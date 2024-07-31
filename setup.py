@@ -6,7 +6,7 @@ from setuptools import find_packages, setup
 description = open("README.md").read() if exists("README.md") else ""
 
 setup(
-    name="sqlmesh",
+    name="lingualeo-sqlmesh",
     description="",
     long_description=description,
     long_description_content_type="text/markdown",
