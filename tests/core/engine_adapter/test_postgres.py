@@ -282,3 +282,354 @@ def test_sync_grants_config_with_default_schema(
         "WHERE table_schema = 'public' AND table_name = 'test_table' "
         "AND grantor = current_role AND grantee <> current_role"
     )
+
+
+def test_get_dependent_views(make_mocked_engine_adapter: t.Callable, mocker: MockerFixture):
+    """Test that _get_dependent_views generates correct SQL query."""
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+    mocker.patch.object(adapter, "_get_current_schema", return_value="public")
+    adapter.cursor.fetchall.return_value = [
+        ("public", "view1", "SELECT * FROM test_table", False),
+        ("public", "mat_view1", "SELECT * FROM test_table", True),
+    ]
+
+    result = adapter._get_dependent_views("public.test_table")
+
+    assert len(result) == 2
+    assert result[0] == ("public", "view1", "SELECT * FROM test_table", False)
+    assert result[1] == ("public", "mat_view1", "SELECT * FROM test_table", True)
+
+    # Verify the SQL query structure
+    sql_calls = to_sql_calls(adapter)
+    assert len(sql_calls) == 1
+    assert "pg_depend" in sql_calls[0].lower()
+    assert "pg_rewrite" in sql_calls[0].lower()
+    assert "pg_class" in sql_calls[0].lower()
+    assert "pg_get_viewdef" in sql_calls[0].lower()
+
+
+def test_recreate_dependent_views_regular(
+    make_mocked_engine_adapter: t.Callable, mocker: MockerFixture
+):
+    """Test that regular views are recreated with CREATE OR REPLACE (preserves grants)."""
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    dependent_views = [
+        ("public", "view1", "SELECT * FROM test_table", False),
+    ]
+
+    adapter._recreate_dependent_views(dependent_views)
+
+    sql_calls = to_sql_calls(adapter)
+    assert len(sql_calls) == 1
+    assert "CREATE OR REPLACE VIEW" in sql_calls[0]
+    assert '"public"."view1"' in sql_calls[0]
+
+
+def test_recreate_dependent_views_materialized(
+    make_mocked_engine_adapter: t.Callable, mocker: MockerFixture
+):
+    """Test that materialized views are recreated with DROP + CREATE and grants are restored."""
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    # Mock _get_table_grants to return some grants
+    adapter.cursor.fetchall.return_value = [("analyst", "SELECT", None)]
+
+    dependent_views = [
+        ("public", "mat_view1", "SELECT * FROM test_table", True),
+    ]
+
+    adapter._recreate_dependent_views(dependent_views)
+
+    sql_calls = to_sql_calls(adapter)
+    # Should have: fetchall (grants query), DROP, CREATE, GRANT
+    assert any("DROP MATERIALIZED VIEW" in sql for sql in sql_calls)
+    assert any("CREATE MATERIALIZED VIEW" in sql for sql in sql_calls)
+    assert any("GRANT SELECT ON" in sql for sql in sql_calls)
+
+
+def test_get_table_indexes(make_mocked_engine_adapter: t.Callable, mocker: MockerFixture):
+    """Test that _get_table_indexes retrieves index definitions."""
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+    mocker.patch.object(adapter, "_get_current_schema", return_value="public")
+    adapter.cursor.fetchall.return_value = [
+        ("CREATE INDEX idx_col1 ON public.test_table (col1)",),
+        ("CREATE INDEX idx_col2 ON public.test_table (col2)",),
+    ]
+
+    result = adapter._get_table_indexes("public.test_table")
+
+    assert len(result) == 2
+    assert "CREATE INDEX idx_col1" in result[0]
+    assert "CREATE INDEX idx_col2" in result[1]
+
+    sql_calls = to_sql_calls(adapter)
+    assert len(sql_calls) == 1
+    assert "pg_indexes" in sql_calls[0].lower()
+    assert "%_pkey" in sql_calls[0]  # Exclude primary keys
+
+
+def test_recreate_indexes(make_mocked_engine_adapter: t.Callable):
+    """Test that _recreate_indexes executes index definitions."""
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    index_definitions = [
+        "CREATE INDEX idx_col1 ON public.test_table (col1)",
+        "CREATE INDEX idx_col2 ON public.test_table (col2)",
+    ]
+    table = exp.to_table("public.test_table")
+
+    adapter._recreate_indexes(index_definitions, table)
+
+    sql_calls = to_sql_calls(adapter)
+    assert len(sql_calls) == 2
+    assert sql_calls[0] == "CREATE INDEX idx_col1 ON public.test_table (col1)"
+    assert sql_calls[1] == "CREATE INDEX idx_col2 ON public.test_table (col2)"
+
+
+def test_get_table_grants(make_mocked_engine_adapter: t.Callable, mocker: MockerFixture):
+    """Test that _get_table_grants retrieves table and column-level grants."""
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+    mocker.patch.object(adapter, "_get_current_schema", return_value="public")
+    adapter.cursor.fetchall.return_value = [
+        ("analyst", "SELECT", None),  # Table-level grant
+        ("writer", "INSERT", None),  # Table-level grant
+        ("analyst", "SELECT", "email"),  # Column-level grant
+    ]
+
+    result = adapter._get_table_grants("public.test_table")
+
+    assert len(result) == 3
+    assert ("analyst", "SELECT", None) in result
+    assert ("writer", "INSERT", None) in result
+    assert ("analyst", "SELECT", "email") in result
+
+
+def test_apply_table_grants(make_mocked_engine_adapter: t.Callable):
+    """Test that _apply_table_grants applies grants correctly."""
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    grants = [
+        ("analyst", "SELECT", None),  # Table-level
+        ("writer", "INSERT", None),  # Table-level
+        ("analyst", "SELECT", "email"),  # Column-level
+    ]
+    table = exp.to_table("public.test_table")
+
+    adapter._apply_table_grants(table, grants)
+
+    sql_calls = to_sql_calls(adapter)
+    assert len(sql_calls) == 3
+    # Note: table name comes from table.sql() which quotes identifiers
+    assert any(
+        "GRANT SELECT ON" in sql and "test_table" in sql and "analyst" in sql and "email" not in sql
+        for sql in sql_calls
+    )
+    assert any(
+        "GRANT INSERT ON" in sql and "test_table" in sql and "writer" in sql for sql in sql_calls
+    )
+    assert any(
+        "GRANT SELECT (email) ON" in sql and "test_table" in sql and "analyst" in sql
+        for sql in sql_calls
+    )
+
+
+def test_replace_query_table_not_exists(
+    make_mocked_engine_adapter: t.Callable, mocker: MockerFixture
+):
+    """Test replace_query when table doesn't exist - should just create it."""
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    # Table doesn't exist
+    mocker.patch.object(adapter, "get_data_object", return_value=None)
+
+    adapter.replace_query(
+        "test_schema.test_table",
+        parse_one("SELECT 1 as id, 'test' as name"),
+        {"id": exp.DataType.build("INT"), "name": exp.DataType.build("TEXT")},
+    )
+
+    sql_calls = to_sql_calls(adapter)
+    # Should create table directly without swap logic
+    assert any("CREATE TABLE" in sql for sql in sql_calls)
+    # Should not have rename operations
+    assert not any("ALTER TABLE" in sql and "RENAME" in sql for sql in sql_calls)
+
+
+def test_replace_query_with_swap(
+    make_mocked_engine_adapter: t.Callable,
+    make_temp_table_name: t.Callable,
+    mocker: MockerFixture,
+):
+    """Test replace_query with atomic swap when table exists."""
+    from sqlmesh.core.engine_adapter.shared import DataObject, DataObjectType
+
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    # Table exists
+    mocker.patch.object(
+        adapter,
+        "get_data_object",
+        return_value=DataObject(
+            catalog="db", schema="test_schema", name="test_table", type=DataObjectType.TABLE
+        ),
+    )
+
+    # Mock temp table names
+    temp_table_mock = mocker.patch.object(adapter, "_get_temp_table")
+    temp_table_mock.side_effect = [
+        make_temp_table_name("test_table", "temp1"),
+        make_temp_table_name("test_table", "old1"),
+    ]
+
+    # Mock methods that query the database
+    mocker.patch.object(adapter, "_get_dependent_views", return_value=[])
+    mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
+    mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(
+        adapter,
+        "columns",
+        return_value={"id": exp.DataType.build("INT"), "name": exp.DataType.build("TEXT")},
+    )
+
+    adapter.replace_query(
+        "test_schema.test_table",
+        parse_one("SELECT 1 as id, 'test' as name"),
+    )
+
+    sql_calls = to_sql_calls(adapter)
+
+    # Should have: BEGIN, CREATE temp table, INSERT, RENAME x2, DROP old, COMMIT
+    assert any("CREATE TABLE" in sql for sql in sql_calls)
+    assert any("INSERT INTO" in sql for sql in sql_calls)
+    # Two renames: target -> old, temp -> target
+    rename_calls = [sql for sql in sql_calls if "ALTER TABLE" in sql and "RENAME" in sql]
+    assert len(rename_calls) == 2
+    assert any("DROP TABLE" in sql for sql in sql_calls)
+
+
+def test_replace_query_self_referencing(
+    make_mocked_engine_adapter: t.Callable, mocker: MockerFixture
+):
+    """Test replace_query falls back to base implementation for self-referencing queries."""
+    from sqlmesh.core.engine_adapter.shared import DataObject, DataObjectType
+
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    # Table exists
+    mocker.patch.object(
+        adapter,
+        "get_data_object",
+        return_value=DataObject(
+            catalog="db", schema="test_schema", name="test_table", type=DataObjectType.TABLE
+        ),
+    )
+
+    mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
+
+    # Mock _insert_overwrite_by_condition to track if it's called
+    insert_overwrite_mock = mocker.patch.object(adapter, "_insert_overwrite_by_condition")
+
+    # Self-referencing query
+    adapter.replace_query(
+        "test_schema.test_table",
+        parse_one("SELECT id + 1 as id FROM test_schema.test_table"),
+    )
+
+    # Should fall back to _insert_overwrite_by_condition
+    insert_overwrite_mock.assert_called_once()
+
+
+def test_replace_query_with_dependent_views(
+    make_mocked_engine_adapter: t.Callable,
+    make_temp_table_name: t.Callable,
+    mocker: MockerFixture,
+):
+    """Test replace_query recreates dependent views after swap."""
+    from sqlmesh.core.engine_adapter.shared import DataObject, DataObjectType
+
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    mocker.patch.object(
+        adapter,
+        "get_data_object",
+        return_value=DataObject(
+            catalog="db", schema="test_schema", name="test_table", type=DataObjectType.TABLE
+        ),
+    )
+
+    temp_table_mock = mocker.patch.object(adapter, "_get_temp_table")
+    temp_table_mock.side_effect = [
+        make_temp_table_name("test_table", "temp1"),
+        make_temp_table_name("test_table", "old1"),
+    ]
+
+    # Has a dependent view
+    mocker.patch.object(
+        adapter,
+        "_get_dependent_views",
+        return_value=[("test_schema", "dependent_view", "SELECT * FROM test_table", False)],
+    )
+    mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
+    mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
+
+    adapter.replace_query(
+        "test_schema.test_table",
+        parse_one("SELECT 1 as id"),
+    )
+
+    sql_calls = to_sql_calls(adapter)
+
+    # Should recreate the dependent view
+    assert any("CREATE OR REPLACE VIEW" in sql and "dependent_view" in sql for sql in sql_calls)
+
+
+def test_replace_query_with_indexes_and_grants(
+    make_mocked_engine_adapter: t.Callable,
+    make_temp_table_name: t.Callable,
+    mocker: MockerFixture,
+):
+    """Test replace_query restores indexes and grants after swap."""
+    from sqlmesh.core.engine_adapter.shared import DataObject, DataObjectType
+
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    mocker.patch.object(
+        adapter,
+        "get_data_object",
+        return_value=DataObject(
+            catalog="db", schema="test_schema", name="test_table", type=DataObjectType.TABLE
+        ),
+    )
+
+    temp_table_mock = mocker.patch.object(adapter, "_get_temp_table")
+    temp_table_mock.side_effect = [
+        make_temp_table_name("test_table", "temp1"),
+        make_temp_table_name("test_table", "old1"),
+    ]
+
+    mocker.patch.object(adapter, "_get_dependent_views", return_value=[])
+    mocker.patch.object(
+        adapter,
+        "_get_table_indexes",
+        return_value=['CREATE INDEX idx_id ON "test_schema"."test_table" (id)'],
+    )
+    mocker.patch.object(
+        adapter,
+        "_get_table_grants",
+        return_value=[("analyst", "SELECT", None)],
+    )
+    mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
+
+    adapter.replace_query(
+        "test_schema.test_table",
+        parse_one("SELECT 1 as id"),
+    )
+
+    sql_calls = to_sql_calls(adapter)
+
+    # Should recreate index
+    assert any("CREATE INDEX idx_id" in sql for sql in sql_calls)
+    # Should restore grants
+    assert any("GRANT SELECT ON" in sql for sql in sql_calls)

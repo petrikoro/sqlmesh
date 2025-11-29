@@ -14,7 +14,7 @@ from sqlmesh.core.engine_adapter.mixins import (
     logical_merge,
     GrantsFromInfoSchemaMixin,
 )
-from sqlmesh.core.engine_adapter.shared import set_catalog
+from sqlmesh.core.engine_adapter.shared import set_catalog, DataObjectType
 
 if t.TYPE_CHECKING:
     from sqlmesh.core._typing import TableName
@@ -141,3 +141,342 @@ class PostgresEngineAdapter(
             if match:
                 return int(match.group(1)), int(match.group(2))
         return 0, 0
+
+    def _get_dependent_views(self, table_name: TableName) -> t.List[t.Tuple[str, str, str, bool]]:
+        """Fetches all views that depend on the given table.
+
+        Uses PostgreSQL system catalogs (pg_depend, pg_rewrite, pg_class) to find
+        views that reference the table. This is needed because PostgreSQL views
+        store the OID of tables they reference, requiring recreation after table swap.
+
+        Args:
+            table_name: The name of the table to find dependents for.
+
+        Returns:
+            List of tuples containing (schema_name, view_name, definition, is_materialized).
+        """
+        table = exp.to_table(table_name)
+        schema_name = table.db or self._get_current_schema()
+        full_table_name = f"{schema_name}.{table.name}"
+        regclass_cast = exp.Cast(this=exp.Literal.string(full_table_name), to="regclass")
+
+        query = (
+            exp.select(
+                exp.column("nspname", "n"),
+                exp.column("relname", "c"),
+                exp.func("pg_get_viewdef", exp.column("oid", "c"), exp.true()),
+                exp.column("relkind", "c").eq(exp.Literal.string("m")),
+            )
+            .distinct()
+            .from_(exp.table_("pg_depend", "pg_catalog").as_("d"))
+            .join(exp.table_("pg_rewrite", "pg_catalog").as_("r"), on="r.oid = d.objid")
+            .join(exp.table_("pg_class", "pg_catalog").as_("c"), on="c.oid = r.ev_class")
+            .join(exp.table_("pg_namespace", "pg_catalog").as_("n"), on="n.oid = c.relnamespace")
+            .where(
+                exp.column("refobjid", "d").eq(regclass_cast),
+                exp.column("classid", "d").eq(
+                    exp.Cast(this=exp.Literal.string("pg_rewrite"), to="regclass")
+                ),
+                exp.column("deptype", "d").eq(exp.Literal.string("n")),
+                exp.column("relkind", "c").isin(exp.Literal.string("v"), exp.Literal.string("m")),
+            )
+            .order_by("n.nspname", "c.relname")
+        )
+
+        self.execute(query)
+        return self.cursor.fetchall()
+
+    def _recreate_dependent_views(
+        self, dependent_views: t.List[t.Tuple[str, str, str, bool]]
+    ) -> None:
+        """Recreates dependent views after a table swap.
+
+        For regular views, uses CREATE OR REPLACE which preserves grants.
+        For materialized views, saves grants before DROP and restores after CREATE.
+
+        Args:
+            dependent_views: List of tuples (schema_name, view_name, definition, is_materialized).
+        """
+        for schema_name, view_name, definition, is_materialized in dependent_views:
+            view_table = exp.table_(view_name, db=schema_name)
+            full_view_name = f"{schema_name}.{view_name}"
+            view_query: exp.Expression = exp.maybe_parse(definition, dialect=self.dialect)
+
+            logger.info("Recreating dependent view '%s'", view_table.sql(dialect=self.dialect))
+
+            if is_materialized:
+                view_grants = self._get_table_grants(full_view_name)
+
+                self.execute(
+                    exp.Drop(this=view_table, exists=True, kind="MATERIALIZED VIEW", cascade=True)
+                )
+                self.execute(
+                    exp.Create(this=view_table, kind="MATERIALIZED VIEW", expression=view_query)
+                )
+
+                if view_grants:
+                    logger.info("Restoring grants for materialized view '%s'", full_view_name)
+                    self._apply_table_grants(view_table, view_grants)
+            else:
+                self.execute(
+                    exp.Create(this=view_table, kind="VIEW", replace=True, expression=view_query)
+                )
+
+    def _get_table_indexes(self, table_name: TableName) -> t.List[str]:
+        """Fetches CREATE INDEX statements for all user-defined indexes on a table.
+
+        Excludes primary key indexes (suffix '_pkey') as they are automatically
+        created with table constraints.
+
+        Args:
+            table_name: The name of the table to get indexes for.
+
+        Returns:
+            List of CREATE INDEX SQL statements.
+        """
+        table = exp.to_table(table_name)
+        schema_name = table.db or self._get_current_schema()
+
+        query = (
+            exp.select(exp.column("indexdef"))
+            .from_("pg_indexes")
+            .where(
+                exp.column("schemaname").eq(exp.Literal.string(schema_name)),
+                exp.column("tablename").eq(exp.Literal.string(table.name)),
+                exp.column("indexname").like(exp.Literal.string("%_pkey")).not_(),
+            )
+        )
+
+        self.execute(query)
+        return [row[0] for row in self.cursor.fetchall() if row[0]]
+
+    def _recreate_indexes(
+        self,
+        index_definitions: t.List[str],
+        source_table: exp.Table,
+        target_table: t.Optional[exp.Table] = None,
+    ) -> None:
+        """Recreates indexes on a table from stored definitions.
+
+        Args:
+            index_definitions: List of CREATE INDEX SQL statements.
+            source_table: The original table the index definitions reference.
+            target_table: The table to create indexes on. If None, uses source_table.
+        """
+        target = target_table or source_table
+        source_name = source_table.sql(dialect=self.dialect)
+        target_name = target.sql(dialect=self.dialect)
+
+        for index_def in index_definitions:
+            if target_table:
+                index_def = index_def.replace(source_name, target_name)
+            try:
+                self.execute(index_def)
+            except Exception as e:
+                logger.warning("Failed to recreate index: %s", e)
+
+    def _get_table_grants(
+        self, table_name: TableName
+    ) -> t.List[t.Tuple[str, str, t.Optional[str]]]:
+        """Fetches all grants on a table from PostgreSQL system catalogs.
+
+        Retrieves both table-level grants (from pg_class.relacl) and column-level
+        grants (from pg_attribute.attacl) using the aclexplode() function.
+
+        Args:
+            table_name: The name of the table to get grants for.
+
+        Returns:
+            List of tuples (grantee, privilege_type, column_name).
+            column_name is None for table-level grants.
+        """
+        table = exp.to_table(table_name)
+        schema_name = table.db or self._get_current_schema()
+        full_table_name = f"{schema_name}.{table.name}"
+        regclass_cast = exp.Cast(this=exp.Literal.string(full_table_name), to="regclass")
+
+        # Table-level grants
+        table_acl_subquery = (
+            exp.select(
+                exp.column("(aclexplode(relacl)).grantee::regrole::text").as_("grantee"),
+                exp.column("(aclexplode(relacl)).privilege_type").as_("privilege_type"),
+            )
+            .from_(exp.table_("pg_class"))
+            .where(
+                exp.column("oid").eq(regclass_cast),
+                exp.column("relacl").is_(exp.null()).not_(),
+            )
+        )
+        table_grants_query = (
+            exp.select(
+                exp.column("grantee"),
+                exp.column("privilege_type"),
+                exp.cast(exp.null(), "text").as_("column_name"),
+            )
+            .from_(table_acl_subquery.subquery("t"))
+            .where(exp.column("grantee").neq(exp.column("current_user")))
+        )
+
+        # Column-level grants
+        column_acl_subquery = (
+            exp.select(
+                exp.column("attname", "a"),
+                exp.column("(aclexplode(a.attacl)).grantee::regrole::text").as_("grantee"),
+                exp.column("(aclexplode(a.attacl)).privilege_type").as_("privilege_type"),
+            )
+            .from_(exp.table_("pg_attribute").as_("a"))
+            .join(exp.table_("pg_class").as_("c"), on="c.oid = a.attrelid")
+            .where(
+                exp.column("oid", "c").eq(regclass_cast),
+                exp.column("attacl", "a").is_(exp.null()).not_(),
+                exp.GT(this=exp.column("attnum", "a"), expression=exp.Literal.number(0)),
+            )
+        )
+        column_grants_query = (
+            exp.select(
+                exp.column("grantee"),
+                exp.column("privilege_type"),
+                exp.column("attname").as_("column_name"),
+            )
+            .from_(column_acl_subquery.subquery("t"))
+            .where(exp.column("grantee").neq(exp.column("current_user")))
+        )
+
+        self.execute(exp.union(table_grants_query, column_grants_query, distinct=False))
+        return self.cursor.fetchall()
+
+    def _apply_table_grants(
+        self, table: exp.Table, grants: t.List[t.Tuple[str, str, t.Optional[str]]]
+    ) -> None:
+        """Applies grants to a table including column-level grants.
+
+        Args:
+            table: The table expression to apply grants to.
+            grants: List of tuples (grantee, privilege_type, column_name).
+                   column_name is None for table-level grants.
+        """
+        table_name = table.sql(dialect=self.dialect)
+
+        for grantee, privilege, column_name in grants:
+            grant_sql = (
+                f"GRANT {privilege} ({column_name}) ON {table_name} TO {grantee}"
+                if column_name
+                else f"GRANT {privilege} ON {table_name} TO {grantee}"
+            )
+            try:
+                self.execute(grant_sql)
+            except Exception as e:
+                logger.warning("Failed to apply grant: %s", e)
+
+    def replace_query(
+        self,
+        table_name: TableName,
+        query_or_df: QueryOrDF,
+        target_columns_to_types: t.Optional[t.Dict[str, exp.DataType]] = None,
+        table_description: t.Optional[str] = None,
+        column_descriptions: t.Optional[t.Dict[str, str]] = None,
+        source_columns: t.Optional[t.List[str]] = None,
+        supports_replace_table_override: t.Optional[bool] = None,
+        **kwargs: t.Any,
+    ) -> None:
+        """Replaces table contents using atomic swap.
+
+        Uses RENAME to swap tables atomically, then recreates dependent views (bound by OID),
+        restores indexes and grants. Falls back to _insert_overwrite_by_condition for
+        self-referencing queries.
+        """
+        target_data_object = self.get_data_object(table_name)
+        table_exists = target_data_object is not None
+        if self.drop_data_object_on_type_mismatch(target_data_object, DataObjectType.TABLE):
+            table_exists = False
+
+        source_queries, target_columns_to_types = self._get_source_queries_and_columns_to_types(
+            query_or_df,
+            target_columns_to_types,
+            target_table=table_name,
+            source_columns=source_columns,
+        )
+
+        if not table_exists:
+            return self._create_table_from_source_queries(
+                table_name,
+                source_queries,
+                target_columns_to_types,
+                replace=False,
+                table_description=table_description,
+                column_descriptions=column_descriptions,
+                **kwargs,
+            )
+
+        target_table = exp.to_table(table_name)
+        query = source_queries[0].query_factory()
+
+        from sqlmesh.core.engine_adapter.base import quote_identifiers
+
+        self_referencing = any(
+            quote_identifiers(tbl) == quote_identifiers(target_table)
+            for tbl in query.find_all(exp.Table)
+        )
+
+        if self_referencing:
+            if not target_columns_to_types:
+                target_columns_to_types = self.columns(target_table)
+            return self._insert_overwrite_by_condition(
+                target_table,
+                source_queries,
+                target_columns_to_types,
+                **kwargs,
+            )
+
+        if not target_columns_to_types:
+            target_columns_to_types = self.columns(target_table)
+
+        with self.transaction():
+            dependent_views = self._get_dependent_views(table_name)
+            indexes = self._get_table_indexes(table_name)
+            grants = self._get_table_grants(table_name)
+
+            temp_table = self._get_temp_table(target_table)
+            old_table = self._get_temp_table(target_table)
+
+            self.create_table(
+                temp_table,
+                target_columns_to_types,
+                exists=False,
+                table_description=table_description,
+                column_descriptions=column_descriptions,
+                **kwargs,
+            )
+            self._insert_append_source_queries(temp_table, source_queries, target_columns_to_types)
+
+            # Apply indexes and grants BEFORE swap so the new table is fully prepared
+            if indexes:
+                logger.info(
+                    "Creating %d index(es) on temp table",
+                    len(indexes),
+                )
+                self._recreate_indexes(indexes, target_table, temp_table)
+
+            if grants:
+                logger.info(
+                    "Applying %d grant(s) to temp table",
+                    len(grants),
+                )
+                self._apply_table_grants(temp_table, grants)
+
+            logger.info("Analyzing temp table")
+            self.execute(f"ANALYZE {temp_table.sql(dialect=self.dialect)}")
+
+            logger.info("Swapping table '%s' with new data", target_table.sql(dialect=self.dialect))
+            self.rename_table(target_table, old_table)
+            self.rename_table(temp_table, target_table)
+
+            if dependent_views:
+                logger.info(
+                    "Recreating %d dependent view(s) for table '%s'",
+                    len(dependent_views),
+                    target_table.sql(dialect=self.dialect),
+                )
+                self._recreate_dependent_views(dependent_views)
+
+            self.drop_table(old_table)
