@@ -251,9 +251,7 @@ class PostgresEngineAdapter(
             )
             .where(
                 exp.column("nspname", "n").eq(exp.Literal.string(schema_name)),
-                exp.column("contype", "c").isin(
-                    exp.Literal.string("p"), exp.Literal.string("u")
-                ),
+                exp.column("contype", "c").isin(exp.Literal.string("p"), exp.Literal.string("u")),
             )
         )
 
@@ -272,6 +270,7 @@ class PostgresEngineAdapter(
             )
         )
 
+        logger.info("Fetching table indexes for %s", table_name)
         self.execute(query)
         return [row[0] for row in self.cursor.fetchall() if row[0]]
 
@@ -298,7 +297,7 @@ class PostgresEngineAdapter(
             try:
                 self.execute(index_def)
             except Exception as e:
-                logger.warning("Failed to recreate index: %s", e)
+                logger.error("Failed to recreate index: %s", e)
 
     def _get_table_grants(
         self, table_name: TableName
@@ -355,6 +354,7 @@ class PostgresEngineAdapter(
             .group_by(exp.column("grantee"), exp.column("privilege_type"))
         )
 
+        logger.info("Fetching table grants for %s", table_name)
         self.execute(exp.union(table_grants_query, column_grants_query, distinct=False))
         return self.cursor.fetchall()
 
@@ -485,10 +485,8 @@ class PostgresEngineAdapter(
                 )
                 self._apply_table_grants(temp_table, grants)
 
-            logger.info("Analyzing temp table")
             self.execute(exp.Command(this="ANALYZE", expression=temp_table))
 
-            logger.info("Swapping table '%s' with new data", target_table.sql(dialect=self.dialect))
             self.rename_table(target_table, old_table)
             self.rename_table(temp_table, target_table)
 

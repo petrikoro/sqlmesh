@@ -468,8 +468,7 @@ def test_apply_table_grants(make_mocked_engine_adapter: t.Callable):
     )
     # Table-level grant with single privilege
     assert any(
-        "GRANT INSERT ON" in sql and "test_table" in sql and "writer" in sql
-        for sql in sql_calls
+        "GRANT INSERT ON" in sql and "test_table" in sql and "writer" in sql for sql in sql_calls
     )
     # Column-level grant with multiple columns
     assert any(
