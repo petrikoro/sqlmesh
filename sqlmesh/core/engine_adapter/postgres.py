@@ -291,6 +291,8 @@ class PostgresEngineAdapter(
         source_name = source_table.sql(dialect=self.dialect)
         target_name = target.sql(dialect=self.dialect)
 
+        logger.info("Recreating indexes on %s", target_name)
+
         for index_def in index_definitions:
             if target_table:
                 index_def = index_def.replace(source_name, target_name)
@@ -383,6 +385,8 @@ class PostgresEngineAdapter(
                 securable=table.copy(),
                 principals=[exp.Var(this=grantee)],
             )
+
+            logger.info("Recreating grants on %s", table.sql(dialect=self.dialect))
 
             try:
                 self.execute(grant_expr)
