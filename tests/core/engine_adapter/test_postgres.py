@@ -420,6 +420,31 @@ def test_get_table_grants(make_mocked_engine_adapter: t.Callable, mocker: Mocker
     assert "union" in sql  # Combined query
 
 
+def test_get_table_grants_current_user_not_quoted(
+    make_mocked_engine_adapter: t.Callable, mocker: MockerFixture
+):
+    """Test that current_user is not quoted in _get_table_grants SQL query.
+
+    current_user is a SQL keyword that returns the current user, not a column name.
+    If quoted as "current_user", PostgreSQL interprets it as a column reference
+    and raises: psycopg2.errors.UndefinedColumn: column "current_user" does not exist
+    """
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+    mocker.patch.object(adapter, "_get_current_schema", return_value="public")
+    adapter.cursor.fetchall.return_value = []
+
+    adapter._get_table_grants("public.test_table")
+
+    sql_calls = to_sql_calls(adapter)
+    assert len(sql_calls) == 1
+    sql = sql_calls[0]
+
+    # current_user should appear unquoted (as SQL keyword), not as "current_user" (column ref)
+    assert "current_user" in sql.lower()
+    # Should NOT have quoted "current_user" which would be interpreted as a column
+    assert '"current_user"' not in sql
+
+
 def test_apply_table_grants(make_mocked_engine_adapter: t.Callable):
     """Test that _apply_table_grants applies aggregated grants correctly."""
     adapter = make_mocked_engine_adapter(PostgresEngineAdapter)

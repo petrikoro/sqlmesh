@@ -332,7 +332,7 @@ class PostgresEngineAdapter(
             .where(
                 exp.column("table_schema").eq(exp.Literal.string(schema_name)),
                 exp.column("table_name").eq(exp.Literal.string(table.name)),
-                exp.column("grantee").neq(exp.column("current_user")),
+                exp.column("grantee").neq(exp.var("current_user")),
             )
             .group_by(exp.column("grantee"))
         )
@@ -350,7 +350,7 @@ class PostgresEngineAdapter(
             .where(
                 exp.column("table_schema").eq(exp.Literal.string(schema_name)),
                 exp.column("table_name").eq(exp.Literal.string(table.name)),
-                exp.column("grantee").neq(exp.column("current_user")),
+                exp.column("grantee").neq(exp.var("current_user")),
             )
             .group_by(exp.column("grantee"), exp.column("privilege_type"))
         )
