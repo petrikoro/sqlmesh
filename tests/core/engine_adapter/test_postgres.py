@@ -332,8 +332,8 @@ def test_recreate_dependent_views_materialized(
     """Test that materialized views are recreated with DROP + CREATE and grants are restored."""
     adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
 
-    # Mock _get_table_grants to return some grants
-    adapter.cursor.fetchall.return_value = [("analyst", "SELECT", None)]
+    # Mock _get_table_grants to return aggregated grants
+    adapter.cursor.fetchall.return_value = [("analyst", "SELECT, UPDATE", None)]
 
     dependent_views = [
         ("public", "mat_view1", "SELECT * FROM test_table", True),
@@ -345,11 +345,11 @@ def test_recreate_dependent_views_materialized(
     # Should have: fetchall (grants query), DROP, CREATE, GRANT
     assert any("DROP MATERIALIZED VIEW" in sql for sql in sql_calls)
     assert any("CREATE MATERIALIZED VIEW" in sql for sql in sql_calls)
-    assert any("GRANT SELECT ON" in sql for sql in sql_calls)
+    assert any("GRANT SELECT, UPDATE ON" in sql for sql in sql_calls)
 
 
 def test_get_table_indexes(make_mocked_engine_adapter: t.Callable, mocker: MockerFixture):
-    """Test that _get_table_indexes retrieves index definitions."""
+    """Test that _get_table_indexes retrieves index definitions excluding constraint-backed indexes."""
     adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
     mocker.patch.object(adapter, "_get_current_schema", return_value="public")
     adapter.cursor.fetchall.return_value = [
@@ -366,7 +366,10 @@ def test_get_table_indexes(make_mocked_engine_adapter: t.Callable, mocker: Mocke
     sql_calls = to_sql_calls(adapter)
     assert len(sql_calls) == 1
     assert "pg_indexes" in sql_calls[0].lower()
-    assert "%_pkey" in sql_calls[0]  # Exclude primary keys
+    # Excludes primary key ('p') and unique ('u') constraint-backed indexes via pg_constraint
+    assert "pg_constraint" in sql_calls[0].lower()
+    assert "'p'" in sql_calls[0]  # Primary key constraint type
+    assert "'u'" in sql_calls[0]  # Unique constraint type
 
 
 def test_recreate_indexes(make_mocked_engine_adapter: t.Callable):
@@ -388,31 +391,44 @@ def test_recreate_indexes(make_mocked_engine_adapter: t.Callable):
 
 
 def test_get_table_grants(make_mocked_engine_adapter: t.Callable, mocker: MockerFixture):
-    """Test that _get_table_grants retrieves table and column-level grants."""
+    """Test that _get_table_grants retrieves aggregated grants from information_schema."""
     adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
     mocker.patch.object(adapter, "_get_current_schema", return_value="public")
+    # Aggregated format: (grantee, privileges, columns)
     adapter.cursor.fetchall.return_value = [
-        ("analyst", "SELECT", None),  # Table-level grant
+        ("analyst", "SELECT, UPDATE", None),  # Table-level grants aggregated
         ("writer", "INSERT", None),  # Table-level grant
-        ("analyst", "SELECT", "email"),  # Column-level grant
+        ("analyst", "SELECT", "email, name"),  # Column-level grant with aggregated columns
     ]
 
     result = adapter._get_table_grants("public.test_table")
 
     assert len(result) == 3
-    assert ("analyst", "SELECT", None) in result
+    assert ("analyst", "SELECT, UPDATE", None) in result
     assert ("writer", "INSERT", None) in result
-    assert ("analyst", "SELECT", "email") in result
+    assert ("analyst", "SELECT", "email, name") in result
+
+    # Verify SQL uses information_schema with aggregation
+    sql_calls = to_sql_calls(adapter)
+    assert len(sql_calls) == 1
+    sql = sql_calls[0].lower()
+    assert "information_schema" in sql
+    assert "role_table_grants" in sql  # Table-level grants
+    assert "column_privileges" in sql  # Column-level grants
+    assert "string_agg" in sql  # Aggregation function
+    assert "group by" in sql  # Grouping
+    assert "union" in sql  # Combined query
 
 
 def test_apply_table_grants(make_mocked_engine_adapter: t.Callable):
-    """Test that _apply_table_grants applies grants correctly."""
+    """Test that _apply_table_grants applies aggregated grants correctly."""
     adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
 
+    # Aggregated format: (grantee, privileges, columns)
     grants = [
-        ("analyst", "SELECT", None),  # Table-level
-        ("writer", "INSERT", None),  # Table-level
-        ("analyst", "SELECT", "email"),  # Column-level
+        ("analyst", "SELECT, UPDATE", None),  # Table-level with multiple privileges
+        ("writer", "INSERT", None),  # Table-level single privilege
+        ("analyst", "SELECT", "email, name"),  # Column-level with multiple columns
     ]
     table = exp.to_table("public.test_table")
 
@@ -420,16 +436,19 @@ def test_apply_table_grants(make_mocked_engine_adapter: t.Callable):
 
     sql_calls = to_sql_calls(adapter)
     assert len(sql_calls) == 3
-    # Note: table name comes from table.sql() which quotes identifiers
+    # Table-level grant with multiple privileges
     assert any(
-        "GRANT SELECT ON" in sql and "test_table" in sql and "analyst" in sql and "email" not in sql
+        "GRANT SELECT, UPDATE ON" in sql and "test_table" in sql and "analyst" in sql
         for sql in sql_calls
     )
+    # Table-level grant with single privilege
     assert any(
-        "GRANT INSERT ON" in sql and "test_table" in sql and "writer" in sql for sql in sql_calls
+        "GRANT INSERT ON" in sql and "test_table" in sql and "writer" in sql
+        for sql in sql_calls
     )
+    # Column-level grant with multiple columns
     assert any(
-        "GRANT SELECT (email) ON" in sql and "test_table" in sql and "analyst" in sql
+        "GRANT SELECT (email, name) ON" in sql and "test_table" in sql and "analyst" in sql
         for sql in sql_calls
     )
 
@@ -615,10 +634,11 @@ def test_replace_query_with_indexes_and_grants(
         "_get_table_indexes",
         return_value=['CREATE INDEX idx_id ON "test_schema"."test_table" (id)'],
     )
+    # Aggregated grants format
     mocker.patch.object(
         adapter,
         "_get_table_grants",
-        return_value=[("analyst", "SELECT", None)],
+        return_value=[("analyst", "SELECT, UPDATE", None)],
     )
     mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
 
@@ -631,5 +651,5 @@ def test_replace_query_with_indexes_and_grants(
 
     # Should recreate index
     assert any("CREATE INDEX idx_id" in sql for sql in sql_calls)
-    # Should restore grants
-    assert any("GRANT SELECT ON" in sql for sql in sql_calls)
+    # Should restore aggregated grants
+    assert any("GRANT SELECT, UPDATE ON" in sql for sql in sql_calls)

@@ -225,8 +225,8 @@ class PostgresEngineAdapter(
     def _get_table_indexes(self, table_name: TableName) -> t.List[str]:
         """Fetches CREATE INDEX statements for all user-defined indexes on a table.
 
-        Excludes primary key indexes (suffix '_pkey') as they are automatically
-        created with table constraints.
+        Excludes indexes that back primary key or unique constraints, as these are
+        automatically created with table constraints.
 
         Args:
             table_name: The name of the table to get indexes for.
@@ -237,13 +237,38 @@ class PostgresEngineAdapter(
         table = exp.to_table(table_name)
         schema_name = table.db or self._get_current_schema()
 
-        query = (
-            exp.select(exp.column("indexdef"))
-            .from_("pg_indexes")
+        # CTE to find indexes backing primary key or unique constraints
+        excluded_indexes_cte = (
+            exp.select(exp.column("relname", "idx").as_("indexname"))
+            .from_(exp.table_("pg_constraint", "pg_catalog").as_("c"))
+            .join(
+                exp.table_("pg_class", "pg_catalog").as_("idx"),
+                on=exp.column("oid", "idx").eq(exp.column("conindid", "c")),
+            )
+            .join(
+                exp.table_("pg_namespace", "pg_catalog").as_("n"),
+                on=exp.column("oid", "n").eq(exp.column("connamespace", "c")),
+            )
             .where(
-                exp.column("schemaname").eq(exp.Literal.string(schema_name)),
-                exp.column("tablename").eq(exp.Literal.string(table.name)),
-                exp.column("indexname").like(exp.Literal.string("%_pkey")).not_(),
+                exp.column("nspname", "n").eq(exp.Literal.string(schema_name)),
+                exp.column("contype", "c").isin(
+                    exp.Literal.string("p"), exp.Literal.string("u")
+                ),
+            )
+        )
+
+        query = (
+            exp.select(exp.column("indexdef", "i"))
+            .from_(exp.table_("pg_indexes").as_("i"))
+            .join(
+                excluded_indexes_cte.subquery("ei"),
+                on=exp.column("indexname", "ei").eq(exp.column("indexname", "i")),
+                join_type="LEFT",
+            )
+            .where(
+                exp.column("schemaname", "i").eq(exp.Literal.string(schema_name)),
+                exp.column("tablename", "i").eq(exp.Literal.string(table.name)),
+                exp.column("indexname", "ei").is_(exp.null()),
             )
         )
 
@@ -278,68 +303,56 @@ class PostgresEngineAdapter(
     def _get_table_grants(
         self, table_name: TableName
     ) -> t.List[t.Tuple[str, str, t.Optional[str]]]:
-        """Fetches all grants on a table from PostgreSQL system catalogs.
+        """Fetches all grants on a table/view from information_schema.
 
-        Retrieves both table-level grants (from pg_class.relacl) and column-level
-        grants (from pg_attribute.attacl) using the aclexplode() function.
+        Retrieves both table-level grants (aggregated by grantee) and column-level
+        grants (aggregated by grantee and privilege_type).
 
         Args:
-            table_name: The name of the table to get grants for.
+            table_name: The name of the table/view to get grants for.
 
         Returns:
-            List of tuples (grantee, privilege_type, column_name).
-            column_name is None for table-level grants.
+            List of tuples (grantee, privileges, columns).
+            - For table-level: (grantee, "SELECT, INSERT, ...", None)
+            - For column-level: (grantee, "SELECT", "col1, col2, ...")
         """
         table = exp.to_table(table_name)
         schema_name = table.db or self._get_current_schema()
-        full_table_name = f"{schema_name}.{table.name}"
-        regclass_cast = exp.Cast(this=exp.Literal.string(full_table_name), to="regclass")
 
-        # Table-level grants
-        table_acl_subquery = (
-            exp.select(
-                exp.column("(aclexplode(relacl)).grantee::regrole::text").as_("grantee"),
-                exp.column("(aclexplode(relacl)).privilege_type").as_("privilege_type"),
-            )
-            .from_(exp.table_("pg_class"))
-            .where(
-                exp.column("oid").eq(regclass_cast),
-                exp.column("relacl").is_(exp.null()).not_(),
-            )
-        )
+        # Table-level grants: aggregate privileges per grantee
         table_grants_query = (
             exp.select(
                 exp.column("grantee"),
-                exp.column("privilege_type"),
-                exp.cast(exp.null(), "text").as_("column_name"),
+                exp.func("string_agg", exp.column("privilege_type"), exp.Literal.string(", ")).as_(
+                    "privileges"
+                ),
+                exp.cast(exp.null(), "text").as_("columns"),
             )
-            .from_(table_acl_subquery.subquery("t"))
-            .where(exp.column("grantee").neq(exp.column("current_user")))
+            .from_(exp.table_("role_table_grants", "information_schema"))
+            .where(
+                exp.column("table_schema").eq(exp.Literal.string(schema_name)),
+                exp.column("table_name").eq(exp.Literal.string(table.name)),
+                exp.column("grantee").neq(exp.column("current_user")),
+            )
+            .group_by(exp.column("grantee"))
         )
 
-        # Column-level grants
-        column_acl_subquery = (
-            exp.select(
-                exp.column("attname", "a"),
-                exp.column("(aclexplode(a.attacl)).grantee::regrole::text").as_("grantee"),
-                exp.column("(aclexplode(a.attacl)).privilege_type").as_("privilege_type"),
-            )
-            .from_(exp.table_("pg_attribute").as_("a"))
-            .join(exp.table_("pg_class").as_("c"), on="c.oid = a.attrelid")
-            .where(
-                exp.column("oid", "c").eq(regclass_cast),
-                exp.column("attacl", "a").is_(exp.null()).not_(),
-                exp.GT(this=exp.column("attnum", "a"), expression=exp.Literal.number(0)),
-            )
-        )
+        # Column-level grants: aggregate columns per (grantee, privilege_type)
         column_grants_query = (
             exp.select(
                 exp.column("grantee"),
-                exp.column("privilege_type"),
-                exp.column("attname").as_("column_name"),
+                exp.column("privilege_type").as_("privileges"),
+                exp.func("string_agg", exp.column("column_name"), exp.Literal.string(", ")).as_(
+                    "columns"
+                ),
             )
-            .from_(column_acl_subquery.subquery("t"))
-            .where(exp.column("grantee").neq(exp.column("current_user")))
+            .from_(exp.table_("column_privileges", "information_schema"))
+            .where(
+                exp.column("table_schema").eq(exp.Literal.string(schema_name)),
+                exp.column("table_name").eq(exp.Literal.string(table.name)),
+                exp.column("grantee").neq(exp.column("current_user")),
+            )
+            .group_by(exp.column("grantee"), exp.column("privilege_type"))
         )
 
         self.execute(exp.union(table_grants_query, column_grants_query, distinct=False))
@@ -352,19 +365,27 @@ class PostgresEngineAdapter(
 
         Args:
             table: The table expression to apply grants to.
-            grants: List of tuples (grantee, privilege_type, column_name).
-                   column_name is None for table-level grants.
+            grants: List of tuples (grantee, privileges, columns).
+                   - For table-level: (grantee, "SELECT, INSERT, ...", None)
+                   - For column-level: (grantee, "SELECT", "col1, col2, ...")
         """
-        table_name = table.sql(dialect=self.dialect)
+        for grantee, privileges, columns in grants:
+            if columns:
+                # Column-level grant: GRANT privilege (col1, col2) ON TABLE table TO grantee
+                privilege_str = f"{privileges} ({columns})"
+            else:
+                # Table-level grant: GRANT priv1, priv2 ON TABLE table TO grantee
+                privilege_str = privileges
 
-        for grantee, privilege, column_name in grants:
-            grant_sql = (
-                f"GRANT {privilege} ({column_name}) ON {table_name} TO {grantee}"
-                if column_name
-                else f"GRANT {privilege} ON {table_name} TO {grantee}"
+            grant_expr = exp.Grant(
+                privileges=[exp.Var(this=privilege_str)],
+                kind="TABLE",
+                securable=table.copy(),
+                principals=[exp.Var(this=grantee)],
             )
+
             try:
-                self.execute(grant_sql)
+                self.execute(grant_expr)
             except Exception as e:
                 logger.warning("Failed to apply grant: %s", e)
 
@@ -465,7 +486,7 @@ class PostgresEngineAdapter(
                 self._apply_table_grants(temp_table, grants)
 
             logger.info("Analyzing temp table")
-            self.execute(f"ANALYZE {temp_table.sql(dialect=self.dialect)}")
+            self.execute(exp.Command(this="ANALYZE", expression=temp_table))
 
             logger.info("Swapping table '%s' with new data", target_table.sql(dialect=self.dialect))
             self.rename_table(target_table, old_table)
