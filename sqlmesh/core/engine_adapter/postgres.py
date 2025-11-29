@@ -15,6 +15,7 @@ from sqlmesh.core.engine_adapter.mixins import (
     GrantsFromInfoSchemaMixin,
 )
 from sqlmesh.core.engine_adapter.shared import set_catalog, DataObjectType
+from sqlmesh.utils import random_id
 
 if t.TYPE_CHECKING:
     from sqlmesh.core._typing import TableName
@@ -277,27 +278,23 @@ class PostgresEngineAdapter(
     def _recreate_indexes(
         self,
         index_definitions: t.List[str],
-        source_table: exp.Table,
-        target_table: t.Optional[exp.Table] = None,
+        target_table: exp.Table,
     ) -> None:
-        """Recreates indexes on a table from stored definitions.
+        """Recreates indexes on target table from stored definitions.
 
         Args:
             index_definitions: List of CREATE INDEX SQL statements.
-            source_table: The original table the index definitions reference.
-            target_table: The table to create indexes on. If None, uses source_table.
+            target_table: The table to create indexes on.
         """
-        target = target_table or source_table
-        source_name = source_table.sql(dialect=self.dialect)
-        target_name = target.sql(dialect=self.dialect)
-
-        logger.info("Recreating indexes on %s", target_name)
+        logger.info("Recreating indexes on %s", target_table.sql(dialect=self.dialect))
 
         for index_def in index_definitions:
-            if target_table:
-                index_def = index_def.replace(source_name, target_name)
+            index_expr: exp.Expression = exp.maybe_parse(index_def, dialect=self.dialect)
+            if index := index_expr.find(exp.Index):
+                index.set("table", target_table.copy())
+                index.this.set("this", random_id())
             try:
-                self.execute(index_def)
+                self.execute(index_expr)
             except Exception as e:
                 logger.error("Failed to recreate index: %s", e)
 
@@ -480,7 +477,7 @@ class PostgresEngineAdapter(
                     "Creating %d index(es) on temp table",
                     len(indexes),
                 )
-                self._recreate_indexes(indexes, target_table, temp_table)
+                self._recreate_indexes(indexes, temp_table)
 
             if grants:
                 logger.info(
