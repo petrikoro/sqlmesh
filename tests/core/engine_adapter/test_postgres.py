@@ -946,3 +946,55 @@ def test_replace_query_without_hypertable(
 
     # Should NOT call _create_hypertable for regular tables
     create_hypertable_mock.assert_not_called()
+
+
+def test_replace_query_runs_analyze_on_temp_table(
+    make_mocked_engine_adapter: t.Callable,
+    make_temp_table_name: t.Callable,
+    mocker: MockerFixture,
+):
+    """Test that replace_query runs ANALYZE on the temp table before swapping.
+
+    ANALYZE should include the table name, not just 'ANALYZE' without arguments.
+    Without the table name, ANALYZE would analyze all tables in the database.
+    """
+    from sqlmesh.core.engine_adapter.shared import DataObject, DataObjectType
+
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    mocker.patch.object(
+        adapter,
+        "get_data_object",
+        return_value=DataObject(
+            catalog="db", schema="test_schema", name="test_table", type=DataObjectType.TABLE
+        ),
+    )
+
+    temp_table = make_temp_table_name("test_table", "temp1")
+    temp_table_mock = mocker.patch.object(adapter, "_get_temp_table")
+    temp_table_mock.side_effect = [
+        temp_table,
+        make_temp_table_name("test_table", "old1"),
+    ]
+
+    mocker.patch.object(adapter, "_get_dependent_views", return_value=[])
+    mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
+    mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(adapter, "_get_hypertable_config", return_value=None)
+    mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
+
+    adapter.replace_query(
+        "test_schema.test_table",
+        parse_one("SELECT 1 as id"),
+    )
+
+    sql_calls = to_sql_calls(adapter)
+
+    # Find ANALYZE statement
+    analyze_calls = [sql for sql in sql_calls if sql.upper().startswith("ANALYZE")]
+    assert len(analyze_calls) == 1, f"Expected exactly one ANALYZE call, got: {analyze_calls}"
+
+    # ANALYZE should include the temp table name, not be empty
+    analyze_sql = analyze_calls[0]
+    assert "temp1" in analyze_sql, f"ANALYZE should include temp table name, got: {analyze_sql}"
+    assert analyze_sql != "ANALYZE", "ANALYZE should not be called without a table name"

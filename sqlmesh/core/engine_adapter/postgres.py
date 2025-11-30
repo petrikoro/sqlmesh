@@ -599,7 +599,9 @@ class PostgresEngineAdapter(
             if grants:
                 self._apply_table_grants(temp_table, grants)
 
-            self.execute(exp.Command(this="ANALYZE", expression=temp_table))
+            self.execute(
+                exp.Command(this="ANALYZE", expression=temp_table.sql(dialect=self.dialect))
+            )
         except Exception:
             self.drop_table(temp_table, exists=True)
             raise
