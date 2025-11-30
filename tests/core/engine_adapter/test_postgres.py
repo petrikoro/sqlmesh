@@ -534,6 +534,7 @@ def test_replace_query_with_swap(
     mocker.patch.object(adapter, "_get_dependent_views", return_value=[])
     mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
     mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(adapter, "_get_hypertable_config", return_value=None)
     mocker.patch.object(
         adapter,
         "columns",
@@ -620,6 +621,7 @@ def test_replace_query_with_dependent_views(
     )
     mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
     mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(adapter, "_get_hypertable_config", return_value=None)
     mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
 
     adapter.replace_query(
@@ -669,6 +671,7 @@ def test_replace_query_with_indexes_and_grants(
         "_get_table_grants",
         return_value=[("analyst", "SELECT, UPDATE", None)],
     )
+    mocker.patch.object(adapter, "_get_hypertable_config", return_value=None)
     mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
 
     adapter.replace_query(
@@ -712,6 +715,7 @@ def test_replace_query_error_during_insert_cleans_up_temp_table(
     mocker.patch.object(adapter, "_get_dependent_views", return_value=[])
     mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
     mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(adapter, "_get_hypertable_config", return_value=None)
     mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
 
     # Simulate error during insert
@@ -763,6 +767,7 @@ def test_replace_query_error_during_swap_cleans_up_temp_table(
     mocker.patch.object(adapter, "_get_dependent_views", return_value=[])
     mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
     mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(adapter, "_get_hypertable_config", return_value=None)
     mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
 
     # Simulate error during rename (swap)
@@ -815,6 +820,7 @@ def test_replace_query_error_during_view_recreation_cleans_up_temp_table(
     )
     mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
     mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(adapter, "_get_hypertable_config", return_value=None)
     mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
 
     # Simulate error during view recreation
@@ -835,3 +841,108 @@ def test_replace_query_error_during_view_recreation_cleans_up_temp_table(
     assert any("INSERT INTO" in sql for sql in sql_calls)
     # Transaction rolled back (rename undone), temp table dropped
     assert any("DROP TABLE" in sql and "temp1" in sql for sql in sql_calls)
+
+
+def test_replace_query_with_hypertable_swap(
+    make_mocked_engine_adapter: t.Callable,
+    make_temp_table_name: t.Callable,
+    mocker: MockerFixture,
+):
+    """Test replace_query preserves hypertable configuration during swap."""
+    from sqlmesh.core.engine_adapter import PostgresEngineAdapter
+    from sqlmesh.core.engine_adapter.postgres import HypertableConfig
+    from sqlmesh.core.engine_adapter.shared import DataObject, DataObjectType
+
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    mocker.patch.object(
+        adapter,
+        "get_data_object",
+        return_value=DataObject(
+            catalog="db", schema="test_schema", name="events", type=DataObjectType.TABLE
+        ),
+    )
+
+    temp_table_mock = mocker.patch.object(adapter, "_get_temp_table")
+    temp_table_mock.side_effect = [
+        make_temp_table_name("events", "temp1"),
+        make_temp_table_name("events", "old1"),
+    ]
+
+    mocker.patch.object(adapter, "_get_dependent_views", return_value=[])
+    mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
+    mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(
+        adapter,
+        "columns",
+        return_value={
+            "id": exp.DataType.build("INT"),
+            "event_time": exp.DataType.build("TIMESTAMP"),
+        },
+    )
+
+    # Mock hypertable config - table is already a hypertable
+    hypertable_config = HypertableConfig(
+        time_column="event_time",
+        chunk_time_interval="7 days",
+    )
+    mocker.patch.object(adapter, "_get_hypertable_config", return_value=hypertable_config)
+
+    # Track _create_hypertable calls
+    create_hypertable_mock = mocker.patch.object(adapter, "_create_hypertable")
+
+    adapter.replace_query(
+        "test_schema.events",
+        parse_one("SELECT 1 as id, NOW() as event_time"),
+    )
+
+    # Should call _create_hypertable on temp table with the same config
+    create_hypertable_mock.assert_called_once()
+    call_args = create_hypertable_mock.call_args
+    # First arg is the temp table
+    assert "temp1" in call_args[0][0].sql(dialect="postgres")
+    # Second arg is the hypertable config
+    assert call_args[0][1] == hypertable_config
+
+
+def test_replace_query_without_hypertable(
+    make_mocked_engine_adapter: t.Callable,
+    make_temp_table_name: t.Callable,
+    mocker: MockerFixture,
+):
+    """Test replace_query does not call _create_hypertable for regular tables."""
+    from sqlmesh.core.engine_adapter.shared import DataObject, DataObjectType
+
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    mocker.patch.object(
+        adapter,
+        "get_data_object",
+        return_value=DataObject(
+            catalog="db", schema="test_schema", name="test_table", type=DataObjectType.TABLE
+        ),
+    )
+
+    temp_table_mock = mocker.patch.object(adapter, "_get_temp_table")
+    temp_table_mock.side_effect = [
+        make_temp_table_name("test_table", "temp1"),
+        make_temp_table_name("test_table", "old1"),
+    ]
+
+    mocker.patch.object(adapter, "_get_dependent_views", return_value=[])
+    mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
+    mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
+
+    # Not a hypertable
+    mocker.patch.object(adapter, "_get_hypertable_config", return_value=None)
+
+    create_hypertable_mock = mocker.patch.object(adapter, "_create_hypertable")
+
+    adapter.replace_query(
+        "test_schema.test_table",
+        parse_one("SELECT 1 as id"),
+    )
+
+    # Should NOT call _create_hypertable for regular tables
+    create_hypertable_mock.assert_not_called()

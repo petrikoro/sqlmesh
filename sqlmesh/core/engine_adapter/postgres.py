@@ -21,6 +21,16 @@ if t.TYPE_CHECKING:
     from sqlmesh.core._typing import TableName
     from sqlmesh.core.engine_adapter._typing import DF, QueryOrDF
 
+
+class HypertableConfig(t.NamedTuple):
+    """Configuration for a TimescaleDB hypertable."""
+
+    time_column: str
+    chunk_time_interval: t.Optional[str] = None
+    partitioning_column: t.Optional[str] = None
+    number_partitions: t.Optional[int] = None
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -390,6 +400,109 @@ class PostgresEngineAdapter(
             except Exception as e:
                 logger.warning("Failed to apply grant: %s", e)
 
+    def _get_hypertable_config(self, table_name: TableName) -> t.Optional[HypertableConfig]:
+        """Gets TimescaleDB hypertable configuration if the table is a hypertable.
+
+        Queries TimescaleDB information schema to retrieve hypertable dimensions.
+        Returns None if the table is not a hypertable or TimescaleDB is not installed.
+
+        Args:
+            table_name: The name of the table to check.
+
+        Returns:
+            HypertableConfig with time column and optional space partitioning info,
+            or None if not a hypertable.
+        """
+        table = exp.to_table(table_name)
+        schema_name = table.db or self._get_current_schema()
+
+        # Query TimescaleDB dimensions view for hypertable info
+        # This view contains both time and space dimensions
+        query = (
+            exp.select(
+                exp.column("column_name", "d"),
+                exp.column("dimension_type", "d"),
+                exp.column("time_interval", "d"),
+                exp.column("num_partitions", "d"),
+            )
+            .from_(exp.table_("dimensions", "timescaledb_information").as_("d"))
+            .join(
+                exp.table_("hypertables", "timescaledb_information").as_("h"),
+                on=exp.and_(
+                    exp.column("hypertable_schema", "d").eq(exp.column("hypertable_schema", "h")),
+                    exp.column("hypertable_name", "d").eq(exp.column("hypertable_name", "h")),
+                ),
+            )
+            .where(
+                exp.column("hypertable_schema", "h").eq(exp.Literal.string(schema_name)),
+                exp.column("hypertable_name", "h").eq(exp.Literal.string(table.name)),
+            )
+            .order_by(exp.column("dimension_number", "d"))
+        )
+
+        try:
+            logger.info("Fetching TimescaleDB info for %s", table_name)
+            self.execute(query)
+            rows = self.cursor.fetchall()
+        except Exception as e:
+            # TimescaleDB not installed or other error
+            logger.warning("Could not query TimescaleDB info: %s", e)
+            return None
+
+        if not rows:
+            return None
+
+        time_column = None
+        chunk_time_interval = None
+        partitioning_column = None
+        number_partitions = None
+
+        for column_name, dimension_type, time_interval, num_partitions in rows:
+            if dimension_type == "Time":
+                time_column = column_name
+                if time_interval:
+                    chunk_time_interval = str(time_interval)
+            elif dimension_type == "Space":
+                partitioning_column = column_name
+                number_partitions = num_partitions
+
+        if not time_column:
+            return None
+
+        return HypertableConfig(
+            time_column=time_column,
+            chunk_time_interval=chunk_time_interval,
+            partitioning_column=partitioning_column,
+            number_partitions=number_partitions,
+        )
+
+    def _create_hypertable(self, table: exp.Table, config: HypertableConfig) -> None:
+        """Converts a regular table to a TimescaleDB hypertable.
+
+        Args:
+            table: The table to convert.
+            config: HypertableConfig with the hypertable configuration.
+        """
+        table_sql = table.sql(dialect=self.dialect)
+        time_column_sql = exp.to_identifier(config.time_column).sql(dialect=self.dialect)
+
+        # Build create_hypertable call
+        args = [f"{table_sql}", f"{time_column_sql}"]
+
+        if config.chunk_time_interval:
+            args.append(f"chunk_time_interval => INTERVAL '{config.chunk_time_interval}'")
+
+        if config.partitioning_column and config.number_partitions:
+            partitioning_col_sql = exp.to_identifier(config.partitioning_column).sql(
+                dialect=self.dialect
+            )
+            args.append(f"partitioning_column => {partitioning_col_sql}")
+            args.append(f"number_partitions => {config.number_partitions}")
+
+        create_hypertable_sql = f"SELECT create_hypertable({', '.join(args)})"
+        logger.info("Converting table to hypertable: %s", table_sql)
+        self.execute(create_hypertable_sql)
+
     def replace_query(
         self,
         table_name: TableName,
@@ -456,6 +569,7 @@ class PostgresEngineAdapter(
         dependent_views = self._get_dependent_views(table_name)
         indexes = self._get_table_indexes(table_name)
         grants = self._get_table_grants(table_name)
+        hypertable_config = self._get_hypertable_config(table_name)
 
         temp_table = self._get_temp_table(target_table)
         old_table = self._get_temp_table(target_table)
@@ -469,6 +583,11 @@ class PostgresEngineAdapter(
                 column_descriptions=column_descriptions,
                 **kwargs,
             )
+
+            # Convert to hypertable before inserting data (required by TimescaleDB)
+            if hypertable_config:
+                self._create_hypertable(temp_table, hypertable_config)
+
             self._insert_append_source_queries(temp_table, source_queries, target_columns_to_types)
 
             if indexes:
