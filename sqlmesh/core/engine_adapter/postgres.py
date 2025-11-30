@@ -448,6 +448,9 @@ class PostgresEngineAdapter(
         except Exception as e:
             # TimescaleDB not installed or other error
             logger.warning("Could not query TimescaleDB info: %s", e)
+            # Rollback to recover from the failed transaction state in PostgreSQL
+            # Without this, all subsequent queries would fail
+            self._connection_pool.rollback()
             return None
 
         if not rows:
