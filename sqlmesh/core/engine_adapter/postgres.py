@@ -453,14 +453,14 @@ class PostgresEngineAdapter(
         if not target_columns_to_types:
             target_columns_to_types = self.columns(target_table)
 
-        with self.transaction():
-            dependent_views = self._get_dependent_views(table_name)
-            indexes = self._get_table_indexes(table_name)
-            grants = self._get_table_grants(table_name)
+        dependent_views = self._get_dependent_views(table_name)
+        indexes = self._get_table_indexes(table_name)
+        grants = self._get_table_grants(table_name)
 
-            temp_table = self._get_temp_table(target_table)
-            old_table = self._get_temp_table(target_table)
+        temp_table = self._get_temp_table(target_table)
+        old_table = self._get_temp_table(target_table)
 
+        try:
             self.create_table(
                 temp_table,
                 target_columns_to_types,
@@ -471,32 +471,26 @@ class PostgresEngineAdapter(
             )
             self._insert_append_source_queries(temp_table, source_queries, target_columns_to_types)
 
-            # Apply indexes and grants BEFORE swap so the new table is fully prepared
             if indexes:
-                logger.info(
-                    "Creating %d index(es) on temp table",
-                    len(indexes),
-                )
                 self._recreate_indexes(indexes, temp_table)
-
             if grants:
-                logger.info(
-                    "Applying %d grant(s) to temp table",
-                    len(grants),
-                )
                 self._apply_table_grants(temp_table, grants)
 
             self.execute(exp.Command(this="ANALYZE", expression=temp_table))
+        except Exception:
+            self.drop_table(temp_table, exists=True)
+            raise
 
-            self.rename_table(target_table, old_table)
-            self.rename_table(temp_table, target_table)
+        try:
+            with self.transaction():
+                self.rename_table(target_table, old_table)
+                self.rename_table(temp_table, target_table)
 
-            if dependent_views:
-                logger.info(
-                    "Recreating %d dependent view(s) for table '%s'",
-                    len(dependent_views),
-                    target_table.sql(dialect=self.dialect),
-                )
-                self._recreate_dependent_views(dependent_views)
+                if dependent_views:
+                    self._recreate_dependent_views(dependent_views)
 
-            self.drop_table(old_table)
+                self.drop_table(old_table)
+        except Exception:
+            # Transaction rolled back, temp_table still exists
+            self.drop_table(temp_table, exists=True)
+            raise
