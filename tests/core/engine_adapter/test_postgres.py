@@ -998,3 +998,94 @@ def test_replace_query_runs_analyze_on_temp_table(
     analyze_sql = analyze_calls[0]
     assert "temp1" in analyze_sql, f"ANALYZE should include temp table name, got: {analyze_sql}"
     assert analyze_sql != "ANALYZE", "ANALYZE should not be called without a table name"
+
+
+def test_create_hypertable_sql_generation(make_mocked_engine_adapter: t.Callable):
+    """Test that _create_hypertable generates correct SQL with string literals.
+
+    The create_hypertable function requires string literals (single quotes) for
+    table and column names, not identifiers (double quotes). Double-quoted identifiers
+    are interpreted as column references, causing 'missing FROM-clause' errors.
+    """
+    from sqlmesh.core.engine_adapter.postgres import HypertableConfig
+
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    # Test basic hypertable creation
+    config = HypertableConfig(
+        time_column="created_at",
+        chunk_time_interval="7 days",
+    )
+
+    table = exp.to_table("test_schema.test_table")
+    adapter._create_hypertable(table, config)
+
+    sql_calls = to_sql_calls(adapter)
+    create_hypertable_calls = [sql for sql in sql_calls if "create_hypertable" in sql.lower()]
+
+    assert len(create_hypertable_calls) == 1
+    sql = create_hypertable_calls[0]
+
+    # Table name should be wrapped in single quotes (string literal)
+    assert "'" in sql, "Table name should be a string literal"
+    # Table reference should be a string literal, not an identifier reference
+    assert "'test_schema.test_table'" in sql, f"Table name not properly quoted: {sql}"
+
+    # Column name should be a string literal
+    assert "'created_at'" in sql, f"Column name not properly quoted: {sql}"
+
+    # Chunk interval should be present
+    assert "chunk_time_interval => INTERVAL '7 days'" in sql
+
+
+def test_create_hypertable_with_partitioning(make_mocked_engine_adapter: t.Callable):
+    """Test _create_hypertable with space partitioning column."""
+    from sqlmesh.core.engine_adapter.postgres import HypertableConfig
+
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    config = HypertableConfig(
+        time_column="event_time",
+        chunk_time_interval="1 day",
+        partitioning_column="device_id",
+        number_partitions=4,
+    )
+
+    table = exp.to_table("events")
+    adapter._create_hypertable(table, config)
+
+    sql_calls = to_sql_calls(adapter)
+    create_hypertable_calls = [sql for sql in sql_calls if "create_hypertable" in sql.lower()]
+
+    assert len(create_hypertable_calls) == 1
+    sql = create_hypertable_calls[0]
+
+    # Check all arguments are string literals where needed
+    assert "'event_time'" in sql
+    assert "partitioning_column => 'device_id'" in sql
+    assert "number_partitions => 4" in sql
+
+
+def test_create_hypertable_escapes_quotes(make_mocked_engine_adapter: t.Callable):
+    """Test that _create_hypertable properly escapes single quotes in column names."""
+    from sqlmesh.core.engine_adapter.postgres import HypertableConfig
+
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    # Column name with a single quote (unusual but possible)
+    config = HypertableConfig(
+        time_column="it's_time",
+        chunk_time_interval="1 day",
+    )
+
+    table = exp.to_table("test_table")
+    adapter._create_hypertable(table, config)
+
+    sql_calls = to_sql_calls(adapter)
+    create_hypertable_calls = [sql for sql in sql_calls if "create_hypertable" in sql.lower()]
+
+    assert len(create_hypertable_calls) == 1
+    sql = create_hypertable_calls[0]
+
+    # Single quote should be escaped by doubling
+    assert "'it''s_time'" in sql, f"Quote not escaped properly: {sql}"

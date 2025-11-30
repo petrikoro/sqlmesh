@@ -488,19 +488,20 @@ class PostgresEngineAdapter(
             config: HypertableConfig with the hypertable configuration.
         """
         table_sql = table.sql(dialect=self.dialect)
-        time_column_sql = exp.to_identifier(config.time_column).sql(dialect=self.dialect)
 
-        # Build create_hypertable call
-        args = [f"{table_sql}", f"{time_column_sql}"]
+        # Build create_hypertable call - arguments must be string literals (single quotes)
+        # The table reference is passed as a string that PostgreSQL casts to regclass
+        # Column names are passed as NAME type strings
+        def escape_literal(s: str) -> str:
+            return s.replace("'", "''")
+
+        args = [f"'{table_sql}'", f"'{escape_literal(config.time_column)}'"]
 
         if config.chunk_time_interval:
             args.append(f"chunk_time_interval => INTERVAL '{config.chunk_time_interval}'")
 
         if config.partitioning_column and config.number_partitions:
-            partitioning_col_sql = exp.to_identifier(config.partitioning_column).sql(
-                dialect=self.dialect
-            )
-            args.append(f"partitioning_column => {partitioning_col_sql}")
+            args.append(f"partitioning_column => '{escape_literal(config.partitioning_column)}'")
             args.append(f"number_partitions => {config.number_partitions}")
 
         create_hypertable_sql = f"SELECT create_hypertable({', '.join(args)})"
