@@ -194,6 +194,7 @@ class PostgresEngineAdapter(
             .order_by("n.nspname", "c.relname")
         )
 
+        logger.info("Fetching dependent views for %s", table_name)
         self.execute(query)
         return self.cursor.fetchall()
 
