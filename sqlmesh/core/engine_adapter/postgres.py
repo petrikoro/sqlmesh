@@ -480,12 +480,16 @@ class PostgresEngineAdapter(
             number_partitions=number_partitions,
         )
 
-    def _create_hypertable(self, table: exp.Table, config: HypertableConfig) -> None:
+    def _create_hypertable(
+        self, table: exp.Table, config: HypertableConfig, create_default_indexes: bool = True
+    ) -> None:
         """Converts a regular table to a TimescaleDB hypertable.
 
         Args:
             table: The table to convert.
             config: HypertableConfig with the hypertable configuration.
+            create_default_indexes: Whether to create default indexes on the time column.
+                Set to False when recreating indexes manually to avoid conflicts.
         """
         table_sql = table.sql(dialect=self.dialect)
 
@@ -503,6 +507,9 @@ class PostgresEngineAdapter(
         if config.partitioning_column and config.number_partitions:
             args.append(f"partitioning_column => '{escape_literal(config.partitioning_column)}'")
             args.append(f"number_partitions => {config.number_partitions}")
+
+        if not create_default_indexes:
+            args.append("create_default_indexes => FALSE")
 
         create_hypertable_sql = f"SELECT create_hypertable({', '.join(args)})"
         logger.info("Converting table to hypertable: %s", table_sql)
@@ -590,8 +597,13 @@ class PostgresEngineAdapter(
             )
 
             # Convert to hypertable before inserting data (required by TimescaleDB)
+            # When we have indexes to recreate, disable default index creation to avoid conflicts
+            # (TimescaleDB creates indexes on time column by default, which would conflict with
+            # the indexes we're about to recreate)
             if hypertable_config:
-                self._create_hypertable(temp_table, hypertable_config)
+                self._create_hypertable(
+                    temp_table, hypertable_config, create_default_indexes=not indexes
+                )
 
             self._insert_append_source_queries(temp_table, source_queries, target_columns_to_types)
 

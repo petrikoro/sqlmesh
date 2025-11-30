@@ -903,6 +903,74 @@ def test_replace_query_with_hypertable_swap(
     assert "temp1" in call_args[0][0].sql(dialect="postgres")
     # Second arg is the hypertable config
     assert call_args[0][1] == hypertable_config
+    # Third arg: no indexes to recreate, so create_default_indexes should be True
+    assert call_args[1].get("create_default_indexes", True) is True
+
+
+def test_replace_query_with_hypertable_and_indexes_disables_default_indexes(
+    make_mocked_engine_adapter: t.Callable,
+    make_temp_table_name: t.Callable,
+    mocker: MockerFixture,
+):
+    """Test that create_default_indexes=False when recreating indexes.
+
+    When a hypertable has indexes that need to be recreated, we disable
+    TimescaleDB's default index creation to avoid conflicts.
+    """
+    from sqlmesh.core.engine_adapter import PostgresEngineAdapter
+    from sqlmesh.core.engine_adapter.postgres import HypertableConfig
+    from sqlmesh.core.engine_adapter.shared import DataObject, DataObjectType
+
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    mocker.patch.object(
+        adapter,
+        "get_data_object",
+        return_value=DataObject(
+            catalog="db", schema="test_schema", name="events", type=DataObjectType.TABLE
+        ),
+    )
+
+    temp_table_mock = mocker.patch.object(adapter, "_get_temp_table")
+    temp_table_mock.side_effect = [
+        make_temp_table_name("events", "temp1"),
+        make_temp_table_name("events", "old1"),
+    ]
+
+    mocker.patch.object(adapter, "_get_dependent_views", return_value=[])
+    # Table has indexes that need to be recreated
+    mocker.patch.object(
+        adapter,
+        "_get_table_indexes",
+        return_value=['CREATE INDEX "events_time_idx" ON "test_schema"."events" ("event_time")'],
+    )
+    mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(
+        adapter,
+        "columns",
+        return_value={
+            "id": exp.DataType.build("INT"),
+            "event_time": exp.DataType.build("TIMESTAMP"),
+        },
+    )
+
+    hypertable_config = HypertableConfig(
+        time_column="event_time",
+        chunk_time_interval="7 days",
+    )
+    mocker.patch.object(adapter, "_get_hypertable_config", return_value=hypertable_config)
+
+    create_hypertable_mock = mocker.patch.object(adapter, "_create_hypertable")
+
+    adapter.replace_query(
+        "test_schema.events",
+        parse_one("SELECT 1 as id, NOW() as event_time"),
+    )
+
+    create_hypertable_mock.assert_called_once()
+    call_args = create_hypertable_mock.call_args
+    # When there are indexes to recreate, create_default_indexes should be False
+    assert call_args[1].get("create_default_indexes") is False
 
 
 def test_replace_query_without_hypertable(
@@ -1089,3 +1157,60 @@ def test_create_hypertable_escapes_quotes(make_mocked_engine_adapter: t.Callable
 
     # Single quote should be escaped by doubling
     assert "'it''s_time'" in sql, f"Quote not escaped properly: {sql}"
+
+
+def test_create_hypertable_with_create_default_indexes_false(
+    make_mocked_engine_adapter: t.Callable,
+):
+    """Test that _create_hypertable can disable default index creation.
+
+    When recreating indexes manually during table swap, we need to disable
+    TimescaleDB's automatic index creation to avoid conflicts with the indexes
+    we're about to recreate.
+    """
+    from sqlmesh.core.engine_adapter.postgres import HypertableConfig
+
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    config = HypertableConfig(
+        time_column="created_at",
+        chunk_time_interval="7 days",
+    )
+
+    table = exp.to_table("test_table")
+    adapter._create_hypertable(table, config, create_default_indexes=False)
+
+    sql_calls = to_sql_calls(adapter)
+    create_hypertable_calls = [sql for sql in sql_calls if "create_hypertable" in sql.lower()]
+
+    assert len(create_hypertable_calls) == 1
+    sql = create_hypertable_calls[0]
+
+    # Should include create_default_indexes => FALSE
+    assert "create_default_indexes => FALSE" in sql, f"Missing create_default_indexes: {sql}"
+
+
+def test_create_hypertable_default_indexes_enabled_by_default(
+    make_mocked_engine_adapter: t.Callable,
+):
+    """Test that _create_hypertable enables default indexes by default."""
+    from sqlmesh.core.engine_adapter.postgres import HypertableConfig
+
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    config = HypertableConfig(
+        time_column="created_at",
+        chunk_time_interval="7 days",
+    )
+
+    table = exp.to_table("test_table")
+    adapter._create_hypertable(table, config)  # No create_default_indexes argument
+
+    sql_calls = to_sql_calls(adapter)
+    create_hypertable_calls = [sql for sql in sql_calls if "create_hypertable" in sql.lower()]
+
+    assert len(create_hypertable_calls) == 1
+    sql = create_hypertable_calls[0]
+
+    # Should NOT include create_default_indexes (uses TimescaleDB default which is TRUE)
+    assert "create_default_indexes" not in sql, f"Unexpected create_default_indexes: {sql}"
