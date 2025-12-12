@@ -619,16 +619,39 @@ class PostgresEngineAdapter(
             self.drop_table(temp_table, exists=True)
             raise
 
+        # Atomic swap: rename target_table -> old_table, then temp_table -> target_table
+        # This makes the new table visible atomically.
+        # If this fails, the transaction automatically rolls back, so all renames are undone.
+        # Only temp_table (created before the transaction) still exists and needs cleanup.
         try:
             with self.transaction():
                 self.rename_table(target_table, old_table)
                 self.rename_table(temp_table, target_table)
-
-                if dependent_views:
-                    self._recreate_dependent_views(dependent_views)
-
-                self.drop_table(old_table)
         except Exception:
-            # Transaction rolled back, temp_table still exists
+            # Transaction rolled back automatically - no need to rename back.
+            # Only cleanup: drop temp_table which was created before the transaction.
             self.drop_table(temp_table, exists=True)
+            raise
+
+        # Views must be recreated because PostgreSQL views store OIDs that reference the old table.
+        # If this fails, rollback by restoring old_table to target_table.
+        try:
+            if dependent_views:
+                with self.transaction():
+                    self._recreate_dependent_views(dependent_views)
+        except Exception:
+            # Rollback: restore original table state.
+            # Since target_table currently has the new table, we need to:
+            # 1. Drop the new table (target_table) to free the name
+            # 2. Rename old_table back to target_table to restore original state
+            # This ensures views point to the correct table and system is consistent.
+            self.drop_table(target_table, exists=True)
+            self.rename_table(old_table, target_table)
+            raise
+
+        try:
+            with self.transaction():
+                self.drop_table(old_table, exists=True)
+        except Exception:
+            logger.warning("Failed to drop old table %s", old_table.sql(dialect=self.dialect))
             raise
