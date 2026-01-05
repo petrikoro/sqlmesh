@@ -77,6 +77,7 @@ ENGINES = [
     IntegrationTestEngine("spark", native_dataframe_type="pyspark"),
     IntegrationTestEngine("clickhouse", catalog_types=["standalone", "cluster"]),
     IntegrationTestEngine("risingwave"),
+    IntegrationTestEngine("starrocks"),
     # Cloud engines that need paid accounts / special credentials
     IntegrationTestEngine("clickhouse_cloud", cloud=True),
     IntegrationTestEngine("redshift", cloud=True),
