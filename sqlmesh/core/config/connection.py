@@ -2277,6 +2277,61 @@ class AthenaConnectionConfig(ConnectionConfig):
         return self.catalog_name
 
 
+class StarRocksConnectionConfig(ConnectionConfig):
+    """StarRocks connection configuration."""
+
+    host: str
+    user: str
+    password: str
+    port: t.Optional[int] = None
+    database: t.Optional[str] = None
+    charset: t.Optional[str] = None
+    collation: t.Optional[str] = None
+    ssl_disabled: t.Optional[bool] = None
+
+    concurrent_tasks: int = 4
+    register_comments: bool = True
+    pre_ping: bool = True
+
+    type_: t.Literal["starrocks"] = Field(alias="type", default="starrocks")
+    DIALECT: t.ClassVar[t.Literal["starrocks"]] = "starrocks"
+    DISPLAY_NAME: t.ClassVar[t.Literal["StarRocks"]] = "StarRocks"
+    DISPLAY_ORDER: t.ClassVar[t.Literal[18]] = 18
+
+    _engine_import_validator = _get_engine_import_validator("pymysql", "starrocks")
+
+    @property
+    def _connection_kwargs_keys(self) -> t.Set[str]:
+        connection_keys = {
+            "host",
+            "user",
+            "password",
+        }
+        if self.port is not None:
+            connection_keys.add("port")
+        if self.database is not None:
+            connection_keys.add("database")
+        if self.charset is not None:
+            connection_keys.add("charset")
+        if self.collation is not None:
+            connection_keys.add("collation")
+        if self.ssl_disabled is not None:
+            connection_keys.add("ssl_disabled")
+        return connection_keys
+
+    @property
+    def _engine_adapter(self) -> t.Type[EngineAdapter]:
+        from sqlmesh.core.engine_adapter.starrocks import StarRocksEngineAdapter
+
+        return StarRocksEngineAdapter
+
+    @property
+    def _connection_factory(self) -> t.Callable:
+        from pymysql import connect
+
+        return connect
+
+
 class RisingwaveConnectionConfig(ConnectionConfig):
     host: str
     user: str
