@@ -115,9 +115,9 @@ dev-publish: ui-build clean-build publish
 jupyter-example:
 	jupyter lab tests/slows/jupyter/example_outputs.ipynb
 
-engine-up: engine-clickhouse-up engine-mssql-up engine-mysql-up engine-postgres-up engine-spark-up engine-trino-up
+engine-up: engine-clickhouse-up engine-mssql-up engine-mysql-up engine-postgres-up engine-spark-up engine-starrocks-up engine-trino-up
 
-engine-down: engine-clickhouse-down engine-mssql-down engine-mysql-down engine-postgres-down engine-spark-down engine-trino-down
+engine-down: engine-clickhouse-down engine-mssql-down engine-mysql-down engine-postgres-down engine-spark-down engine-starrocks-down engine-trino-down
 
 fast-test:
 	pytest -n auto -m "fast and not cicdonly" --junitxml=test-results/junit-fast-test.xml && pytest -m "isolated" && pytest -m "registry_isolation" && pytest -m "dialect_isolated"
@@ -207,6 +207,9 @@ trino-test: engine-trino-up
 
 risingwave-test: engine-risingwave-up
 	pytest -n auto -m "risingwave" --reruns 3 --junitxml=test-results/junit-risingwave.xml
+
+starrocks-test: engine-starrocks-up
+	pytest -n auto -m "starrocks" --reruns 3 --junitxml=test-results/junit-starrocks.xml
 
 #################
 # Cloud Engines #

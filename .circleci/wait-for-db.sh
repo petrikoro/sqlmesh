@@ -59,6 +59,10 @@ risingwave_ready() {
     probe_port 4566
 }
 
+starrocks_ready() {
+    probe_port 9030
+}
+
 echo "Waiting for $ENGINE to be ready..."
 
 READINESS_FUNC="${ENGINE}_ready"
