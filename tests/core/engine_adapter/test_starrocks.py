@@ -162,6 +162,22 @@ def test_is_dynamic_overwrite_enabled_exception(
     fetchone_mock.assert_called_once_with("SELECT @@dynamic_overwrite")
 
 
+def test_delete_from_with_true_condition(adapter: StarRocksEngineAdapter):
+    """When where=exp.true(), StarRocks should use TRUNCATE TABLE instead of DELETE"""
+    adapter.delete_from(exp.to_table("test_table"), exp.true())
+
+    sql_calls = to_sql_calls(adapter)
+    assert sql_calls == ["TRUNCATE TABLE `test_table`"]
+
+
+def test_delete_from_with_regular_condition(adapter: StarRocksEngineAdapter):
+    """When where is a regular condition, StarRocks should use standard DELETE FROM"""
+    adapter.delete_from(exp.to_table("test_table"), "a = 1")
+
+    sql_calls = to_sql_calls(adapter)
+    assert sql_calls == ["DELETE FROM `test_table` WHERE `a` = 1"]
+
+
 def test_adapter_settings():
     """Test that adapter class settings are correct"""
     assert StarRocksEngineAdapter.DIALECT == "starrocks"

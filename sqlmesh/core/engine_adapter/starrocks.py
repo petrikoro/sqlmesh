@@ -72,6 +72,21 @@ class StarRocksEngineAdapter(MySQLEngineAdapter):
             **kwargs,
         )
 
+    def delete_from(self, table_name: TableName, where: t.Union[str, exp.Expression]) -> None:
+        # StarRocks DELETE WHERE clause doesn't support boolean literals like TRUE/FALSE,
+        # also we cannot use DELETE with WHERE in some cases.
+        # So we use TRUNCATE TABLE instead when deleting all rows.
+        # Another option is to use dynamic_overwrite which is supported in StarRocks since v2.4.
+        if where == exp.true():
+            return self.execute(
+                exp.TruncateTable(
+                    expressions=[
+                        exp.to_table(table_name, dialect=self.dialect),
+                    ]
+                )
+            )
+        return super().delete_from(table_name, where)
+
     def create_schema(
         self,
         schema_name: SchemaName,
