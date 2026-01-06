@@ -36,10 +36,8 @@ class StarRocksEngineAdapter(MySQLEngineAdapter):
     # database (schema) names are limited to 256 characters.
     # see https://docs.starrocks.io/docs/sql-reference/System_limit/
     MAX_IDENTIFIER_LENGTH = 256
-    # We always use INSERT_OVERWRITE here because StarRocks has some pretty strict limitations on DELETE statements—
-    # for example, its WHERE clauses aren't very flexible and don't allow functions like CAST in conditions.
-    # To get the expected behavior, you should turn on dynamic_overwrite (available since StarRocks 2.4).
-    # For more details, see: https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/INSERT/#dynamic-overwrite
+    # We always use INSERT_OVERWRITE here because
+    # StarRocks has strict limitations on DELETE statements.
     INSERT_OVERWRITE_STRATEGY = InsertOverwriteStrategy.INSERT_OVERWRITE
 
     def create_schema(
@@ -49,12 +47,11 @@ class StarRocksEngineAdapter(MySQLEngineAdapter):
         warn_on_error: bool = True,
         properties: t.Optional[t.List[exp.Expression]] = None,
     ) -> None:
-        properties = properties or []
         return super()._create_schema(
             schema_name=schema_name,
             ignore_if_exists=ignore_if_exists,
             warn_on_error=warn_on_error,
-            properties=properties,
+            properties=properties or [],
             kind="DATABASE",  # In StarRocks, a schema is a database
         )
 
