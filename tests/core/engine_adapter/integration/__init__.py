@@ -274,6 +274,8 @@ class TestContext:
             for k, v in self.columns_to_types.items()
             if v.sql().lower().startswith("timestamp")
             or (v.sql().lower() == "datetime" and self.dialect == "bigquery")
+            # StarRocks returns DATE columns as datetime.date objects
+            or (v.sql().lower() == "date" and self.dialect == "starrocks")
         ]
 
     @property

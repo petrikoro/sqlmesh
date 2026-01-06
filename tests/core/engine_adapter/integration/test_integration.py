@@ -783,6 +783,9 @@ def test_insert_overwrite_by_time_partition(ctx_query_and_df: TestContext):
         ds_type = "datetime"
     if ctx.dialect == "tsql":
         ds_type = "varchar(max)"
+    if ctx.dialect == "starrocks":
+        # StarRocks PARTITION BY RANGE only supports DATE/DATETIME columns
+        ds_type = "date"
 
     ctx.columns_to_types = {"id": "int", "ds": ds_type}
     table = ctx.table("test_table")
@@ -871,6 +874,9 @@ def test_insert_overwrite_by_time_partition_source_columns(ctx_query_and_df: Tes
         ds_type = "datetime"
     if ctx.dialect == "tsql":
         ds_type = "varchar(max)"
+    if ctx.dialect == "starrocks":
+        # StarRocks PARTITION BY RANGE only supports DATE/DATETIME columns
+        ds_type = "date"
 
     ctx.columns_to_types = {"id": "int", "ds": ds_type}
     columns_to_types = {
