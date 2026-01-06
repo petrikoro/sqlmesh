@@ -1240,6 +1240,20 @@ def test_starrocks(make_config):
     assert config.concurrent_tasks == 8
 
 
+def test_starrocks_dynamic_overwrite(make_config):
+    # Test that dynamic_overwrite is always enabled
+    config = make_config(
+        type="starrocks",
+        host="host",
+        user="user",
+        password="password",
+        check_import=False,
+    )
+    assert isinstance(config, StarRocksConnectionConfig)
+    static_kwargs = config._static_connection_kwargs
+    assert static_kwargs == {"init_command": "SET dynamic_overwrite = true"}
+
+
 def test_clickhouse(make_config):
     from sqlmesh import __version__
 

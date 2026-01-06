@@ -57,6 +57,8 @@ FORBIDDEN_STATE_SYNC_ENGINES = {
     "trino",
     # Nullable types are problematic
     "clickhouse",
+    # DELETE statements have pretty strict restrictions on WHERE clauses
+    "starrocks",
 }
 MOTHERDUCK_TOKEN_REGEX = re.compile(r"(\?|\&)(motherduck_token=)(\S*)")
 PASSWORD_REGEX = re.compile(r"(password=)(\S+)")
@@ -2289,7 +2291,7 @@ class StarRocksConnectionConfig(ConnectionConfig):
     collation: t.Optional[str] = None
     ssl_disabled: t.Optional[bool] = None
 
-    concurrent_tasks: int = 4
+    concurrent_tasks: int = 1
     register_comments: bool = True
     pre_ping: bool = True
 
@@ -2330,6 +2332,11 @@ class StarRocksConnectionConfig(ConnectionConfig):
         from pymysql import connect
 
         return connect
+
+    @property
+    def _static_connection_kwargs(self) -> t.Dict[str, t.Any]:
+        # Enable dynamic_overwrite for correct INSERT OVERWRITE behavior
+        return {"init_command": "SET dynamic_overwrite = true"}
 
 
 class RisingwaveConnectionConfig(ConnectionConfig):
