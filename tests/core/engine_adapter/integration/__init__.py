@@ -316,6 +316,11 @@ class TestContext:
         if self.dialect == "risingwave":
             return False
 
+        # StarRocks doesn't support subqueries in DELETE WHERE IN predicates,
+        # which is used by the logical merge implementation
+        if self.dialect == "starrocks":
+            return False
+
         return True
 
     @property
@@ -457,7 +462,7 @@ class TestContext:
                     AND pgc.relkind = '{"v" if table_kind == "VIEW" else "r"}'
                 ;
             """
-        elif self.dialect in ["mysql", "snowflake"]:
+        elif self.dialect in ["mysql", "snowflake", "starrocks"]:
             # Snowflake treats all identifiers as uppercase unless they are lowercase and quoted.
             # They are lowercase and quoted in sushi but not in the inline tests.
             if self.dialect == "snowflake" and snowflake_capitalize_ids:
@@ -467,6 +472,7 @@ class TestContext:
             comment_field_name = {
                 "mysql": "table_comment",
                 "snowflake": "comment",
+                "starrocks": "table_comment",
             }
 
             query = f"""
@@ -572,7 +578,7 @@ class TestContext:
                     AND pgc.relkind = '{"v" if table_kind == "VIEW" else "r"}'
                 ;
             """
-        elif self.dialect in ["mysql", "snowflake", "trino"]:
+        elif self.dialect in ["mysql", "snowflake", "trino", "starrocks"]:
             # Snowflake treats all identifiers as uppercase unless they are lowercase and quoted.
             # They are lowercase and quoted in sushi but not in the inline tests.
             if self.dialect == "snowflake" and snowflake_capitalize_ids:
@@ -583,6 +589,7 @@ class TestContext:
                 "mysql": "column_comment",
                 "snowflake": "comment",
                 "trino": "comment",
+                "starrocks": "column_comment",
             }
 
             query = f"""

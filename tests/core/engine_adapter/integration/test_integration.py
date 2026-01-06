@@ -264,7 +264,10 @@ def test_ctas(ctx_query_and_df: TestContext):
         column_comments = ctx.get_column_comments(table.db, table.name)
 
         assert table_description == "test table description"
-        assert column_comments == {"id": "test id column description"}
+        # StarRocks doesn't support adding column comments via post-creation commands,
+        # so column comments won't be present for CTAS tables
+        if ctx.dialect != "starrocks":
+            assert column_comments == {"id": "test id column description"}
 
     # ensure we don't hit clickhouse INSERT with LIMIT 0 bug on CTAS
     if ctx.dialect == "clickhouse":
@@ -311,7 +314,10 @@ def test_ctas_source_columns(ctx_query_and_df: TestContext):
         column_comments = ctx.get_column_comments(table.db, table.name)
 
         assert table_description == "test table description"
-        assert column_comments == {"id": "test id column description"}
+        # StarRocks doesn't support adding column comments via post-creation commands,
+        # so column comments won't be present for CTAS tables
+        if ctx.dialect != "starrocks":
+            assert column_comments == {"id": "test id column description"}
 
     # ensure we don't hit clickhouse INSERT with LIMIT 0 bug on CTAS
     if ctx.dialect == "clickhouse":
@@ -2579,6 +2585,7 @@ def test_dialects(ctx: TestContext):
                 "mysql": pd.Timestamp("2020-01-01 00:00:00"),
                 "spark": pd.Timestamp("2020-01-01 00:00:00"),
                 "databricks": pd.Timestamp("2020-01-01 00:00:00"),
+                "starrocks": pd.Timestamp("2020-01-01 00:00:00"),
             },
         ),
         (
@@ -3118,6 +3125,8 @@ def test_value_normalization(
             pytest.skip("Trino on Hive doesn't support TIMESTAMP WITH TIME ZONE fields")
         if ctx.dialect == "fabric":
             pytest.skip("Fabric doesn't support TIMESTAMP WITH TIME ZONE fields")
+        if ctx.dialect == "starrocks":
+            pytest.skip("StarRocks doesn't properly support TIMESTAMP WITH TIME ZONE fields")
 
     if not isinstance(ctx.engine_adapter, RowDiffMixin):
         pytest.skip(
@@ -3139,6 +3148,10 @@ def test_value_normalization(
                     )
                 ],
             )
+        if ctx.dialect == "starrocks":
+            # StarRocks DATETIME natively supports microsecond precision without explicit (6) syntax
+            # and doesn't accept the precision specifier
+            pytest.skip("StarRocks DATETIME doesn't support precision syntax like DATETIME(6)")
     if ctx.dialect == "tsql" and column_type == exp.DataType.Type.DATETIME:
         full_column_type = exp.DataType.build("DATETIME2", dialect="tsql")
 
