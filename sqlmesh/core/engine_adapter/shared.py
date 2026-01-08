@@ -236,6 +236,7 @@ class InsertOverwriteStrategy(Enum):
     # First, issue a DELETE to clear the data range. Then, issue an INSERT query to insert the new data
     DELETE_INSERT = 1
     # Issue a single INSERT OVERWRITE query to replace a data range.
+    # Note: INSERT OVERWRITE on StarRocks requires that `dynamic_overwrite=true` be set in the session properties.
     INSERT_OVERWRITE = 2
     # Issue a single INSERT INTO... REPLACE WHERE query
     # Note: Replace where on Databricks requires that `spark.sql.sources.partitionOverwriteMode` be set to `static`
