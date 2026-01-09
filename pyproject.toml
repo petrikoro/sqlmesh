@@ -24,7 +24,7 @@ dependencies = [
     "requests",
     "rich[jupyter]",
     "ruamel.yaml",
-    "sqlglot[rs] @ git+https://github.com/petrikoro/sqlglot.git@petrikoro-main",
+    "sqlglot[rs] @ git+https://github.com/petrikoro/sqlglot.git@v27.28.0+petrikoro.1",
     "tenacity",
     "time-machine",
     "json-stream"
