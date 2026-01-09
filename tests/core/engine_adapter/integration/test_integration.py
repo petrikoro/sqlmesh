@@ -264,7 +264,10 @@ def test_ctas(ctx_query_and_df: TestContext):
         column_comments = ctx.get_column_comments(table.db, table.name)
 
         assert table_description == "test table description"
-        assert column_comments == {"id": "test id column description"}
+        # StarRocks doesn't support adding column comments via post-creation commands,
+        # so column comments won't be present for CTAS tables
+        if ctx.dialect != "starrocks":
+            assert column_comments == {"id": "test id column description"}
 
     # ensure we don't hit clickhouse INSERT with LIMIT 0 bug on CTAS
     if ctx.dialect == "clickhouse":
@@ -311,7 +314,10 @@ def test_ctas_source_columns(ctx_query_and_df: TestContext):
         column_comments = ctx.get_column_comments(table.db, table.name)
 
         assert table_description == "test table description"
-        assert column_comments == {"id": "test id column description"}
+        # StarRocks doesn't support adding column comments via post-creation commands,
+        # so column comments won't be present for CTAS tables
+        if ctx.dialect != "starrocks":
+            assert column_comments == {"id": "test id column description"}
 
     # ensure we don't hit clickhouse INSERT with LIMIT 0 bug on CTAS
     if ctx.dialect == "clickhouse":
@@ -777,6 +783,9 @@ def test_insert_overwrite_by_time_partition(ctx_query_and_df: TestContext):
         ds_type = "datetime"
     if ctx.dialect == "tsql":
         ds_type = "varchar(max)"
+    if ctx.dialect == "starrocks":
+        # StarRocks PARTITION BY RANGE only supports DATE/DATETIME columns
+        ds_type = "date"
 
     ctx.columns_to_types = {"id": "int", "ds": ds_type}
     table = ctx.table("test_table")
@@ -865,6 +874,9 @@ def test_insert_overwrite_by_time_partition_source_columns(ctx_query_and_df: Tes
         ds_type = "datetime"
     if ctx.dialect == "tsql":
         ds_type = "varchar(max)"
+    if ctx.dialect == "starrocks":
+        # StarRocks PARTITION BY RANGE only supports DATE/DATETIME columns
+        ds_type = "date"
 
     ctx.columns_to_types = {"id": "int", "ds": ds_type}
     columns_to_types = {
@@ -2579,6 +2591,7 @@ def test_dialects(ctx: TestContext):
                 "mysql": pd.Timestamp("2020-01-01 00:00:00"),
                 "spark": pd.Timestamp("2020-01-01 00:00:00"),
                 "databricks": pd.Timestamp("2020-01-01 00:00:00"),
+                "starrocks": pd.Timestamp("2020-01-01 00:00:00"),
             },
         ),
         (
@@ -3118,6 +3131,8 @@ def test_value_normalization(
             pytest.skip("Trino on Hive doesn't support TIMESTAMP WITH TIME ZONE fields")
         if ctx.dialect == "fabric":
             pytest.skip("Fabric doesn't support TIMESTAMP WITH TIME ZONE fields")
+        if ctx.dialect == "starrocks":
+            pytest.skip("StarRocks doesn't properly support TIMESTAMP WITH TIME ZONE fields")
 
     if not isinstance(ctx.engine_adapter, RowDiffMixin):
         pytest.skip(
@@ -3139,6 +3154,10 @@ def test_value_normalization(
                     )
                 ],
             )
+        if ctx.dialect == "starrocks":
+            # StarRocks DATETIME natively supports microsecond precision without explicit (6) syntax
+            # and doesn't accept the precision specifier
+            pytest.skip("StarRocks DATETIME doesn't support precision syntax like DATETIME(6)")
     if ctx.dialect == "tsql" and column_type == exp.DataType.Type.DATETIME:
         full_column_type = exp.DataType.build("DATETIME2", dialect="tsql")
 
@@ -3209,7 +3228,7 @@ def test_table_diff_grain_check_single_key(ctx: TestContext):
 
     columns_to_types = {
         "key1": exp.DataType.build("int"),
-        "value": exp.DataType.build("varchar"),
+        "value": exp.DataType.build("varchar(255)"),
     }
 
     ctx.engine_adapter.create_table(src_table, columns_to_types)
@@ -3333,13 +3352,13 @@ def test_table_diff_arbitrary_condition(ctx: TestContext):
 
     columns_to_types_src = {
         "id": exp.DataType.build("int"),
-        "value": exp.DataType.build("varchar"),
+        "value": exp.DataType.build("varchar(255)"),
         "ts": exp.DataType.build("timestamp"),
     }
 
     columns_to_types_target = {
         "item_id": exp.DataType.build("int"),
-        "value": exp.DataType.build("varchar"),
+        "value": exp.DataType.build("varchar(255)"),
         "ts": exp.DataType.build("timestamp"),
     }
 
@@ -3948,6 +3967,11 @@ def test_grants_case_insensitive_grantees(ctx: TestContext):
             f"Skipping Test since engine adapter {ctx.engine_adapter.dialect} doesn't support grants"
         )
 
+    if getattr(ctx.engine_adapter, "CASE_SENSITIVE_GRANTEES", False):
+        pytest.skip(
+            f"Skipping Test since engine adapter {ctx.engine_adapter.dialect} has case-sensitive grantees"
+        )
+
     with ctx.create_users_or_roles("reader", "writer") as roles:
         table = ctx.table("grants_quoted_test")
         ctx.engine_adapter.create_table(table, {"id": exp.DataType.build("INT")})
@@ -4070,13 +4094,19 @@ def test_grants_plan(ctx: TestContext, tmp_path: Path):
         assert final_grants.get(insert_privilege, []) == expected_final_grants[insert_privilege]
 
         # Virtual layer should also have the updated grants
+        # Note: Some engines (like StarRocks) only support SELECT on views, not INSERT/UPDATE/DELETE
         updated_virtual_grants = ctx.engine_adapter._get_current_grants_config(
             exp.to_table(view_name, dialect=ctx.dialect)
         )
         assert set(updated_virtual_grants.get(select_privilege, [])) == set(
             expected_final_grants[select_privilege]
         )
-        assert (
-            updated_virtual_grants.get(insert_privilege, [])
-            == expected_final_grants[insert_privilege]
-        )
+        view_supported_privileges = getattr(ctx.engine_adapter, "VIEW_SUPPORTED_PRIVILEGES", None)
+        if view_supported_privileges and insert_privilege.upper() not in view_supported_privileges:
+            # This engine doesn't support INSERT on views, so we expect no INSERT grants
+            assert updated_virtual_grants.get(insert_privilege, []) == []
+        else:
+            assert (
+                updated_virtual_grants.get(insert_privilege, [])
+                == expected_final_grants[insert_privilege]
+            )
