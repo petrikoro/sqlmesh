@@ -3228,7 +3228,7 @@ def test_table_diff_grain_check_single_key(ctx: TestContext):
 
     columns_to_types = {
         "key1": exp.DataType.build("int"),
-        "value": exp.DataType.build("varchar"),
+        "value": exp.DataType.build("varchar(255)"),
     }
 
     ctx.engine_adapter.create_table(src_table, columns_to_types)
@@ -3352,13 +3352,13 @@ def test_table_diff_arbitrary_condition(ctx: TestContext):
 
     columns_to_types_src = {
         "id": exp.DataType.build("int"),
-        "value": exp.DataType.build("varchar"),
+        "value": exp.DataType.build("varchar(255)"),
         "ts": exp.DataType.build("timestamp"),
     }
 
     columns_to_types_target = {
         "item_id": exp.DataType.build("int"),
-        "value": exp.DataType.build("varchar"),
+        "value": exp.DataType.build("varchar(255)"),
         "ts": exp.DataType.build("timestamp"),
     }
 
