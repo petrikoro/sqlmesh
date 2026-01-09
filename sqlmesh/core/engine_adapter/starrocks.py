@@ -4,6 +4,7 @@ import logging
 import typing as t
 
 from sqlglot import exp
+from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
 
 from sqlmesh.core.dialect import to_schema
 from sqlmesh.core.engine_adapter.mixins import (
@@ -12,6 +13,7 @@ from sqlmesh.core.engine_adapter.mixins import (
     PandasNativeFetchDFSupportMixin,
     GetCurrentCatalogFromFunctionMixin,
     RowDiffMixin,
+    GrantsFromInfoSchemaMixin,
 )
 from sqlmesh.core.engine_adapter.shared import (
     CatalogSupport,
@@ -28,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 if t.TYPE_CHECKING:
     from sqlmesh.core._typing import SchemaName, TableName
+    from sqlmesh.core.engine_adapter._typing import DCL, GrantsConfig
     from sqlmesh.core.node import IntervalUnit
 
 
@@ -38,6 +41,7 @@ class StarRocksEngineAdapter(
     NonTransactionalTruncateMixin,
     GetCurrentCatalogFromFunctionMixin,
     RowDiffMixin,
+    GrantsFromInfoSchemaMixin,
 ):
     """StarRocks engine adapter."""
 
@@ -46,6 +50,7 @@ class StarRocksEngineAdapter(
     SUPPORTS_TRANSACTIONS = False
     # StarRocks does support indexes, but we don't support them yet.
     SUPPORTS_INDEXES = False
+    SUPPORTS_GRANTS = True
     SUPPORTS_REPLACE_TABLE = False
     CURRENT_CATALOG_EXPRESSION = exp.func("catalog")
     COMMENT_CREATION_TABLE = CommentCreationTable.IN_SCHEMA_DEF_NO_CTAS
@@ -60,6 +65,9 @@ class StarRocksEngineAdapter(
     # database (schema) names are limited to 256 characters.
     # See https://docs.starrocks.io/docs/sql-reference/System_limit/
     MAX_IDENTIFIER_LENGTH = 256
+    # StarRocks usernames are case-sensitive
+    CASE_SENSITIVE_GRANTEES = True
+    VIEW_SUPPORTED_PRIVILEGES: t.FrozenSet[str] = frozenset({"SELECT"})
 
     STARROCKS_SUPPORTED_TABLE_TYPES = frozenset(
         (
@@ -308,3 +316,98 @@ class StarRocksEngineAdapter(
         )
         columns = [exp.to_column(col.name) for col in exprs]
         return exp.Order(expressions=[exp.Tuple(expressions=columns)])
+
+    @staticmethod
+    def _grant_object_kind(table_type: DataObjectType) -> str:
+        """Returns the object kind for GRANT/REVOKE statements."""
+        if table_type == DataObjectType.VIEW:
+            return "VIEW"
+        return "TABLE"
+
+    def _get_current_schema(self) -> str:
+        """Returns the current default schema (database) for the connection."""
+        result = self.fetchone(exp.select(exp.func("database")))
+        if result and result[0]:
+            return str(result[0])
+        raise SQLMeshError("Unable to determine current schema/database")
+
+    def _get_current_grants_config(self, table: exp.Table) -> "GrantsConfig":
+        """Returns current grants for a table from StarRocks system views."""
+        schema_identifier = table.args.get("db") or normalize_identifiers(
+            exp.to_identifier(self._get_current_schema(), quoted=True), dialect=self.dialect
+        )
+        schema_name = (
+            schema_identifier.this if hasattr(schema_identifier, "this") else str(schema_identifier)
+        )
+        table_name = table.args.get("this").this  # type: ignore
+
+        query = (
+            exp.select("PRIVILEGE_TYPE", "GRANTEE")
+            .from_(exp.table_("grants_to_users", db="sys"))
+            .where(
+                exp.and_(
+                    exp.column("OBJECT_DATABASE").eq(exp.Literal.string(schema_name)),
+                    exp.column("OBJECT_NAME").eq(exp.Literal.string(table_name)),
+                    exp.column("OBJECT_TYPE").isin(
+                        exp.Literal.string("TABLE"), exp.Literal.string("VIEW")
+                    ),
+                )
+            )
+        )
+
+        try:
+            results = self.fetchall(query)
+        except Exception as e:
+            logger.warning(f"Failed to query grants from sys.grants_to_users: {e}")
+            return {}
+
+        grants_dict: t.Dict[str, t.List[str]] = {}
+        for privilege_raw, grantee_raw in results:
+            if privilege_raw is None or grantee_raw is None:
+                continue
+
+            privileges_str = str(privilege_raw)
+            grantee = str(grantee_raw)
+            if not privileges_str or not grantee:
+                continue
+
+            # StarRocks returns grantee in format "'username'@'host'" - extract just the username
+            if "@" in grantee:
+                # Extract username from "'username'@'host'" format
+                grantee = grantee.split("@")[0].strip("'")
+
+            # StarRocks may return multiple privileges as comma-separated string (e.g., "INSERT, SELECT")
+            privileges = [p.strip() for p in privileges_str.split(",")]
+            for privilege in privileges:
+                if not privilege:
+                    continue
+                grantees = grants_dict.setdefault(privilege, [])
+                if grantee not in grantees:
+                    grantees.append(grantee)
+
+        return grants_dict
+
+    def _dcl_grants_config_expr(
+        self,
+        dcl_cmd: t.Type["DCL"],
+        table: exp.Table,
+        grants_config: "GrantsConfig",
+        table_type: DataObjectType = DataObjectType.TABLE,
+    ) -> t.List[exp.Expression]:
+        # StarRocks doesn't support catalog in GRANT/REVOKE statements - strip it
+        table_without_catalog = table.copy()
+        table_without_catalog.set("catalog", None)
+
+        # Filter out unsupported privileges for views
+        # StarRocks only supports SELECT on views, not INSERT, UPDATE, DELETE, etc.
+        if table_type == DataObjectType.VIEW:
+            filtered_grants_config: GrantsConfig = {
+                privilege: grantees
+                for privilege, grantees in grants_config.items()
+                if privilege.upper() in self.VIEW_SUPPORTED_PRIVILEGES
+            }
+            grants_config = filtered_grants_config
+
+        return super()._dcl_grants_config_expr(
+            dcl_cmd, table_without_catalog, grants_config, table_type
+        )
