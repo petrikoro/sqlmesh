@@ -71,8 +71,8 @@ class StarRocksEngineAdapter(
 
     STARROCKS_SUPPORTED_TABLE_TYPES = frozenset(
         (
-            "PRIMARY",
-            "DUPLICATE",
+            "PRIMARY KEY",
+            "DUPLICATE KEY",
         )
     )
     _TABLE_TYPE_MAP = {
