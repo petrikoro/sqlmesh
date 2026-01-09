@@ -3967,6 +3967,11 @@ def test_grants_case_insensitive_grantees(ctx: TestContext):
             f"Skipping Test since engine adapter {ctx.engine_adapter.dialect} doesn't support grants"
         )
 
+    if getattr(ctx.engine_adapter, "CASE_SENSITIVE_GRANTEES", False):
+        pytest.skip(
+            f"Skipping Test since engine adapter {ctx.engine_adapter.dialect} has case-sensitive grantees"
+        )
+
     with ctx.create_users_or_roles("reader", "writer") as roles:
         table = ctx.table("grants_quoted_test")
         ctx.engine_adapter.create_table(table, {"id": exp.DataType.build("INT")})
@@ -4089,13 +4094,19 @@ def test_grants_plan(ctx: TestContext, tmp_path: Path):
         assert final_grants.get(insert_privilege, []) == expected_final_grants[insert_privilege]
 
         # Virtual layer should also have the updated grants
+        # Note: Some engines (like StarRocks) only support SELECT on views, not INSERT/UPDATE/DELETE
         updated_virtual_grants = ctx.engine_adapter._get_current_grants_config(
             exp.to_table(view_name, dialect=ctx.dialect)
         )
         assert set(updated_virtual_grants.get(select_privilege, [])) == set(
             expected_final_grants[select_privilege]
         )
-        assert (
-            updated_virtual_grants.get(insert_privilege, [])
-            == expected_final_grants[insert_privilege]
-        )
+        view_supported_privileges = getattr(ctx.engine_adapter, "VIEW_SUPPORTED_PRIVILEGES", None)
+        if view_supported_privileges and insert_privilege.upper() not in view_supported_privileges:
+            # This engine doesn't support INSERT on views, so we expect no INSERT grants
+            assert updated_virtual_grants.get(insert_privilege, []) == []
+        else:
+            assert (
+                updated_virtual_grants.get(insert_privilege, [])
+                == expected_final_grants[insert_privilege]
+            )

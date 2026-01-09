@@ -1,12 +1,14 @@
 import typing as t
 
 import pytest
+from pytest_mock import MockerFixture
 from sqlglot import exp
 
 from sqlmesh.core.engine_adapter.shared import (
     CatalogSupport,
     CommentCreationTable,
     CommentCreationView,
+    DataObjectType,
     InsertOverwriteStrategy,
 )
 from sqlmesh.core.engine_adapter.starrocks import StarRocksEngineAdapter
@@ -31,6 +33,7 @@ def test_adapter_settings(adapter: StarRocksEngineAdapter):
     assert StarRocksEngineAdapter.MAX_TABLE_COMMENT_LENGTH == 1024
     assert StarRocksEngineAdapter.MAX_COLUMN_COMMENT_LENGTH == 1024
     assert StarRocksEngineAdapter.MAX_IDENTIFIER_LENGTH == 256
+    assert StarRocksEngineAdapter.SUPPORTS_GRANTS is True
     assert (
         StarRocksEngineAdapter.COMMENT_CREATION_TABLE == CommentCreationTable.IN_SCHEMA_DEF_NO_CTAS
     )
@@ -247,3 +250,40 @@ def test_build_order_by_property(adapter: StarRocksEngineAdapter, order_by_expr)
     result = adapter._build_order_by_property(order_by_expr)
     assert isinstance(result, exp.Order)
     assert "ORDER BY" in result.sql(dialect="starrocks")
+
+
+def test_dcl_grants_config_expr_strips_catalog(adapter: StarRocksEngineAdapter):
+    """Test _dcl_grants_config_expr strips catalog from table reference.
+
+    StarRocks does not support catalog names in GRANT statements, so the adapter
+    should strip the catalog before generating the GRANT SQL.
+    """
+    # Create a table with catalog
+    table = exp.to_table("default_catalog.test_db.test_table")
+    grants_config = {"SELECT": ["user1"]}
+
+    expressions = adapter._apply_grants_config_expr(table, grants_config, DataObjectType.TABLE)
+
+    assert len(expressions) == 1
+
+    # Check that the catalog is NOT in the generated SQL
+    sql = expressions[0].sql(dialect="starrocks")
+    assert "default_catalog" not in sql
+    assert "test_db.test_table" in sql or "`test_db`.`test_table`" in sql
+
+
+def test_get_current_grants_config_parses_starrocks_format(
+    adapter: StarRocksEngineAdapter, mocker: MockerFixture
+):
+    """Test _get_current_grants_config handles StarRocks-specific grantee format.
+
+    StarRocks returns grantees in "'username'@'host'" format and may return
+    comma-separated privileges. This tests the StarRocks-specific parsing logic.
+    """
+    # StarRocks returns privileges as comma-separated string and grantee in 'user'@'host' format
+    mocker.patch.object(adapter, "fetchall", return_value=[("INSERT, SELECT", "'user1'@'%'")])
+
+    table = exp.to_table("test_db.test_table")
+    grants_config = adapter._get_current_grants_config(table)
+
+    assert grants_config == {"INSERT": ["user1"], "SELECT": ["user1"]}

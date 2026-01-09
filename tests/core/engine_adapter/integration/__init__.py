@@ -794,6 +794,9 @@ class TestContext:
             project_id = self.engine_adapter.get_current_catalog()
             service_account = f"sqlmesh-test-{role_name}@{project_id}.iam.gserviceaccount.com"
             return f"serviceAccount:{service_account}", None
+        if self.dialect == "starrocks":
+            # StarRocks uses MySQL-like syntax for creating users
+            return username, f"CREATE USER '{username}' IDENTIFIED BY '{password}'"
         raise ValueError(f"User creation not supported for dialect: {self.dialect}")
 
     def _create_user_or_role(self, username: str, password: t.Optional[str] = None) -> str:
@@ -864,6 +867,9 @@ class TestContext:
             elif self.dialect in ["databricks", "bigquery"]:
                 # For Databricks and BigQuery, we use pre-created accounts that should not be deleted
                 pass
+            elif self.dialect == "starrocks":
+                # StarRocks uses MySQL-like syntax for dropping users
+                self.engine_adapter.execute(f"DROP USER IF EXISTS '{user_name}'")
         except Exception:
             pass
 
