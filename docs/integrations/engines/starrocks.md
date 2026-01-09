@@ -2,7 +2,7 @@
 
 [StarRocks](https://www.starrocks.io/) is a modern analytical database product based on an MPP architecture. It provides real-time analytical capabilities, supporting both high-concurrency point queries and high-throughput complex analysis.
 
-SQLMesh supports StarRocks through its MySQL-compatible protocol, while providing StarRocks-specific optimizations for table models, indexing, partitioning, and other features.
+SQLMesh connects to StarRocks through its MySQL-compatible protocol and takes advantage of StarRocks-specific features like table models, partitioning, and distribution.
 
 ## Local/Built-in Scheduler
 
@@ -33,21 +33,90 @@ StarRocks uses the MySQL protocol for connections. Therefore, the connection par
 
 ## Model Configuration
 
-### Insert Overwrite Behavior
+### Model Properties
 
-StarRocks supports native `INSERT OVERWRITE` syntax for partitioned tables. By default, SQLMesh uses the `DELETE_INSERT` strategy for broader compatibility. However, if your StarRocks cluster has `dynamic_overwrite` enabled, SQLMesh will automatically detect this and use the more efficient `INSERT OVERWRITE` strategy.
+You can configure StarRocks-specific behavior using these [model properties](../../concepts/models/overview.md#model-properties):
 
-You can check if `dynamic_overwrite` is enabled in your cluster by running:
+| Property         | Description                                                                        |
+|------------------|------------------------------------------------------------------------------------|
+| `storage_format` | Engine type (e.g., `OLAP`). Becomes the `ENGINE` clause in the CREATE TABLE.       |
+| `table_format`   | Either `PRIMARY KEY` or `DUPLICATE KEY`. Controls how StarRocks handles your data (becomes `KEY` clause in the CREATE TABLE). |
+
+### Physical Properties
+
+The StarRocks adapter recognizes the following [physical_properties](../../concepts/models/overview.md#physical_properties):
+
+| Property         | Description                                                              |
+|------------------|--------------------------------------------------------------------------|
+| `key_columns`    | Key columns for PRIMARY KEY or DUPLICATE KEY tables. Pass as a tuple.    |
+| `distributed_by` | Columns for hash distribution. Omit for random distribution.             |
+| `buckets`        | Number of distribution buckets.                                          |
+| `order_by`       | Sort key columns to speed up queries.                                    |
+| `rollup`         | Rollup indexes for aggregation optimization.                             |
+
+### Example
+
+This model creates a DUPLICATE KEY table optimized for analytical queries on order data:
 
 ```sql
-SELECT @@dynamic_overwrite;
+MODEL (
+  name analytics.daily_orders,
+  kind FULL,
+  storage_format OLAP,
+  table_format DUPLICATE KEY,
+  physical_properties (
+    key_columns = (order_date, order_id),
+    distributed_by = (customer_id),
+    buckets = 16,
+    order_by = (order_date, customer_id),
+    rollup = (
+      rollup_by_customer(customer_id, order_date, total_amount),
+      rollup_by_product(product_id, order_date, quantity)
+    )
+  )
+);
+
+SELECT
+  order_id,
+  order_date,
+  customer_id,
+  product_id,
+  quantity,
+  total_amount
+FROM raw.orders
+WHERE status = 'completed'
 ```
 
-For more information about INSERT OVERWRITE in StarRocks, see the [StarRocks documentation](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/INSERT/#dynamic-overwrite).
+This should generate a CREATE TABLE statement like:
+
+```sql
+CREATE TABLE analytics.daily_orders (
+  order_id BIGINT,
+  order_date DATE,
+  customer_id BIGINT,
+  ...
+)
+ENGINE = OLAP
+DUPLICATE KEY (`order_date`, `order_id`)
+DISTRIBUTED BY HASH (`customer_id`) BUCKETS 16
+ORDER BY (`order_date`, `customer_id`)
+ROLLUP (
+  rollup_by_customer (`customer_id`, `order_date`, `total_amount`),
+  rollup_by_product (`product_id`, `order_date`, `quantity`)
+)
+```
+
+### Insert Overwrite Behavior
+
+SQLMesh uses StarRocks' native `INSERT OVERWRITE` syntax for all models. This is because StarRocks has strict limitations on `DELETE` statements — for example, WHERE clauses don't support expressions like `CAST()`.
+
+SQLMesh automatically enables `dynamic_overwrite` for each connection session to ensure `INSERT OVERWRITE` only replaces partitions matching the source query data. This feature requires StarRocks v3.4.0 or later.
+
+For more information, see the [StarRocks Dynamic overwrite documentation](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/INSERT/#dynamic-overwrite).
 
 ## Limitations
 
-- **Transactions**: StarRocks does not support traditional database transactions. SQLMesh handles this automatically.
-- **Materialized Views**: While StarRocks supports asynchronous materialized views since v2.4, SQLMesh does not currently support them. Use regular views or tables instead.
-- **Schema/Database Naming**: In StarRocks, schemas are equivalent to databases. When SQLMesh creates a schema, it creates a StarRocks database.
-- **Identifier Length**: Database (schema) names are limited to 256 characters, while table names can be up to 1024 characters. SQLMesh uses the more restrictive 256 character limit for compatibility.
+- **No transactions** — StarRocks doesn't support traditional transactions, so SQLMesh runs operations non-transactionally.
+- **No materialized views** — StarRocks has async materialized views, but SQLMesh doesn't support them yet. Use regular views or tables.
+- **Schemas = databases** — When you create a schema in SQLMesh, it becomes a StarRocks database under the hood.
+- **Name length** — StarRocks allows table names up to 1024 characters, but database names are limited to 256. SQLMesh uses the stricter 256-character limit for all identifiers.
