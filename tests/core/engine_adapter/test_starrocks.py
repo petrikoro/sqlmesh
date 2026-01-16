@@ -1,6 +1,7 @@
 import typing as t
 
 import pytest
+import sqlglot
 from pytest_mock import MockerFixture
 from sqlglot import exp
 
@@ -112,18 +113,58 @@ def test_create_table_like(
             },
             ["PRIMARY KEY"],
         ),
+        # HASH with named params (columns + buckets)
         (
             {
                 "table_properties": {
-                    "distributed_by": exp.Tuple(expressions=[exp.to_column("id")]),
-                    "buckets": exp.Literal.number(10),
+                    "distributed_by": sqlglot.parse_one(
+                        "HASH(columns := (id), buckets := 10)", dialect="starrocks"
+                    ),
                 }
             },
             ["DISTRIBUTED BY HASH", "BUCKETS 10"],
         ),
+        # HASH with multiple columns
         (
-            {"table_properties": {"buckets": exp.Literal.number(5)}},
+            {
+                "table_properties": {
+                    "distributed_by": sqlglot.parse_one(
+                        "HASH(columns := (col1, col2), buckets := 16)", dialect="starrocks"
+                    ),
+                }
+            },
+            ["DISTRIBUTED BY HASH", "col1", "col2", "BUCKETS 16"],
+        ),
+        # HASH without buckets
+        (
+            {
+                "table_properties": {
+                    "distributed_by": sqlglot.parse_one(
+                        "HASH(columns := (id))", dialect="starrocks"
+                    ),
+                }
+            },
+            ["DISTRIBUTED BY HASH"],
+        ),
+        # RANDOM with buckets
+        (
+            {
+                "table_properties": {
+                    "distributed_by": sqlglot.parse_one(
+                        "RANDOM(buckets := 5)", dialect="starrocks"
+                    ),
+                }
+            },
             ["DISTRIBUTED BY RANDOM", "BUCKETS 5"],
+        ),
+        # RANDOM without buckets
+        (
+            {
+                "table_properties": {
+                    "distributed_by": sqlglot.parse_one("RANDOM()", dialect="starrocks"),
+                }
+            },
+            ["DISTRIBUTED BY RANDOM"],
         ),
         (
             {
@@ -135,17 +176,19 @@ def test_create_table_like(
             },
             ["ORDER BY"],
         ),
+        # Full example
         (
             {
                 "table_description": "Test table",
                 "partitioned_by": [exp.to_column("ds")],
                 "table_properties": {
                     "primary_key": exp.Tuple(expressions=[exp.to_column("id")]),
-                    "distributed_by": exp.to_column("id"),
-                    "buckets": exp.Literal.number(10),
+                    "distributed_by": sqlglot.parse_one(
+                        "HASH(columns := id, buckets := 10)", dialect="starrocks"
+                    ),
                 },
             },
-            ["PRIMARY KEY", "COMMENT", "PARTITION BY", "DISTRIBUTED BY"],
+            ["PRIMARY KEY", "COMMENT", "PARTITION BY", "DISTRIBUTED BY HASH", "BUCKETS 10"],
         ),
     ],
 )
@@ -194,25 +237,42 @@ def test_build_partitioned_by_exp(adapter: StarRocksEngineAdapter):
 
 
 @pytest.mark.parametrize(
-    "distributed_by,buckets,expected_fragment",
+    "distributed_by_expr,expected_sql",
     [
+        # HASH with columns and buckets
         (
-            exp.Tuple(expressions=[exp.to_column("id")]),
-            exp.Literal.number(10),
-            "DISTRIBUTED BY HASH",
+            sqlglot.parse_one("HASH(columns := (id, name), buckets := 10)", dialect="starrocks"),
+            "DISTRIBUTED BY HASH (id, name) BUCKETS 10",
         ),
-        (None, exp.Literal.number(5), "DISTRIBUTED BY RANDOM"),
+        # HASH with single column
+        (
+            sqlglot.parse_one("HASH(columns := id, buckets := 16)", dialect="starrocks"),
+            "DISTRIBUTED BY HASH (id) BUCKETS 16",
+        ),
+        # HASH without buckets
+        (
+            sqlglot.parse_one("HASH(columns := (col1, col2))", dialect="starrocks"),
+            "DISTRIBUTED BY HASH (col1, col2)",
+        ),
+        # RANDOM with buckets
+        (
+            sqlglot.parse_one("RANDOM(buckets := 5)", dialect="starrocks"),
+            "DISTRIBUTED BY RANDOM BUCKETS 5",
+        ),
+        # RANDOM without buckets
+        (
+            sqlglot.parse_one("RANDOM()", dialect="starrocks"),
+            "DISTRIBUTED BY RANDOM",
+        ),
     ],
 )
-def test_build_distribution_property(
-    adapter: StarRocksEngineAdapter, distributed_by, buckets, expected_fragment
+def test_build_distributed_by_property(
+    adapter: StarRocksEngineAdapter, distributed_by_expr, expected_sql
 ):
-    """Test _build_distribution_property with HASH and RANDOM."""
-    result = adapter._build_distribution_property(
-        distributed_by_expr=distributed_by, buckets_expr=buckets
-    )
+    """Test _build_distributed_by_property with HASH and RANDOM."""
+    result = adapter._build_distributed_by_property(distributed_by_expr)
     assert isinstance(result, exp.DistributedByProperty)
-    assert expected_fragment in result.sql(dialect="starrocks")
+    assert result.sql(dialect="starrocks") == expected_sql
 
 
 @pytest.mark.parametrize(
