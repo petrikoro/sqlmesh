@@ -37,18 +37,13 @@ StarRocks uses the MySQL protocol for connections. Therefore, the connection par
 
 You can configure StarRocks-specific behavior using these [model properties](../../concepts/models/overview.md#model-properties):
 
-| Property         | Description                                                                        |
-|------------------|------------------------------------------------------------------------------------|
-| `storage_format` | Engine type (e.g., `OLAP`). Becomes the `ENGINE` clause in the CREATE TABLE.       |
-| `table_format`   | Either `PRIMARY KEY` or `DUPLICATE KEY`. Controls how StarRocks handles your data (becomes `KEY` clause in the CREATE TABLE). |
-
 ### Physical Properties
 
 The StarRocks adapter recognizes the following [physical_properties](../../concepts/models/overview.md#physical_properties):
 
 | Property         | Description                                                              |
 |------------------|--------------------------------------------------------------------------|
-| `key_columns`    | Key columns for PRIMARY KEY or DUPLICATE KEY tables. Pass as a tuple.    |
+| `primary_key`    | Primary key columns for PRIMARY KEY tables. Pass as a tuple. If not specified, creates a DUPLICATE KEY table. |
 | `distributed_by` | Columns for hash distribution. Omit for random distribution.             |
 | `buckets`        | Number of distribution buckets.                                          |
 | `order_by`       | Sort key columns to speed up queries.                                    |
@@ -56,16 +51,14 @@ The StarRocks adapter recognizes the following [physical_properties](../../conce
 
 ### Example
 
-This model creates a DUPLICATE KEY table optimized for analytical queries on order data:
+This model creates a PRIMARY KEY table optimized for analytical queries on order data:
 
 ```sql
 MODEL (
   name analytics.daily_orders,
   kind FULL,
-  storage_format OLAP,
-  table_format DUPLICATE KEY,
   physical_properties (
-    key_columns = (order_date, order_id),
+    primary_key = (order_date, order_id),
     distributed_by = (customer_id),
     buckets = 16,
     order_by = (order_date, customer_id),
@@ -96,8 +89,7 @@ CREATE TABLE analytics.daily_orders (
   customer_id BIGINT,
   ...
 )
-ENGINE = OLAP
-DUPLICATE KEY (`order_date`, `order_id`)
+PRIMARY KEY (`order_date`, `order_id`)
 DISTRIBUTED BY HASH (`customer_id`) BUCKETS 16
 ORDER BY (`order_date`, `customer_id`)
 ROLLUP (
