@@ -200,10 +200,8 @@ class StarRocksEngineAdapter(
         if primary_key_expr := props.pop("primary_key", None):
             properties.append(self._build_primary_key_property(primary_key_expr))
 
-        buckets_expr = props.pop("buckets", None)
-        distributed_by_expr = props.pop("distributed_by", None)
-        if distributed_by_expr or buckets_expr:
-            properties.append(self._build_distribution_property(distributed_by_expr, buckets_expr))
+        if distributed_by_expr := props.pop("distributed_by", None):
+            properties.append(self._build_distributed_by_property(distributed_by_expr))
 
         if rollup_expr := props.pop("rollup", None):
             properties.append(self._build_rollup_property(rollup_expr))
@@ -249,25 +247,37 @@ class StarRocksEngineAdapter(
         """Build partitioned by property."""
         return exp.PartitionedByProperty(this=exp.Schema(expressions=partitioned_by))
 
-    def _build_distribution_property(
+    def _build_distributed_by_property(
         self,
-        distributed_by_expr: t.Optional[exp.Expression],
-        buckets_expr: t.Optional[exp.Expression],
+        distributed_by_expr: exp.Expression,
     ) -> exp.DistributedByProperty:
-        """Build distribution property."""
-        if not distributed_by_expr:
-            return exp.DistributedByProperty(kind=exp.var("RANDOM"), buckets=buckets_expr)
+        """Build distribution property from HASH(columns := ...) or RANDOM()."""
+        # RANDOM(buckets := N) or RANDOM()
+        if isinstance(distributed_by_expr, exp.Rand):
+            buckets_prop = distributed_by_expr.args.get("this")
 
-        exprs = (
-            distributed_by_expr.expressions
-            if isinstance(distributed_by_expr, exp.Tuple)
-            else [distributed_by_expr]
-        )
-        return exp.DistributedByProperty(
-            kind=exp.var("HASH"),
-            expressions=[exp.to_column(col.name) for col in exprs],
-            buckets=buckets_expr,
-        )
+            return exp.DistributedByProperty(
+                kind=exp.var("RANDOM"),
+                buckets=buckets_prop.expression if buckets_prop else None,
+            )
+
+        # HASH(columns := (col1, col2), buckets := N)
+        if (
+            isinstance(distributed_by_expr, exp.Anonymous)
+            and distributed_by_expr.name.upper() == "HASH"
+        ):
+            props = {p.this.name.lower(): p.expression for p in distributed_by_expr.expressions}
+
+            if not (columns := props.get("columns")):
+                raise SQLMeshError("HASH requires 'columns' parameter")
+
+            return exp.DistributedByProperty(
+                kind=exp.var("HASH"),
+                expressions=columns.expressions if isinstance(columns, exp.Tuple) else [columns],
+                buckets=props.get("buckets"),
+            )
+
+        raise SQLMeshError("distributed_by: expected HASH(columns := ...) or RANDOM()")
 
     def _build_rollup_property(self, rollup_expr: exp.Expression) -> exp.RollupProperty:
         """Build rollup property."""
