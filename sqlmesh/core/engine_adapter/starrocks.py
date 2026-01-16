@@ -72,12 +72,6 @@ class StarRocksEngineAdapter(
     CASE_SENSITIVE_GRANTEES = True
     VIEW_SUPPORTED_PRIVILEGES: t.FrozenSet[str] = frozenset({"SELECT"})
 
-    STARROCKS_SUPPORTED_TABLE_TYPES = frozenset(
-        (
-            "PRIMARY KEY",
-            "DUPLICATE KEY",
-        )
-    )
     _TABLE_TYPE_MAP = {
         "BASE TABLE": "table",
         "VIEW": "view",
@@ -197,28 +191,14 @@ class StarRocksEngineAdapter(
         properties: t.List[exp.Expression] = []
         props = {k.lower(): v for k, v in (table_properties or {}).items()}
 
-        # StarRocks engine type
-        # See: https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/#engine
-        if storage_format:
-            properties.append(self._build_engine_property(storage_format))
-
-        # StarRocks table type
-        # See: https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/#key
-        key_columns_expr = props.pop("key_columns", None)
-        if table_format or key_columns_expr:
-            if table_format and table_format.upper() not in self.STARROCKS_SUPPORTED_TABLE_TYPES:
-                raise SQLMeshError(
-                    "Invalid or unsupported table type: %s, supported types: %s",
-                    table_format,
-                    ", ".join(self.STARROCKS_SUPPORTED_TABLE_TYPES),
-                )
-            properties.append(self._build_table_type_property(table_format, key_columns_expr))
-
         if table_description:
             properties.append(self._build_table_description_property(table_description))
 
         if partitioned_by:
             properties.append(self._build_partitioned_by_exp(partitioned_by))
+
+        if primary_key_expr := props.pop("primary_key", None):
+            properties.append(self._build_primary_key_property(primary_key_expr))
 
         buckets_expr = props.pop("buckets", None)
         distributed_by_expr = props.pop("distributed_by", None)
@@ -240,30 +220,18 @@ class StarRocksEngineAdapter(
         """Build engine property."""
         return exp.EngineProperty(this=engine)
 
-    def _build_table_type_property(
+    def _build_primary_key_property(
         self,
-        table_type: t.Optional[str] = None,
-        key_columns: t.Optional[exp.Expression] = None,
+        primary_key_expr: exp.Expression,
     ) -> t.Union[exp.PrimaryKey, exp.DuplicateKeyProperty]:
-        """Build table type property.
-
-        Args:
-            table_type: The table type ('PRIMARY KEY' or 'DUPLICATE KEY').
-            key_columns: The key columns expression from physical_properties.
+        """Build table key property.
 
         Returns:
             PrimaryKey or DuplicateKeyProperty expression.
         """
-        cols: t.List[exp.Expression] = []
-        if key_columns:
-            if isinstance(key_columns, (exp.Tuple, exp.Array)):
-                cols = [exp.to_column(c.name) for c in key_columns.expressions]
-            else:
-                cols = [exp.to_column(key_columns.name)]
-
-        if table_type and table_type.upper() == "PRIMARY KEY":
-            return exp.PrimaryKey(expressions=cols)
-        return exp.DuplicateKeyProperty(expressions=cols)
+        return exp.PrimaryKey(
+            expressions=[exp.to_column(c.name) for c in primary_key_expr.expressions]
+        )
 
     def _build_table_description_property(
         self, table_description: str
