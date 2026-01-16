@@ -43,11 +43,10 @@ The StarRocks adapter recognizes the following [physical_properties](../../conce
 
 | Property         | Description                                                              |
 |------------------|--------------------------------------------------------------------------|
-| `primary_key`    | Primary key columns for PRIMARY KEY tables. Pass as a tuple. If not specified, creates a DUPLICATE KEY table. |
-| `distributed_by` | Columns for hash distribution. Omit for random distribution.             |
-| `buckets`        | Number of distribution buckets.                                          |
-| `order_by`       | Sort key columns to speed up queries.                                    |
-| `rollup`         | Rollup indexes for aggregation optimization.                             |
+| `primary_key`    | Primary key columns for PRIMARY KEY tables. If not specified, defaults to a DUPLICATE KEY table. |
+| `distributed_by` | Data distribution across nodes. Use `HASH(columns := ..., buckets := N)` or `RANDOM(buckets := N)`, where buckets argument is optional. Defaults to RANDOM distribution. |
+| `order_by`       | Sort key columns for physical data ordering on disk. |
+| `rollup`         | Pre-aggregated indexes to accelerate aggregation queries. |
 
 ### Example
 
@@ -59,8 +58,7 @@ MODEL (
   kind FULL,
   physical_properties (
     primary_key = (order_date, order_id),
-    distributed_by = (customer_id),
-    buckets = 16,
+    distributed_by = HASH(columns := customer_id, buckets := 16),
     order_by = (order_date, customer_id),
     rollup = (
       rollup_by_customer(customer_id, order_date, total_amount),
@@ -80,7 +78,7 @@ FROM raw.orders
 WHERE status = 'completed'
 ```
 
-This should generate a CREATE TABLE statement like:
+This generates a CREATE TABLE statement like:
 
 ```sql
 CREATE TABLE analytics.daily_orders (
