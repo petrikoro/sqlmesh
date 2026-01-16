@@ -29,7 +29,7 @@ StarRocks uses the MySQL protocol for connections. Therefore, the connection par
 | `charset`          | The character set used for the connection                        | string |    N     |
 | `collation`        | The collation used for the connection                            | string |    N     |
 | `ssl_disabled`     | Whether SSL is disabled                                          | bool   |    N     |
-| `concurrent_tasks` | The maximum number of concurrent tasks (default: 4)              | int    |    N     |
+| `concurrent_tasks` | The maximum number of concurrent tasks              | int    |    N     |
 
 ## Model Configuration
 
