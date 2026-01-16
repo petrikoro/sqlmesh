@@ -47,9 +47,10 @@ class StarRocksEngineAdapter(
 
     DIALECT = "starrocks"
     DEFAULT_BATCH_SIZE = 10000
+    # StarRocks supports only limited number of use cases for transactions.
+    # See: https://docs.starrocks.io/docs/loading/SQL_transaction/
     SUPPORTS_TRANSACTIONS = False
-    # StarRocks does support indexes, but we don't support them yet.
-    SUPPORTS_INDEXES = False
+    SUPPORTS_INDEXES = True
     SUPPORTS_GRANTS = True
     SUPPORTS_REPLACE_TABLE = False
     CURRENT_CATALOG_EXPRESSION = exp.func("catalog")
@@ -59,6 +60,8 @@ class StarRocksEngineAdapter(
     MAX_TABLE_COMMENT_LENGTH = 1024
     MAX_COLUMN_COMMENT_LENGTH = 1024
     SUPPORTS_QUERY_EXECUTION_TRACKING = True
+    # StarRocks does NOT support tuple IN syntax: (col1, col2) IN ((val1, val2), (val3, val4))
+    SUPPORTS_TUPLE_IN = False
     # Though StarRocks supports asynchronous materialized views, we don't support them yet.
     SUPPORTS_MATERIALIZED_VIEWS = False
     # While StarRocks tables can have names up to 1024 characters,

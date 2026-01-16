@@ -27,13 +27,16 @@ def test_adapter_settings(adapter: StarRocksEngineAdapter):
     assert StarRocksEngineAdapter.DIALECT == "starrocks"
     assert StarRocksEngineAdapter.DEFAULT_BATCH_SIZE == 10000
     assert StarRocksEngineAdapter.SUPPORTS_TRANSACTIONS is False
-    assert StarRocksEngineAdapter.SUPPORTS_INDEXES is False
+    assert StarRocksEngineAdapter.SUPPORTS_INDEXES is True
     assert StarRocksEngineAdapter.SUPPORTS_REPLACE_TABLE is False
     assert StarRocksEngineAdapter.SUPPORTS_MATERIALIZED_VIEWS is False
+    assert StarRocksEngineAdapter.SUPPORTS_TUPLE_IN is False
     assert StarRocksEngineAdapter.MAX_TABLE_COMMENT_LENGTH == 1024
     assert StarRocksEngineAdapter.MAX_COLUMN_COMMENT_LENGTH == 1024
+    assert StarRocksEngineAdapter.SUPPORTS_QUERY_EXECUTION_TRACKING is True
     assert StarRocksEngineAdapter.MAX_IDENTIFIER_LENGTH == 256
     assert StarRocksEngineAdapter.SUPPORTS_GRANTS is True
+    assert StarRocksEngineAdapter.VIEW_SUPPORTED_PRIVILEGES == frozenset({"SELECT"})
     assert (
         StarRocksEngineAdapter.COMMENT_CREATION_TABLE == CommentCreationTable.IN_SCHEMA_DEF_NO_CTAS
     )
@@ -106,7 +109,7 @@ def test_create_table_like(
         ({"partitioned_by": [exp.to_column("ds")]}, ["PARTITION BY"]),
         (
             {
-                "table_format": "DUPLICATE",
+                "table_format": "DUPLICATE KEY",
                 "table_properties": {"key_columns": exp.Tuple(expressions=[exp.to_column("id")])},
             },
             ["DUPLICATE KEY"],
@@ -137,7 +140,7 @@ def test_create_table_like(
         (
             {
                 "storage_format": "OLAP",
-                "table_format": "DUPLICATE",
+                "table_format": "DUPLICATE KEY",
                 "table_description": "Test table",
                 "partitioned_by": [exp.to_column("ds")],
                 "table_properties": {
