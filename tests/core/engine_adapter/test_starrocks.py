@@ -104,15 +104,13 @@ def test_create_table_like(
     "kwargs,expected_fragments",
     [
         ({}, None),  # Empty properties returns None
-        ({"storage_format": "olap"}, ["ENGINE=olap"]),
         ({"table_description": "Test description"}, ["COMMENT", "Test description"]),
         ({"partitioned_by": [exp.to_column("ds")]}, ["PARTITION BY"]),
         (
             {
-                "table_format": "DUPLICATE KEY",
-                "table_properties": {"key_columns": exp.Tuple(expressions=[exp.to_column("id")])},
+                "table_properties": {"primary_key": exp.Tuple(expressions=[exp.to_column("id")])},
             },
-            ["DUPLICATE KEY"],
+            ["PRIMARY KEY"],
         ),
         (
             {
@@ -139,17 +137,15 @@ def test_create_table_like(
         ),
         (
             {
-                "storage_format": "OLAP",
-                "table_format": "DUPLICATE KEY",
                 "table_description": "Test table",
                 "partitioned_by": [exp.to_column("ds")],
                 "table_properties": {
-                    "key_columns": exp.to_column("id"),
+                    "primary_key": exp.Tuple(expressions=[exp.to_column("id")]),
                     "distributed_by": exp.to_column("id"),
                     "buckets": exp.Literal.number(10),
                 },
             },
-            ["ENGINE=OLAP", "DUPLICATE KEY", "COMMENT", "PARTITION BY", "DISTRIBUTED BY"],
+            ["PRIMARY KEY", "COMMENT", "PARTITION BY", "DISTRIBUTED BY"],
         ),
     ],
 )
@@ -167,41 +163,19 @@ def test_build_table_properties_exp(
             assert fragment in sql
 
 
-def test_build_table_properties_exp_invalid_table_type(adapter: StarRocksEngineAdapter):
-    """Test that invalid table type raises error."""
-    from sqlmesh.utils.errors import SQLMeshError
-
-    with pytest.raises(SQLMeshError):
-        adapter._build_table_properties_exp(table_format="INVALID_TYPE")
-
-
-def test_build_engine_property(adapter: StarRocksEngineAdapter):
-    """Test _build_engine_property."""
-    result = adapter._build_engine_property("OLAP")
-    assert isinstance(result, exp.EngineProperty)
-    assert result.sql(dialect="starrocks") == "ENGINE=OLAP"
-
-
 @pytest.mark.parametrize(
-    "table_type,key_columns,expected_type,expected_fragment",
+    "primary_key_expr",
     [
-        (
-            "PRIMARY KEY",
-            exp.Tuple(expressions=[exp.to_column("id")]),
-            exp.PrimaryKey,
-            "PRIMARY KEY",
-        ),
-        (None, exp.to_column("id"), exp.DuplicateKeyProperty, "DUPLICATE KEY"),
-        ("DUPLICATE", exp.to_column("id"), exp.DuplicateKeyProperty, "DUPLICATE KEY"),
+        exp.Tuple(expressions=[exp.to_column("id")]),
+        exp.Tuple(expressions=[exp.to_column("id"), exp.to_column("name")]),
+        exp.Array(expressions=[exp.to_column("col1")]),
     ],
 )
-def test_build_table_type_property(
-    adapter: StarRocksEngineAdapter, table_type, key_columns, expected_type, expected_fragment
-):
-    """Test _build_table_type_property for different table types."""
-    result = adapter._build_table_type_property(table_type=table_type, key_columns=key_columns)
-    assert isinstance(result, expected_type)
-    assert expected_fragment in result.sql(dialect="starrocks")
+def test_build_primary_key_property(adapter: StarRocksEngineAdapter, primary_key_expr):
+    """Test _build_primary_key_property for primary key expressions."""
+    result = adapter._build_primary_key_property(primary_key_expr)
+    assert isinstance(result, exp.PrimaryKey)
+    assert "PRIMARY KEY" in result.sql(dialect="starrocks")
 
 
 def test_build_table_description_property(adapter: StarRocksEngineAdapter):
