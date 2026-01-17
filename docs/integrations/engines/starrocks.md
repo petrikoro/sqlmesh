@@ -98,7 +98,7 @@ ROLLUP (
 
 ### Insert Overwrite Behavior
 
-SQLMesh uses StarRocks' native `INSERT OVERWRITE` syntax for all models. This is because StarRocks has strict limitations on `DELETE` statements — for example, WHERE clauses don't support expressions like `CAST()`.
+SQLMesh uses StarRocks' native `INSERT OVERWRITE` syntax for all models. This is because StarRocks has strict limitations on `DELETE` statements — for example, WHERE clauses don't support expressions like `CAST()` on DUPLICATE KEY tables.
 
 SQLMesh automatically enables `dynamic_overwrite` for each connection session to ensure `INSERT OVERWRITE` only replaces partitions matching the source query data. This feature requires StarRocks v3.4.0 or later.
 
