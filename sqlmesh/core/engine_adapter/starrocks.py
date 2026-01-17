@@ -250,7 +250,10 @@ class StarRocksEngineAdapter(
             props = {p.this.name.lower(): p.expression for p in distributed_by_expr.expressions}
 
             if not (columns := props.get("columns")):
-                raise SQLMeshError("HASH requires 'columns' parameter")
+                raise SQLMeshError(
+                    f"Invalid 'distributed_by' value: {distributed_by_expr}. "
+                    "'HASH' distribution requires 'columns' parameter."
+                )
 
             return exp.DistributedByProperty(
                 kind=exp.var("HASH"),
@@ -258,7 +261,10 @@ class StarRocksEngineAdapter(
                 buckets=props.get("buckets"),
             )
 
-        raise SQLMeshError("distributed_by: expected HASH(columns := ...) or RANDOM()")
+        raise SQLMeshError(
+            f"Invalid 'distributed_by' value: {distributed_by_expr}. "
+            "Expected HASH(columns := (col1, col2, ...)) or RANDOM()."
+        )
 
     def _build_rollup_property(self, rollup_expr: exp.Expression) -> exp.RollupProperty:
         return exp.RollupProperty(
