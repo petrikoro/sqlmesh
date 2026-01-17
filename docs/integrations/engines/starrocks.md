@@ -106,7 +106,6 @@ For more information, see the [StarRocks Dynamic overwrite documentation](https:
 
 ## Limitations
 
-- **No transactions** — StarRocks doesn't support traditional transactions, so SQLMesh runs operations non-transactionally.
-- **No materialized views** — StarRocks has async materialized views, but SQLMesh doesn't support them yet. Use regular views or tables.
-- **Schemas = databases** — When you create a schema in SQLMesh, it becomes a StarRocks database under the hood.
-- **Name length** — StarRocks allows table names up to 1024 characters, but database names are limited to 256. SQLMesh uses the stricter 256-character limit for all identifiers.
+- **No transactions** — StarRocks supports only limited number of use cases for transactions. See: https://docs.starrocks.io/docs/loading/SQL_transaction/ for more details.
+- **Name length** — StarRocks allows table names up to 1024 characters, but database names are limited to 256. SQLMesh uses the stricter 256-character limit for all identifiers. See: https://docs.starrocks.io/docs/sql-reference/System_limit/ for more details.
+- **No materialized views** — StarRocks has support for materialized views, but SQLMesh doesn't support them yet. Use regular views or tables.
