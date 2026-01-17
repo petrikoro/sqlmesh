@@ -126,7 +126,6 @@ class StarRocksEngineAdapter(
     def _get_data_objects(
         self, schema_name: SchemaName, object_names: t.Optional[t.Set[str]] = None
     ) -> t.List[DataObject]:
-        """Returns all the data objects that exist in the given schema."""
         catalog = self.get_current_catalog()
         query = (
             exp.select("table_name", "table_schema", "table_type")
@@ -186,8 +185,6 @@ class StarRocksEngineAdapter(
         table_kind: t.Optional[str] = None,
         **kwargs: t.Any,
     ) -> t.Optional[exp.Properties]:
-        """Creates a SQLGlot table properties expression for StarRocks DDL."""
-
         properties: t.List[exp.Expression] = []
         props = {k.lower(): v for k, v in (table_properties or {}).items()}
 
@@ -215,26 +212,17 @@ class StarRocksEngineAdapter(
         return exp.Properties(expressions=properties) if properties else None
 
     def _build_engine_property(self, engine: str) -> exp.EngineProperty:
-        """Build engine property."""
         return exp.EngineProperty(this=engine)
 
     def _build_primary_key_property(
         self,
         primary_key_expr: exp.Expression,
-    ) -> t.Union[exp.PrimaryKey, exp.DuplicateKeyProperty]:
-        """Build table key property.
-
-        Returns:
-            PrimaryKey or DuplicateKeyProperty expression.
-        """
-        return exp.PrimaryKey(
-            expressions=[exp.to_column(c.name) for c in primary_key_expr.expressions]
-        )
+    ) -> exp.PrimaryKey:
+        return exp.PrimaryKey(expressions=primary_key_expr.expressions)
 
     def _build_table_description_property(
         self, table_description: str
     ) -> exp.SchemaCommentProperty:
-        """Build table comment property."""
         return exp.SchemaCommentProperty(
             this=exp.Literal.string(self._truncate_table_comment(table_description))
         )
@@ -244,14 +232,12 @@ class StarRocksEngineAdapter(
         partitioned_by: t.List[exp.Expression],
         **kwargs: t.Any,
     ) -> exp.PartitionedByProperty:
-        """Build partitioned by property."""
         return exp.PartitionedByProperty(this=exp.Schema(expressions=partitioned_by))
 
     def _build_distributed_by_property(
         self,
         distributed_by_expr: exp.Expression,
     ) -> exp.DistributedByProperty:
-        """Build distribution property from HASH(columns := ...) or RANDOM()."""
         # RANDOM(buckets := N) or RANDOM()
         if isinstance(distributed_by_expr, exp.Rand):
             buckets_prop = distributed_by_expr.args.get("this")
@@ -280,7 +266,6 @@ class StarRocksEngineAdapter(
         raise SQLMeshError("distributed_by: expected HASH(columns := ...) or RANDOM()")
 
     def _build_rollup_property(self, rollup_expr: exp.Expression) -> exp.RollupProperty:
-        """Build rollup property."""
         return exp.RollupProperty(
             expressions=[
                 exp.Schema(this=expr.this, expressions=expr.expression.expressions)
@@ -289,31 +274,26 @@ class StarRocksEngineAdapter(
         )
 
     def _build_order_by_property(self, order_by_expr: exp.Expression) -> exp.Order:
-        """Build order by property."""
         exprs = (
             order_by_expr.expressions
             if isinstance(order_by_expr, (exp.Tuple, exp.Array))
             else [order_by_expr]
         )
-        columns = [exp.to_column(col.name) for col in exprs]
-        return exp.Order(expressions=[exp.Tuple(expressions=columns)])
+        return exp.Order(expressions=[exp.Tuple(expressions=exprs)])
 
     @staticmethod
     def _grant_object_kind(table_type: DataObjectType) -> str:
-        """Returns the object kind for GRANT/REVOKE statements."""
         if table_type == DataObjectType.VIEW:
             return "VIEW"
         return "TABLE"
 
     def _get_current_schema(self) -> str:
-        """Returns the current default schema (database) for the connection."""
         result = self.fetchone(exp.select(exp.func("database")))
         if result and result[0]:
             return str(result[0])
         raise SQLMeshError("Unable to determine current schema/database")
 
     def _get_current_grants_config(self, table: exp.Table) -> "GrantsConfig":
-        """Returns current grants for a table from StarRocks system views."""
         schema_identifier = table.args.get("db") or normalize_identifiers(
             exp.to_identifier(self._get_current_schema(), quoted=True), dialect=self.dialect
         )
