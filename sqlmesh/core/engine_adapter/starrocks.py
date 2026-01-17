@@ -60,15 +60,13 @@ class StarRocksEngineAdapter(
     MAX_TABLE_COMMENT_LENGTH = 1024
     MAX_COLUMN_COMMENT_LENGTH = 1024
     SUPPORTS_QUERY_EXECUTION_TRACKING = True
-    # StarRocks does NOT support tuple IN syntax: (col1, col2) IN ((val1, val2), (val3, val4))
     SUPPORTS_TUPLE_IN = False
-    # Though StarRocks supports asynchronous materialized views, we don't support them yet.
+    # Though StarRocks supports materialized views, we don't support them yet.
     SUPPORTS_MATERIALIZED_VIEWS = False
     # While StarRocks tables can have names up to 1024 characters,
     # database (schema) names are limited to 256 characters.
     # See https://docs.starrocks.io/docs/sql-reference/System_limit/
     MAX_IDENTIFIER_LENGTH = 256
-    # StarRocks usernames are case-sensitive
     CASE_SENSITIVE_GRANTEES = True
     VIEW_SUPPORTED_PRIVILEGES: t.FrozenSet[str] = frozenset({"SELECT"})
 
@@ -206,7 +204,6 @@ class StarRocksEngineAdapter(
         if order_by_expr := props.pop("order_by", None):
             properties.append(self._build_order_by_property(order_by_expr))
 
-        # Add remaining properties as PROPERTIES
         properties.extend(self._table_or_view_properties_to_expressions(props))
 
         return exp.Properties(expressions=properties) if properties else None
@@ -238,7 +235,6 @@ class StarRocksEngineAdapter(
         self,
         distributed_by_expr: exp.Expression,
     ) -> exp.DistributedByProperty:
-        # RANDOM(buckets := N) or RANDOM()
         if isinstance(distributed_by_expr, exp.Rand):
             buckets_prop = distributed_by_expr.args.get("this")
 
@@ -247,7 +243,6 @@ class StarRocksEngineAdapter(
                 buckets=buckets_prop.expression if buckets_prop else None,
             )
 
-        # HASH(columns := (col1, col2), buckets := N)
         if (
             isinstance(distributed_by_expr, exp.Anonymous)
             and distributed_by_expr.name.upper() == "HASH"
@@ -332,9 +327,9 @@ class StarRocksEngineAdapter(
             if not privileges_str or not grantee:
                 continue
 
-            # StarRocks returns grantee in format "'username'@'host'" - extract just the username
+            # StarRocks returns grantee in format "'username'@'host'",
+            # we extract just the username
             if "@" in grantee:
-                # Extract username from "'username'@'host'" format
                 grantee = grantee.split("@")[0].strip("'")
 
             # StarRocks may return multiple privileges as comma-separated string (e.g., "INSERT, SELECT")
