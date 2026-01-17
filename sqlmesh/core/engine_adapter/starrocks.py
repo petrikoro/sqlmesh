@@ -9,7 +9,6 @@ from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
 from sqlmesh.core.dialect import to_schema
 from sqlmesh.core.engine_adapter.mixins import (
     LogicalMergeMixin,
-    NonTransactionalTruncateMixin,
     PandasNativeFetchDFSupportMixin,
     GetCurrentCatalogFromFunctionMixin,
     RowDiffMixin,
@@ -38,7 +37,6 @@ if t.TYPE_CHECKING:
 class StarRocksEngineAdapter(
     LogicalMergeMixin,
     PandasNativeFetchDFSupportMixin,
-    NonTransactionalTruncateMixin,
     GetCurrentCatalogFromFunctionMixin,
     RowDiffMixin,
     GrantsFromInfoSchemaMixin,
@@ -68,8 +66,8 @@ class StarRocksEngineAdapter(
     # See https://docs.starrocks.io/docs/sql-reference/System_limit/
     MAX_IDENTIFIER_LENGTH = 256
     CASE_SENSITIVE_GRANTEES = True
-    VIEW_SUPPORTED_PRIVILEGES: t.FrozenSet[str] = frozenset({"SELECT"})
 
+    VIEW_SUPPORTED_PRIVILEGES: t.FrozenSet[str] = frozenset({"SELECT"})
     _TABLE_TYPE_MAP = {
         "BASE TABLE": "table",
         "VIEW": "view",
