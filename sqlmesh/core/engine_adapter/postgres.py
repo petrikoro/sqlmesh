@@ -96,6 +96,26 @@ class PostgresEngineAdapter(
             self._connection_pool.commit()
         return df
 
+    def _get_temp_table(
+        self, table: TableName, table_only: bool = False, quoted: bool = True
+    ) -> exp.Table:
+        """
+        Returns the name of the temp table that should be used for the given table name.
+
+        Uses prefix '_' instead of '__temp' to keep table names shorter for PostgreSQL's
+        63-character identifier limit.
+        """
+        table = t.cast(exp.Table, exp.to_table(table).copy())
+        table.set(
+            "this", exp.to_identifier(f"_{table.name}_{random_id(short=True)}", quoted=quoted)
+        )
+
+        if table_only:
+            table.set("db", None)
+            table.set("catalog", None)
+
+        return table
+
     def _create_table_like(
         self,
         target_table_name: TableName,
