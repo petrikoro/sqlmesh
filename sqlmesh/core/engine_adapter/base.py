@@ -122,6 +122,7 @@ class EngineAdapter:
     ATTACH_CORRELATION_ID = True
     SUPPORTS_QUERY_EXECUTION_TRACKING = False
     SUPPORTS_METADATA_TABLE_LAST_MODIFIED_TS = False
+    CASE_SENSITIVE_GRANTEES = False
 
     def __init__(
         self,

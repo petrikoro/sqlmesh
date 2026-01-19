@@ -784,8 +784,7 @@ def test_insert_overwrite_by_time_partition(ctx_query_and_df: TestContext):
     if ctx.dialect == "tsql":
         ds_type = "varchar(max)"
     if ctx.dialect == "starrocks":
-        # StarRocks PARTITION BY RANGE only supports DATE/DATETIME columns
-        ds_type = "date"
+        ds_type = "datetime"
 
     ctx.columns_to_types = {"id": "int", "ds": ds_type}
     table = ctx.table("test_table")
@@ -875,8 +874,7 @@ def test_insert_overwrite_by_time_partition_source_columns(ctx_query_and_df: Tes
     if ctx.dialect == "tsql":
         ds_type = "varchar(max)"
     if ctx.dialect == "starrocks":
-        # StarRocks PARTITION BY RANGE only supports DATE/DATETIME columns
-        ds_type = "date"
+        ds_type = "datetime"
 
     ctx.columns_to_types = {"id": "int", "ds": ds_type}
     columns_to_types = {
@@ -3132,7 +3130,7 @@ def test_value_normalization(
         if ctx.dialect == "fabric":
             pytest.skip("Fabric doesn't support TIMESTAMP WITH TIME ZONE fields")
         if ctx.dialect == "starrocks":
-            pytest.skip("StarRocks doesn't properly support TIMESTAMP WITH TIME ZONE fields")
+            pytest.skip("StarRocks doesn't support TIMESTAMP WITH TIME ZONE fields")
 
     if not isinstance(ctx.engine_adapter, RowDiffMixin):
         pytest.skip(
@@ -3967,7 +3965,7 @@ def test_grants_case_insensitive_grantees(ctx: TestContext):
             f"Skipping Test since engine adapter {ctx.engine_adapter.dialect} doesn't support grants"
         )
 
-    if getattr(ctx.engine_adapter, "CASE_SENSITIVE_GRANTEES", False):
+    if ctx.engine_adapter.CASE_SENSITIVE_GRANTEES is True:
         pytest.skip(
             f"Skipping Test since engine adapter {ctx.engine_adapter.dialect} has case-sensitive grantees"
         )
@@ -4088,25 +4086,26 @@ def test_grants_plan(ctx: TestContext, tmp_path: Path):
             select_privilege: [roles["analyst"], roles["etl_user"]],
             insert_privilege: [roles["etl_user"]],
         }
+
         assert set(final_grants.get(select_privilege, [])) == set(
             expected_final_grants[select_privilege]
         )
         assert final_grants.get(insert_privilege, []) == expected_final_grants[insert_privilege]
 
         # Virtual layer should also have the updated grants
-        # Note: Some engines (like StarRocks) only support SELECT on views, not INSERT/UPDATE/DELETE
         updated_virtual_grants = ctx.engine_adapter._get_current_grants_config(
             exp.to_table(view_name, dialect=ctx.dialect)
         )
         assert set(updated_virtual_grants.get(select_privilege, [])) == set(
             expected_final_grants[select_privilege]
         )
-        view_supported_privileges = getattr(ctx.engine_adapter, "VIEW_SUPPORTED_PRIVILEGES", None)
-        if view_supported_privileges and insert_privilege.upper() not in view_supported_privileges:
-            # This engine doesn't support INSERT on views, so we expect no INSERT grants
-            assert updated_virtual_grants.get(insert_privilege, []) == []
-        else:
-            assert (
-                updated_virtual_grants.get(insert_privilege, [])
-                == expected_final_grants[insert_privilege]
-            )
+
+        if ctx.dialect == "starrocks":
+            # StarRocks doesn't support INSERT on views,
+            # so INSERT grants should be empty for the view
+            expected_final_grants[insert_privilege] = []
+
+        assert (
+            updated_virtual_grants.get(insert_privilege, [])
+            == expected_final_grants[insert_privilege]
+        )

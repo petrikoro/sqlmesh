@@ -95,6 +95,7 @@ class StarRocksEngineAdapter(
         warn_on_error: bool = True,
         properties: t.Optional[t.List[exp.Expression]] = None,
     ) -> None:
+        # StarRocks uses databases instead of schemas
         return self._create_schema(
             schema_name=schema_name,
             ignore_if_exists=ignore_if_exists,
@@ -110,7 +111,7 @@ class StarRocksEngineAdapter(
         cascade: bool = False,
         **drop_args: t.Dict[str, exp.Expression],
     ) -> None:
-        # StarRocks doesn't support CASCADE clause and drops schemas unconditionally.
+        # StarRocks doesn't support CASCADE clause
         return self._drop_object(
             name=schema_name,
             exists=ignore_if_not_exists,
