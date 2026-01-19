@@ -122,6 +122,7 @@ class EngineAdapter:
     ATTACH_CORRELATION_ID = True
     SUPPORTS_QUERY_EXECUTION_TRACKING = False
     SUPPORTS_METADATA_TABLE_LAST_MODIFIED_TS = False
+    CASE_SENSITIVE_GRANTEES = False
 
     def __init__(
         self,
@@ -2839,7 +2840,7 @@ class EngineAdapter:
         """
         table = t.cast(exp.Table, exp.to_table(table).copy())
         table.set(
-            "this", exp.to_identifier(f"_{table.name}_{random_id(short=True)}", quoted=quoted)
+            "this", exp.to_identifier(f"__temp_{table.name}_{random_id(short=True)}", quoted=quoted)
         )
 
         if table_only:
