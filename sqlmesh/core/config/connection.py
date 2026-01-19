@@ -57,7 +57,8 @@ FORBIDDEN_STATE_SYNC_ENGINES = {
     "trino",
     # Nullable types are problematic
     "clickhouse",
-    # DELETE statements have pretty strict restrictions on WHERE clauses
+    # DELETE statements have strict restrictions
+    # on WHERE clauses for DUPLICATE KEY tables
     "starrocks",
 }
 MOTHERDUCK_TOKEN_REGEX = re.compile(r"(\?|\&)(motherduck_token=)(\S*)")
