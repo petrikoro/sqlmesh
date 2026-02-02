@@ -183,7 +183,15 @@ class MetadataResults(PydanticModel):
 
     @property
     def non_temp_tables(self) -> t.List[str]:
-        return [x for x in self.tables if not x.startswith("__temp") and not x.startswith("temp")]
+        # Temp tables use different prefixes per engine:
+        # - Base: __temp_{name}_{id}
+        # - Postgres: _{name}_{id} (shorter for 63-char limit)
+        # - Spark: temp_{name}_{id}
+        return [
+            x
+            for x in self.tables
+            if not x.startswith("__temp") and not x.startswith("temp") and not x.startswith("_")
+        ]
 
 
 class TestContext:
