@@ -96,6 +96,26 @@ class PostgresEngineAdapter(
             self._connection_pool.commit()
         return df
 
+    def _get_temp_table(
+        self, table: TableName, table_only: bool = False, quoted: bool = True
+    ) -> exp.Table:
+        """
+        Returns the name of the temp table that should be used for the given table name.
+
+        Uses prefix '_' instead of '__temp' to keep table names shorter for PostgreSQL's
+        63-character identifier limit.
+        """
+        table = t.cast(exp.Table, exp.to_table(table).copy())
+        table.set(
+            "this", exp.to_identifier(f"_{table.name}_{random_id(short=True)}", quoted=quoted)
+        )
+
+        if table_only:
+            table.set("db", None)
+            table.set("catalog", None)
+
+        return table
+
     def _create_table_like(
         self,
         target_table_name: TableName,
@@ -441,16 +461,23 @@ class PostgresEngineAdapter(
             .order_by(exp.column("dimension_number", "d"))
         )
 
+        # Use savepoint in transaction to recover from error without losing other work
+        in_tx = self._connection_pool.is_transaction_active
+        savepoint = f"_tsdb_{random_id(short=True)}" if in_tx else None
         try:
             logger.info("Fetching TimescaleDB info for %s", table_name)
+            if savepoint:
+                self.cursor.execute(f"SAVEPOINT {savepoint}")
             self.execute(query)
             rows = self.cursor.fetchall()
+            if savepoint:
+                self.cursor.execute(f"RELEASE SAVEPOINT {savepoint}")
         except Exception as e:
-            # TimescaleDB not installed or other error
             logger.warning("Could not query TimescaleDB info: %s", e)
-            # Rollback to recover from the failed transaction state in PostgreSQL
-            # Without this, all subsequent queries would fail
-            self._connection_pool.rollback()
+            if savepoint:
+                self.cursor.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            else:
+                self._connection_pool.rollback()
             return None
 
         if not rows:
