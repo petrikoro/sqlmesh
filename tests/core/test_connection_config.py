@@ -20,6 +20,7 @@ from sqlmesh.core.config.connection import (
     MySQLConnectionConfig,
     PostgresConnectionConfig,
     SnowflakeConnectionConfig,
+    StarRocksConnectionConfig,
     TrinoAuthenticationMethod,
     AthenaConnectionConfig,
     MSSQLConnectionConfig,
@@ -1200,6 +1201,57 @@ def test_mysql(make_config):
     )
     assert isinstance(config, MySQLConnectionConfig)
     assert config.is_recommended_for_state_sync is True
+
+
+def test_starrocks(make_config):
+    config = make_config(
+        type="starrocks",
+        host="host",
+        user="user",
+        password="password",
+        check_import=False,
+    )
+    assert isinstance(config, StarRocksConnectionConfig)
+    assert config.is_recommended_for_state_sync is False
+
+    # Test with all optional parameters
+    config = make_config(
+        type="starrocks",
+        host="host",
+        user="user",
+        password="password",
+        port=9030,
+        database="test_db",
+        charset="utf8",
+        collation="utf8_general_ci",
+        ssl_disabled=True,
+        concurrent_tasks=8,
+        check_import=False,
+    )
+    assert isinstance(config, StarRocksConnectionConfig)
+    assert config.host == "host"
+    assert config.user == "user"
+    assert config.password == "password"
+    assert config.port == 9030
+    assert config.database == "test_db"
+    assert config.charset == "utf8"
+    assert config.collation == "utf8_general_ci"
+    assert config.ssl_disabled is True
+    assert config.concurrent_tasks == 8
+
+
+def test_starrocks_dynamic_overwrite(make_config):
+    # Test that dynamic_overwrite is always enabled
+    config = make_config(
+        type="starrocks",
+        host="host",
+        user="user",
+        password="password",
+        check_import=False,
+    )
+    assert isinstance(config, StarRocksConnectionConfig)
+    static_kwargs = config._static_connection_kwargs
+    assert static_kwargs == {"init_command": "SET dynamic_overwrite = true"}
 
 
 def test_clickhouse(make_config):
