@@ -16,9 +16,9 @@ import { ClockIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import {
   type ColumnDescription,
-  type ColumnLineageApiLineageModelNameColumnNameGet200,
+  type ColumnLineageResponse,
   type LineageColumn,
-} from '@/api/client'
+} from '@/api/types'
 import Loading from '@/components/loading/Loading'
 import Spinner from '@/components/logo/Spinner'
 import './Graph.css'
@@ -27,7 +27,7 @@ import {
   type ModelSQLMeshModel,
 } from '@/domain/sqlmesh-model'
 import { useLineageFlow } from './context'
-import { useApiColumnLineage } from '@/api/index'
+import { useApiColumnLineage } from '@/api/hooks'
 import SourceList from '@/components/sourceList/SourceList'
 import type { Lineage } from '@/domain/lineage'
 import type { Column, ColumnName } from '@/domain/column'
@@ -333,7 +333,7 @@ function ModelColumn({
   withHandles?: boolean
   withDescription?: boolean
   updateColumnLineage: (
-    lineage: ColumnLineageApiLineageModelNameColumnNameGet200,
+    lineage: ColumnLineageResponse,
   ) => void
   removeEdges: (columnId: PartialColumnHandleId) => void
   selectManually?: React.Dispatch<

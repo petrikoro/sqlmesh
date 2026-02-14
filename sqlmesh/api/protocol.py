@@ -1,4 +1,4 @@
-"""Transport-agnostic SQLMesh API request / response models."""
+"""Transport-agnostic SQLMesh API response models."""
 
 from __future__ import annotations
 
@@ -8,21 +8,6 @@ from pydantic import field_validator
 
 from sqlmesh.api.models import LineageColumn, Model, TableDiff
 from sqlmesh.utils.pydantic import PydanticModel
-
-API_FEATURE = "sqlmesh/api"
-
-
-class ApiRequest(PydanticModel):
-    """
-    Request to call the SQLMesh API.
-    This is a generic request that can be used to call any API endpoint.
-    """
-
-    requestId: str
-    url: str
-    method: t.Optional[str] = "GET"
-    params: t.Optional[t.Dict[str, t.Any]] = None
-    body: t.Optional[t.Dict[str, t.Any]] = None
 
 
 class BaseAPIResponse(PydanticModel):
@@ -85,16 +70,3 @@ ApiResponse = t.Union[
     ApiResponseGetLineage,
     ApiResponseGetTableDiff,
 ]
-
-_DOCUMENTED_MODELS: t.Tuple[t.Type[PydanticModel], ...] = (
-    ApiRequest,
-    ApiResponseGetModels,
-    ApiResponseGetLineage,
-    ApiResponseGetColumnLineage,
-    ApiResponseGetTableDiff,
-)
-
-
-def get_api_schemas() -> t.Dict[str, t.Dict[str, t.Any]]:
-    """Return JSON schemas for SQLMesh API models for doc generation."""
-    return {model.__name__: model.model_json_schema() for model in _DOCUMENTED_MODELS}

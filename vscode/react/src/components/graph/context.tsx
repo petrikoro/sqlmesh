@@ -12,7 +12,7 @@ import type { ModelSQLMeshModel } from '@/domain/sqlmesh-model'
 import type { Column } from '@/domain/column'
 import type { ModelEncodedFQN, ModelName } from '@/domain/models'
 import type { ColumnName } from '@/domain/column'
-import type { Model } from '@/api/client'
+import type { Model } from '@/api/types'
 import { toID, toKeys } from './types'
 import type { ConnectedNode } from '@/components/graph/types'
 

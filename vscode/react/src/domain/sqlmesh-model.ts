@@ -1,12 +1,8 @@
 import {
   type ModelDetails,
   type Model,
-  type ModelDescription,
-  type ModelSql,
   ModelType,
-  type ModelDefaultCatalog,
-  type ModelDefinition,
-} from '@/api/client'
+} from '@/api/types'
 import type {
   ModelEncodedFQN,
   ModelName,
@@ -18,6 +14,11 @@ import { isArrayNotEmpty } from '@/utils/index'
 import { ModelInitial } from './initial'
 import type { Lineage } from './lineage'
 import { fromAPIColumn, type Column } from '@/domain/column'
+
+type ModelDescription = Model['description']
+type ModelSql = Model['sql']
+type ModelDefaultCatalog = Model['default_catalog']
+type ModelDefinition = Model['definition']
 
 export interface InitialSQLMeshModel
   extends Omit<Model, 'name' | 'fqn' | 'path' | 'full_path'> {

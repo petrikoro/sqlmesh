@@ -3,6 +3,7 @@ import { LSPClient } from '../lsp/lsp'
 import { isErr } from '@bus/result'
 import { CallbackEvent, RPCRequest } from '@bus/callbacks'
 import { getWorkspaceFolders } from '../utilities/common/vscodeapi'
+import { buildRpcResponse } from '../utilities/rpc'
 
 interface ModelInfo {
   name: string
@@ -204,15 +205,10 @@ export function showTableDiff(
       async progress => {
         progress.report({ message: 'Calculating table differences...' })
 
-        return await lspClient.call_custom_method('sqlmesh/api', {
-          method: 'GET',
-          url: '/api/table_diff',
-          params: {
-            source: selectedSourceEnv.label,
-            target: selectedTargetEnv.label,
-            model_or_snapshot: selectedModelInfo.name,
-          },
-          body: {},
+        return await lspClient.call_custom_method('sqlmesh/get_table_diff', {
+          source: selectedSourceEnv.label,
+          target: selectedTargetEnv.label,
+          model_or_snapshot: selectedModelInfo.name,
         })
       },
     )
@@ -280,47 +276,14 @@ export function showTableDiff(
             const payload: RPCRequest = message.payload
             const requestId = payload.requestId
             switch (payload.method) {
-              case 'api_query': {
+              case 'get_table_diff': {
                 const response = await lspClient.call_custom_method(
-                  'sqlmesh/api',
+                  'sqlmesh/get_table_diff',
                   payload.params,
                 )
-                let responseCallback: CallbackEvent
-                if (isErr(response)) {
-                  let errorMessage: string
-                  switch (response.error.type) {
-                    case 'generic':
-                      errorMessage = response.error.message
-                      break
-                    case 'invalid_state':
-                      errorMessage = `Invalid state: ${response.error.message}`
-                      break
-                    case 'sqlmesh_outdated':
-                      errorMessage = `SQLMesh version issue: ${response.error.message}`
-                      break
-                    default:
-                      errorMessage = 'Unknown error'
-                  }
-                  responseCallback = {
-                    key: 'rpcResponse',
-                    payload: {
-                      requestId,
-                      result: {
-                        ok: false,
-                        error: errorMessage,
-                      },
-                    },
-                  }
-                } else {
-                  responseCallback = {
-                    key: 'rpcResponse',
-                    payload: {
-                      requestId,
-                      result: response,
-                    },
-                  }
-                }
-                await panel.webview.postMessage(responseCallback)
+                await panel.webview.postMessage(
+                  buildRpcResponse(requestId, response),
+                )
                 break
               }
               case 'get_active_file': {
@@ -482,16 +445,14 @@ export function showTableDiff(
                       message: 'Calculating table differences...',
                     })
 
-                    return await lspClient.call_custom_method('sqlmesh/api', {
-                      method: 'GET',
-                      url: '/api/table_diff',
-                      params: {
+                    return await lspClient.call_custom_method(
+                      'sqlmesh/get_table_diff',
+                      {
                         source: sourceEnvironment,
                         target: targetEnvironment,
                         model_or_snapshot: sourceModel,
                       },
-                      body: {},
-                    })
+                    )
                   },
                 )
 

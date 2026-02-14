@@ -1,7 +1,7 @@
 import {
   type LineageColumn as ApiLineageColumn,
-  type ModelLineageApiLineageModelNameGet200,
-} from '@/api/client'
+  type ModelLineageResponse,
+} from '@/api/types'
 import type { ModelEncodedFQN, ModelFQN } from '@/domain/models'
 import type { ColumnName } from './column'
 
@@ -31,7 +31,7 @@ export interface ModelLineage {
 }
 
 export const toModelLineage = (
-  lineage: ModelLineageApiLineageModelNameGet200,
+  lineage: ModelLineageResponse,
 ): ModelLineage => {
   return lineage as Record<ModelFQN, ModelFQN[]>
 }

@@ -1,4 +1,4 @@
-import { useApiModelLineage, useApiModels } from '@/api/index'
+import { useApiModelLineage, useApiModels } from '@/api/hooks'
 import { useEffect, useMemo, useState } from 'react'
 import { type ModelSQLMeshModel } from '@/domain/sqlmesh-model'
 import { type HighlightedNodes, useLineageFlow } from './context'

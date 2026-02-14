@@ -72,25 +72,9 @@ Run docs tests:
 make doc-test
 ```
 
-## UI development
-
-In addition to the Python development, you can also develop the UI.
-
-The UI is built using React and Typescript. To run the UI, you will need to install the dependencies by running the following command.
-
-```bash
-pnpm install
-```
-
-Run ide:
-
-```bash
-make ui-up
-```
-
 ## Developing the VSCode extension
 
-Similar to UI development, you can also develop the VSCode extension. To do so, make sure you have the dependencies installed by running the following command inside the `vscode/extension` directory.
+You can develop the VSCode extension and its React-based UI. To do so, make sure you have the dependencies installed by running the following command inside the `vscode/extension` directory.
 
 ```bash
 pnpm install

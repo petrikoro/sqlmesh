@@ -1,7 +1,7 @@
 import { isNil, isArrayNotEmpty, isNotNil, isFalse } from '@/utils/index'
 import clsx from 'clsx'
 import { useMemo, useCallback, useState } from 'react'
-import { ModelType, type Model } from '@/api/client'
+import { ModelType, type Model } from '@/api/types'
 import { useLineageFlow } from './context'
 import { type GraphNodeData } from './help'
 import { Position, type NodeProps } from 'reactflow'

@@ -101,14 +101,10 @@ make databricks-test # Needs DATABRICKS_* env vars
 
 ### UI Development
 ```bash
-# In web/client directory
+# In vscode/react directory
 pnpm run dev   # Start development server
 pnpm run build # Production build
 pnpm run test  # Run tests
-
-# Docker-based UI
-make ui-up     # Start UI in Docker
-make ui-down   # Stop UI
 ```
 
 ## Architecture Overview
@@ -139,8 +135,8 @@ make ui-down   # Stop UI
 
 - `sqlmesh/core/context.py`: Main orchestration class
 - `examples/sushi/`: Reference implementation used in tests
-- `sqlmesh/api/dispatcher.py`: Shared API request dispatcher used by integration surfaces
-- `web/client/src/App.tsx`: Web UI frontend entry point
+- `sqlmesh/api/handlers.py`: API handler functions (models, lineage, table diff) used by LSP and other integration surfaces
+- `vscode/react/src/main.tsx`: VS Code extension React UI entry point
 - `vscode/extension/src/extension.ts`: VSCode extension entry point
 
 ## GitHub CI/CD Bot Architecture

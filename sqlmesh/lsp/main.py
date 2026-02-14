@@ -14,10 +14,17 @@ from lsprotocol.types import (
 )
 from pygls.server import LanguageServer
 from sqlmesh._version import __version__
-from sqlmesh.api import (
-    API_FEATURE,
-    ApiResponse,
-    dispatch_api_request,
+from sqlmesh.api.handlers import (
+    column_lineage,
+    get_models,
+    get_table_diff,
+    model_lineage,
+)
+from sqlmesh.api.protocol import (
+    ApiResponseGetColumnLineage,
+    ApiResponseGetLineage,
+    ApiResponseGetModels,
+    ApiResponseGetTableDiff,
 )
 from sqlmesh.core.context import Context
 
@@ -35,6 +42,10 @@ from sqlmesh.lsp.custom import (
     FORMAT_PROJECT_FEATURE,
     GET_ENVIRONMENTS_FEATURE,
     GET_MODELS_FEATURE,
+    GET_API_MODELS_FEATURE,
+    GET_MODEL_LINEAGE_FEATURE,
+    GET_COLUMN_LINEAGE_FEATURE,
+    GET_TABLE_DIFF_FEATURE,
     AllModelsRequest,
     AllModelsResponse,
     AllModelsForRenderRequest,
@@ -62,6 +73,10 @@ from sqlmesh.lsp.custom import (
     GetModelsRequest,
     GetModelsResponse,
     ModelInfo,
+    GetApiModelsRequest,
+    GetModelLineageRequest,
+    GetColumnLineageRequest,
+    GetTableDiffRequest,
 )
 from sqlmesh.lsp.errors import ContextFailedError, context_error_to_diagnostic
 from sqlmesh.lsp.helpers import to_lsp_range, to_sqlmesh_position
@@ -152,7 +167,6 @@ class SQLMeshLanguageServer:
             ALL_MODELS_FEATURE: self._custom_all_models,
             RENDER_MODEL_FEATURE: self._custom_render_model,
             ALL_MODELS_FOR_RENDER_FEATURE: self._custom_all_models_for_render,
-            API_FEATURE: self._custom_api,
             SUPPORTED_METHODS_FEATURE: self._custom_supported_methods,
             FORMAT_PROJECT_FEATURE: self._custom_format_project,
             LIST_WORKSPACE_TESTS_FEATURE: self._list_workspace_tests,
@@ -160,6 +174,10 @@ class SQLMeshLanguageServer:
             RUN_TEST_FEATURE: self._run_test,
             GET_ENVIRONMENTS_FEATURE: self._custom_get_environments,
             GET_MODELS_FEATURE: self._custom_get_models,
+            GET_API_MODELS_FEATURE: self._custom_get_api_models,
+            GET_MODEL_LINEAGE_FEATURE: self._custom_get_model_lineage,
+            GET_COLUMN_LINEAGE_FEATURE: self._custom_get_column_lineage,
+            GET_TABLE_DIFF_FEATURE: self._custom_get_table_diff,
         }
 
         # Register LSP features (e.g., formatting, hover, etc.)
@@ -305,10 +323,65 @@ class SQLMeshLanguageServer:
                 models=[],
             )
 
-    def _custom_api(self, ls: LanguageServer, request: t.Any) -> ApiResponse:
-        ls.log_trace(f"API request: {request}")
-        context = self._context_get_or_load()
-        return dispatch_api_request(context.context, request)
+    def _custom_get_api_models(
+        self, ls: LanguageServer, params: GetApiModelsRequest
+    ) -> ApiResponseGetModels:
+        """Get all models with full details for the lineage webview."""
+        try:
+            context = self._context_get_or_load()
+            return ApiResponseGetModels(data=get_models(context.context))
+        except Exception as e:
+            ls.log_trace(f"Error getting API models: {e}")
+            return ApiResponseGetModels(response_error=str(e), data=[])
+
+    def _custom_get_model_lineage(
+        self, ls: LanguageServer, params: GetModelLineageRequest
+    ) -> ApiResponseGetLineage:
+        """Get a model's lineage graph."""
+        try:
+            context = self._context_get_or_load()
+            lineage = model_lineage(params.modelName, context.context)
+            non_set_lineage = {k: v for k, v in lineage.items() if v is not None}
+            return ApiResponseGetLineage(data=non_set_lineage)
+        except Exception as e:
+            ls.log_trace(f"Error getting model lineage: {e}")
+            return ApiResponseGetLineage(response_error=str(e), data={})
+
+    def _custom_get_column_lineage(
+        self, ls: LanguageServer, params: GetColumnLineageRequest
+    ) -> ApiResponseGetColumnLineage:
+        """Get a column's lineage graph."""
+        try:
+            context = self._context_get_or_load()
+            return ApiResponseGetColumnLineage(
+                data=column_lineage(
+                    params.modelName, params.columnName, params.modelsOnly, context.context
+                )
+            )
+        except Exception as e:
+            ls.log_trace(f"Error getting column lineage: {e}")
+            return ApiResponseGetColumnLineage(response_error=str(e), data={})
+
+    def _custom_get_table_diff(
+        self, ls: LanguageServer, params: GetTableDiffRequest
+    ) -> ApiResponseGetTableDiff:
+        """Get a table diff between two environments."""
+        try:
+            context = self._context_get_or_load()
+            result = get_table_diff(
+                context=context.context,
+                source=params.source,
+                target=params.target,
+                on=params.on,
+                model_or_snapshot=params.model_or_snapshot,
+                where=params.where,
+                temp_schema=params.temp_schema,
+                limit=params.limit,
+            )
+            return ApiResponseGetTableDiff(data=result)
+        except Exception as e:
+            ls.log_trace(f"Error getting table diff: {e}")
+            return ApiResponseGetTableDiff(response_error=str(e), data=None)
 
     def _custom_supported_methods(
         self, ls: LanguageServer, params: SupportedMethodsRequest

@@ -6,7 +6,7 @@ import {
   isNotNil,
   isObjectEmpty,
 } from '@/utils/index'
-import { type LineageColumn } from '@/api/client'
+import { type LineageColumn } from '@/api/types'
 import { Position, type Edge, type Node, type XYPosition } from 'reactflow'
 import { type ActiveEdges, type Connections } from './context'
 import { toID, toKeys } from './types'

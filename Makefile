@@ -14,7 +14,7 @@ else
 endif
 
 install-dev:
-	$(PIP) install -e ".[dev,web,slack,dlt,lsp]" ./examples/custom_materializations
+	$(PIP) install -e ".[dev,slack,dlt,lsp]" ./examples/custom_materializations
 
 install-doc:
 	$(PIP) install -r ./docs/requirements.txt
@@ -159,7 +159,7 @@ guard-%:
 	fi
 
 engine-%-install:
-	$(PIP) install -e ".[dev,web,slack,lsp,${*}]" ./examples/custom_materializations
+	$(PIP) install -e ".[dev,slack,lsp,${*}]" ./examples/custom_materializations
 
 engine-docker-%-up:
 	docker compose -f ./tests/core/engine_adapter/integration/docker/compose.${*}.yaml up -d

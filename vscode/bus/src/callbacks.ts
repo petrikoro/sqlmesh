@@ -49,14 +49,43 @@ export type RPCMethods = {
       fileUri?: string
     }
   }
-  api_query: {
-    params: {
-      url: string
-      method: string
-      params: any
-      body: any
+  get_api_models: {
+    params: {}
+    result: {
+      data: any[]
     }
-    result: any
+  }
+  get_model_lineage: {
+    params: {
+      modelName: string
+    }
+    result: {
+      data: Record<string, string[]>
+    }
+  }
+  get_column_lineage: {
+    params: {
+      modelName: string
+      columnName: string
+      modelsOnly?: boolean
+    }
+    result: {
+      data: Record<string, Record<string, any>>
+    }
+  }
+  get_table_diff: {
+    params: {
+      source: string
+      target: string
+      on?: string
+      model_or_snapshot?: string
+      where?: string
+      temp_schema?: string
+      limit?: number
+    }
+    result: {
+      data: any | null
+    }
   }
   get_selected_model: {
     params: {}

@@ -91,12 +91,7 @@ export function RerunController({
           setTimeout(() => reject(new Error('Request timeout')), 30000) // 30 second timeout
         })
 
-        const apiPromise = callRpc('api_query', {
-          method: 'GET',
-          url: '/api/table_diff',
-          params: params,
-          body: {},
-        })
+        const apiPromise = callRpc('get_table_diff', params)
 
         const result = (await Promise.race([apiPromise, timeoutPromise])) as any
 

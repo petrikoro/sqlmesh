@@ -9,8 +9,15 @@ import {
   workspace,
 } from 'vscode'
 import { getWorkspaceFolders } from '../utilities/common/vscodeapi'
+import { buildRpcResponse } from '../utilities/rpc'
 import { LSPClient } from '../lsp/lsp'
-import { isErr } from '@bus/result'
+
+/** RPC methods that are forwarded directly to LSP (params passed through). */
+const RPC_TO_LSP: Record<string, string> = {
+  get_api_models: 'sqlmesh/get_api_models',
+  get_model_lineage: 'sqlmesh/get_model_lineage',
+  get_column_lineage: 'sqlmesh/get_column_lineage',
+}
 
 export class LineagePanel implements WebviewViewProvider, Disposable {
   public static readonly viewType = 'sqlmesh.lineage'
@@ -92,67 +99,27 @@ export class LineagePanel implements WebviewViewProvider, Disposable {
           case 'rpcRequest': {
             const payload: RPCRequest = message.payload
             const requestId = payload.requestId
-            switch (payload.method) {
-              case 'api_query': {
-                const response = await this.lsp.call_custom_method(
-                  'sqlmesh/api',
-                  payload.params,
-                )
-                let responseCallback: CallbackEvent
-                if (isErr(response)) {
-                  let errorMessage: string
-                  switch (response.error.type) {
-                    case 'generic':
-                      errorMessage = response.error.message
-                      break
-                    case 'invalid_state':
-                      errorMessage = `Invalid state: ${response.error.message}`
-                      break
-                    case 'sqlmesh_outdated':
-                      errorMessage = `SQLMesh version issue: ${response.error.message}`
-                      break
-                    default:
-                      errorMessage = 'Unknown error'
-                  }
-                  responseCallback = {
-                    key: 'rpcResponse',
-                    payload: {
-                      requestId,
-                      result: {
-                        ok: false,
-                        error: errorMessage,
-                      },
-                    },
-                  }
-                } else {
-                  responseCallback = {
-                    key: 'rpcResponse',
-                    payload: {
-                      requestId,
-                      result: response,
-                    },
-                  }
-                }
-                await webviewView.webview.postMessage(responseCallback)
-                break
-              }
-              case 'get_active_file': {
-                const active_file = window.activeTextEditor?.document.uri.fsPath
-                const responseCallback: CallbackEvent = {
-                  key: 'rpcResponse',
-                  payload: {
-                    requestId,
-                    result: {
-                      fileUri: active_file,
-                    },
-                  },
-                }
-                await webviewView.webview.postMessage(responseCallback)
-                break
-              }
-              default: {
-                throw new Error(`Unhandled RPC method: ${payload.method}`)
-              }
+            const lspMethod = RPC_TO_LSP[payload.method]
+            if (lspMethod) {
+              // Generic proxy: forward params to the matching LSP method.
+              const response = await this.lsp.call_custom_method(
+                lspMethod as any,
+                payload.params,
+              )
+              await webviewView.webview.postMessage(
+                buildRpcResponse(requestId, response),
+              )
+            } else if (payload.method === 'get_active_file') {
+              const active_file = window.activeTextEditor?.document.uri.fsPath
+              await webviewView.webview.postMessage({
+                key: 'rpcResponse',
+                payload: {
+                  requestId,
+                  result: { fileUri: active_file },
+                },
+              } satisfies CallbackEvent)
+            } else {
+              throw new Error(`Unhandled RPC method: ${payload.method}`)
             }
             break
           }

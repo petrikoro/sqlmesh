@@ -1,4 +1,4 @@
-import { type Column as APIColumn } from '@/api/client'
+import { type Column as APIColumn } from '@/api/types'
 import { type Branded } from '@bus/brand'
 
 export type ColumnName = Branded<string, 'ColumnName'>

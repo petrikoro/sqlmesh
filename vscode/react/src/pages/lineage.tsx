@@ -5,7 +5,7 @@ import {
   QueryClientProvider,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useApiModels } from '@/api'
+import { useApiModels } from '@/api/hooks'
 import LineageFlowProvider from '@/components/graph/context'
 import { ModelLineage } from '@/components/graph/ModelLineage'
 import { useVSCode } from '@/hooks/vscode'
@@ -14,7 +14,7 @@ import { ModelSQLMeshModel } from '@/domain/sqlmesh-model'
 import { useEventBus } from '@/hooks/eventBus'
 import type { VSCodeEvent } from '@bus/callbacks'
 import { URI } from 'vscode-uri'
-import type { Model } from '@/api/client'
+import type { Model } from '@/api/types'
 import { useRpc } from '@/utils/rpc'
 import {
   type ModelPath,

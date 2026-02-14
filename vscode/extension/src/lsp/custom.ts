@@ -27,7 +27,6 @@ export interface RenderModelEntry {
 
 export type CustomLSPMethods =
   | AllModelsMethod
-  | AbstractAPICall
   | RenderModelMethod
   | AllModelsForRenderMethod
   | SupportedMethodsMethod
@@ -37,6 +36,10 @@ export type CustomLSPMethods =
   | RunTest
   | GetEnvironmentsMethod
   | GetTableDiffModelsMethod
+  | GetApiModelsMethod
+  | GetModelLineageMethod
+  | GetColumnLineageMethod
+  | GetTableDiffMethod
 
 interface AllModelsRequest {
   textDocument: {
@@ -49,20 +52,68 @@ interface AllModelsResponse extends BaseResponse {
   keywords: string[]
 }
 
-export interface AbstractAPICallRequest {
-  url: string
-  method: string
-  params: Record<string, any>
-  body: Record<string, any>
+export interface GetApiModelsMethod {
+  method: 'sqlmesh/get_api_models'
+  request: GetApiModelsRequest
+  response: GetApiModelsResponse
 }
 
-export interface AbstractAPICall {
-  method: 'sqlmesh/api'
-  request: AbstractAPICallRequest
-  response: AbstractAPICallResponse
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+interface GetApiModelsRequest {}
+
+interface GetApiModelsResponse extends BaseResponse {
+  data: any[]
 }
 
-type AbstractAPICallResponse = object & BaseResponse
+export interface GetModelLineageMethod {
+  method: 'sqlmesh/get_model_lineage'
+  request: GetModelLineageRequest
+  response: GetModelLineageResponse
+}
+
+interface GetModelLineageRequest {
+  modelName: string
+}
+
+interface GetModelLineageResponse extends BaseResponse {
+  data: Record<string, string[]>
+}
+
+export interface GetColumnLineageMethod {
+  method: 'sqlmesh/get_column_lineage'
+  request: GetColumnLineageRequest
+  response: GetColumnLineageResponse
+}
+
+interface GetColumnLineageRequest {
+  modelName: string
+  columnName: string
+  modelsOnly?: boolean
+}
+
+interface GetColumnLineageResponse extends BaseResponse {
+  data: Record<string, Record<string, any>>
+}
+
+export interface GetTableDiffMethod {
+  method: 'sqlmesh/get_table_diff'
+  request: GetTableDiffLSPRequest
+  response: GetTableDiffLSPResponse
+}
+
+interface GetTableDiffLSPRequest {
+  source: string
+  target: string
+  on?: string
+  model_or_snapshot?: string
+  where?: string
+  temp_schema?: string
+  limit?: number
+}
+
+interface GetTableDiffLSPResponse extends BaseResponse {
+  data: any | null
+}
 
 export interface AllModelsForRenderMethod {
   method: 'sqlmesh/all_models_for_render'

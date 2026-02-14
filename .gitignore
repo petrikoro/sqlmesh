@@ -150,7 +150,6 @@ dmypy.json
 # UI
 **/.DS_Store
 **/node_modules
-/web/client/src/api/client.ts
 .local/
 
 # Version file
