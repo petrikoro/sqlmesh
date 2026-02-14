@@ -76,7 +76,7 @@ dev = [
     "google-cloud-bigquery",
     "google-cloud-bigquery-storage",
     "numpy",
-    "pre-commit",
+    "prek",
     "psycopg2-binary",
     "PyAthena[Pandas]",
     "pydantic",
