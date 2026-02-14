@@ -1665,7 +1665,6 @@ class GenericContext(BaseContext, t.Generic[C]):
         max_interval_end_per_model = None
         default_start, default_end = None, None
         if not run:
-            ignore_cron = False
             max_interval_end_per_model = self._get_max_interval_end_per_model(
                 snapshots, backfill_models
             )

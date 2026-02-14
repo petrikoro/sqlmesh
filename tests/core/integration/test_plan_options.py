@@ -209,6 +209,73 @@ def test_plan_ignore_cron(
 
 
 @time_machine.travel("2023-01-08 15:00:00 UTC")
+def test_plan_ignore_cron_without_run(
+    init_and_plan_context: t.Callable,
+):
+    context, _ = init_and_plan_context("examples/sushi")
+
+    # Without ignore_cron: plan should have ignore_cron=False (default)
+    plan_default = context.plan_builder("prod", skip_tests=True).build()
+    assert plan_default.ignore_cron is False
+
+    # With ignore_cron=True and without run: flag should pass through
+    plan_with_flag = context.plan_builder("prod", ignore_cron=True, skip_tests=True).build()
+    assert plan_with_flag.ignore_cron is True
+
+
+@time_machine.travel("2023-01-08 15:00:00 UTC")
+def test_plan_ignore_cron_dev_with_partial_prod(
+    init_and_plan_context: t.Callable,
+):
+    context, _ = init_and_plan_context("examples/sushi")
+
+    model = load_sql_based_model(
+        d.parse(
+            """
+        MODEL (
+            name memory.sushi.partials_e2e,
+            kind INCREMENTAL_UNMANAGED,
+            allow_partials true,
+            start '2023-01-07',
+        );
+        SELECT @end_ts AS end_ts
+        """
+        )
+    )
+    context.upsert_model(model)
+    # Deploy to prod, then run with ignore_cron to get partial interval up to 15:00
+    context.plan("prod", skip_tests=True, auto_apply=True, no_prompts=True)
+    context.apply(context.plan_builder("prod", run=True, ignore_cron=True, skip_tests=True).build())
+
+    # Modify model to trigger dev backfill
+    context.upsert_model(
+        load_sql_based_model(
+            d.parse(
+                """
+        MODEL (
+            name memory.sushi.partials_e2e,
+            kind INCREMENTAL_UNMANAGED,
+            allow_partials true,
+            start '2023-01-07',
+        );
+        SELECT @end_ts AS end_ts, 1 AS new_col
+        """
+            )
+        )
+    )
+
+    # With ignore_cron: dev backfill covers prod's partial (up to 15:00)
+    plan = context.plan_builder("dev", ignore_cron=True, skip_tests=True).build()
+    intervals = [mi for mi in plan.missing_intervals if "partials_e2e" in mi.snapshot_id.name]
+    assert intervals and intervals[0].intervals[-1][1] == to_timestamp("2023-01-08 15:00:00")
+
+    # Without ignore_cron: dev backfill truncated to midnight
+    plan = context.plan_builder("dev", skip_tests=True).build()
+    intervals = [mi for mi in plan.missing_intervals if "partials_e2e" in mi.snapshot_id.name]
+    assert intervals and intervals[0].intervals[-1][1] <= to_timestamp("2023-01-08")
+
+
+@time_machine.travel("2023-01-08 15:00:00 UTC")
 def test_plan_with_run(
     init_and_plan_context: t.Callable,
 ):

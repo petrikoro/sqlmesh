@@ -156,6 +156,8 @@
 ??? question "How can I force a model to run now?"
     Ensure that the model's `allow_partials` attribute is set to `true` and execute the `run` command with the `--ignore-cron` option: `sqlmesh run --ignore-cron`.
 
+    The `--ignore-cron` flag also works with `sqlmesh plan` to include partial intervals in the backfill range: `sqlmesh plan dev --ignore-cron`.
+
     See the documentation for [allow_partials](../concepts/models/overview.md#allow_partials) to understand the rationale behind this.
 
 

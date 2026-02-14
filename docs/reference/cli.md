@@ -393,6 +393,14 @@ Options:
                                   versions of the models and standalone
                                   audits.
   --explain                       Explain the plan instead of applying it.
+  --ignore-cron                   Ignore individual cron schedules when
+                                  computing missing intervals. When used
+                                  with models that have allow_partials,
+                                  this includes partial (incomplete)
+                                  intervals in the backfill range.
+  --min-intervals INTEGER         For every model, ensure at least this many
+                                  intervals are covered by a missing intervals
+                                  check regardless of the plan start date.
   -v, --verbose                   Verbose output. Use -vv for very verbose
                                   output.
   --help                          Show this message and exit.

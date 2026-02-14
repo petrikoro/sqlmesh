@@ -530,7 +530,7 @@ def diff(ctx: click.Context, environment: t.Optional[str] = None) -> None:
 @click.option(
     "--ignore-cron",
     is_flag=True,
-    help="Run all missing intervals, ignoring individual cron schedules. Only applies if --run is set.",
+    help="Ignore individual cron schedules when computing missing intervals. When used with models that have allow_partials, this includes partial (incomplete) intervals in the backfill range.",
     default=None,
 )
 @click.option(
