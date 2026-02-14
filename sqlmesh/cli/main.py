@@ -23,7 +23,7 @@ from sqlmesh.core.console import configure_console, get_console
 from sqlmesh.core.context import Context
 from sqlmesh.utils import Verbosity
 from sqlmesh.utils.date import TimeLike
-from sqlmesh.utils.errors import MissingDependencyError, SQLMeshError
+from sqlmesh.utils.errors import SQLMeshError
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ SKIP_LOAD_COMMANDS = (
     "run",
     "table_name",
 )
-SKIP_CONTEXT_COMMANDS = ("init", "ui")
+SKIP_CONTEXT_COMMANDS = ("init",)
 
 
 def _sqlmesh_version() -> str:
@@ -873,62 +873,6 @@ def info(obj: Context, skip_connection: bool, verbose: int) -> None:
     Includes counts of project models and macros and connection tests for the data warehouse.
     """
     obj.print_info(skip_connection=skip_connection, verbosity=Verbosity(verbose))
-
-
-@cli.command("ui")
-@click.option(
-    "--host",
-    type=str,
-    default="127.0.0.1",
-    help="Bind socket to this host. Default: 127.0.0.1",
-)
-@click.option(
-    "--port",
-    type=int,
-    default=8000,
-    help="Bind socket to this port. Default: 8000",
-)
-@click.option(
-    "--mode",
-    type=click.Choice(["ide", "catalog", "docs", "plan"], case_sensitive=False),
-    default="ide",
-    help="Mode to start the UI in. Default: ide",
-)
-@click.pass_context
-@error_handler
-@cli_analytics
-def ui(ctx: click.Context, host: str, port: int, mode: str) -> None:
-    """Start a browser-based SQLMesh UI."""
-    from sqlmesh.core.console import get_console
-
-    get_console().log_warning(
-        "The UI is deprecated and will be removed in a future version. Please use the SQLMesh VSCode extension instead. "
-        "Learn more at https://sqlmesh.readthedocs.io/en/stable/guides/vscode/"
-    )
-
-    try:
-        import uvicorn
-    except ModuleNotFoundError as e:
-        raise MissingDependencyError(
-            "Missing UI dependencies. Run `pip install 'sqlmesh[web]'` to install them."
-        ) from e
-
-    os.environ["PROJECT_PATH"] = ctx.obj
-    os.environ["UI_MODE"] = mode
-    if ctx.parent:
-        config = ctx.parent.params.get("config")
-        gateway = ctx.parent.params.get("gateway")
-        if config:
-            os.environ["CONFIG"] = config
-        if gateway:
-            os.environ["GATEWAY"] = gateway
-    uvicorn.run(
-        "web.server.app:app",
-        host=host,
-        port=port,
-        log_level="info",
-        timeout_keep_alive=300,
-    )
 
 
 @cli.command("migrate")
