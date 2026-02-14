@@ -61,7 +61,7 @@ class Materialization(str, Enum):
     CUSTOM = "custom"
 
     @classmethod
-    def _missing_(cls, value):  # type: ignore
+    def _missing_(cls, value):
         return cls.CUSTOM
 
 
@@ -311,7 +311,11 @@ class BaseModelConfig(GeneralConfig):
         if (
             getattr(self, "model_materialization", None) == Materialization.CUSTOM
             and hasattr(self, "_get_custom_materialization")
-            and (custom_mat := self._get_custom_materialization(context))
+            and (
+                custom_mat := self._get_custom_materialization(
+                    context
+                )  # ty:ignore[call-non-callable]
+            )
         ):
             # include custom materialization dependencies as they might use macros
             dependencies = dependencies.union(custom_mat.dependencies)

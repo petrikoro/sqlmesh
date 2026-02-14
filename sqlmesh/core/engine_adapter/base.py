@@ -185,7 +185,7 @@ class EngineAdapter:
             register_comments=self._register_comments,
             multithreaded=self._multithreaded,
             pretty_sql=self._pretty_sql,
-            **extra_kwargs,
+            **extra_kwargs,  # ty:ignore[invalid-argument-type]
         )
 
         return adapter
@@ -300,7 +300,7 @@ class EngineAdapter:
                         .select(*select_columns)
                         .from_(query_or_df.subquery("select_source_columns"))
                     )
-            return [SourceQuery(query_factory=query_factory)]  # type: ignore
+            return [SourceQuery(query_factory=query_factory)]
 
         if not target_columns_to_types:
             raise SQLMeshError(
@@ -345,7 +345,7 @@ class EngineAdapter:
             SourceQuery(
                 query_factory=partial(
                     self._values_to_sql,
-                    values=values,  # type: ignore
+                    values=values,
                     target_columns_to_types=target_columns_to_types,
                     batch_start=i,
                     batch_end=min(i + batch_size, num_rows),
@@ -401,7 +401,7 @@ class EngineAdapter:
         import pandas as pd
 
         if not target_columns_to_types and isinstance(query_or_df, pd.DataFrame):
-            target_columns_to_types = columns_to_types_from_df(t.cast(pd.DataFrame, query_or_df))
+            target_columns_to_types = columns_to_types_from_df(query_or_df)
         if not source_columns and target_columns_to_types:
             source_columns = list(target_columns_to_types)
         # source columns should only contain columns that are defined in the target. If there are extras then
@@ -540,8 +540,8 @@ class EngineAdapter:
             ) as temp_table:
                 for source_query in source_queries:
                     source_query.add_transform(
-                        lambda node: (  # type: ignore
-                            temp_table  # type: ignore
+                        lambda node: (
+                            temp_table
                             if isinstance(node, exp.Table)
                             and quote_identifiers(node) == quote_identifiers(target_table)
                             else node
@@ -1918,7 +1918,7 @@ class EngineAdapter:
             update_valid_from_start = to_time_column(
                 "1970-01-01 00:00:00+00:00", time_data_type, self.dialect, nullable=True
             )
-        insert_valid_from_start = execution_ts if check_columns else updated_at_col  # type: ignore
+        insert_valid_from_start = execution_ts if check_columns else updated_at_col
         # joined._exists IS NULL is saying "if the row is deleted"
         delete_check = (
             exp.column("_exists", "joined").is_(exp.Null()) if invalidate_hard_deletes else None
@@ -2033,7 +2033,7 @@ class EngineAdapter:
                 prefixed_col.this.set("this", f"t_{prefixed_col.name}")
                 prefixed_unmanaged_columns.append(prefixed_col)
             query = (
-                exp.Select()  # type: ignore
+                exp.Select()
                 .select(*table_columns)
                 .from_("static")
                 .union(
@@ -2049,7 +2049,7 @@ class EngineAdapter:
                     exp.select(exp.true().as_("_exists"), *select_source_columns)
                     .distinct(*unique_key)
                     .from_(
-                        self.use_server_nulls_for_unmatched_after_join(source_query).subquery(  # type: ignore
+                        self.use_server_nulls_for_unmatched_after_join(source_query).subquery(
                             "raw_source"
                         )
                     ),
@@ -2756,7 +2756,8 @@ class EngineAdapter:
 
         if table_properties:
             table_type = self._pop_creatable_type_from_properties(table_properties)
-            properties.extend(ensure_list(table_type))
+            if table_type is not None:
+                properties.append(table_type)
 
         if properties:
             return exp.Properties(expressions=properties)
@@ -2837,7 +2838,7 @@ class EngineAdapter:
         """
         Returns the name of the temp table that should be used for the given table name.
         """
-        table = t.cast(exp.Table, exp.to_table(table).copy())
+        table = exp.to_table(table).copy()
         table.set(
             "this", exp.to_identifier(f"__temp_{table.name}_{random_id(short=True)}", quoted=quoted)
         )
@@ -2860,7 +2861,7 @@ class EngineAdapter:
         ):
             return query
 
-        query = t.cast(exp.Query, query.copy())
+        query = query.copy()
         with_ = query.args.pop("with_", None)
 
         select_exprs: t.List[exp.Expression] = [

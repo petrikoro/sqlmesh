@@ -73,8 +73,8 @@ class PydanticModel(pydantic.BaseModel):
             exp.Expression: _expression_encoder,
             exp.DataType: _expression_encoder,
             exp.Tuple: _expression_encoder,
-            AuditQueryTypes: _expression_encoder,  # type: ignore
-            ModelQueryTypes: _expression_encoder,  # type: ignore
+            AuditQueryTypes: _expression_encoder,
+            ModelQueryTypes: _expression_encoder,
             tzinfo: lambda tz: tz.key,
         },
         arbitrary_types_allowed=True,
@@ -95,9 +95,12 @@ class PydanticModel(pydantic.BaseModel):
         kwargs = {**DEFAULT_ARGS, **kwargs}
         # Pydantic v2 doesn't support arbitrary arguments for json.dump().
         if kwargs.pop("sort_keys", False):
-            return json.dumps(super().model_dump(mode="json", **kwargs), sort_keys=True)
+            return json.dumps(
+                super().model_dump(mode="json", **kwargs),  # ty:ignore[invalid-argument-type]
+                sort_keys=True,
+            )
 
-        return super().model_dump_json(**kwargs)
+        return super().model_dump_json(**kwargs)  # ty:ignore[invalid-argument-type]
 
     def copy(self: "Model", **kwargs: t.Any) -> "Model":
         return super().model_copy(**kwargs)
@@ -159,7 +162,7 @@ class PydanticModel(pydantic.BaseModel):
             obj = {k: v for k, v in self.__dict__.items() if k in self.all_field_infos()}
             return hash(self.__class__) + hash(tuple(obj.values()))
 
-        from pydantic._internal._model_construction import make_hash_func  # type: ignore
+        from pydantic._internal._model_construction import make_hash_func
 
         if self.__class__ not in PydanticModel._hash_func_mapping:
             PydanticModel._hash_func_mapping[self.__class__] = make_hash_func(self.__class__)
@@ -229,7 +232,7 @@ def _formatted_validation_errors(error: pydantic.ValidationError) -> t.List[str]
     for e in error.errors():
         msg = e["msg"]
         loc: t.Optional[t.Tuple] = e.get("loc")
-        loc_str = ".".join(loc) if loc else None
+        loc_str = ".".join(loc) if loc else None  # ty:ignore[no-matching-overload]
         result.append(f"Invalid field '{loc_str}':\n    {msg}" if loc_str else msg)
     return result
 
@@ -294,8 +297,8 @@ def list_of_fields_or_star_validator(
 ) -> t.Union[exp.Star, t.List[exp.Expression]]:
     expressions = _get_fields(v, values)
     if len(expressions) == 1 and isinstance(expressions[0], exp.Star):
-        return t.cast(exp.Star, expressions[0])
-    return t.cast(t.List[exp.Expression], expressions)
+        return expressions[0]
+    return expressions
 
 
 def cron_validator(v: t.Any) -> str:

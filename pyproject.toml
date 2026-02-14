@@ -10,13 +10,14 @@ dependencies = [
     "astor",
     "click",
     "croniter",
-    "duckdb>=0.10.0,!=0.10.3",
     "dateparser<=1.2.1",
+    "duckdb>=0.10.0,!=0.10.3",
     "humanize",
     "hyperscript>=0.1.0",
     "importlib-metadata; python_version<'3.12'",
     "ipywidgets",
     "jinja2",
+    "json-stream",
     "packaging",
     "pandas<3.0.0",
     "pydantic>=2.0.0",
@@ -27,7 +28,6 @@ dependencies = [
     "sqlglot[rs]~=28.10.0",
     "tenacity",
     "time-machine",
-    "json-stream"
 ]
 classifiers = [
     "Intended Audience :: Developers",
@@ -42,46 +42,44 @@ classifiers = [
 athena = ["PyAthena[Pandas]"]
 azuresql = ["pymssql"]
 azuresql-odbc = ["pyodbc>=5.0.0"]
-bigquery = [
-    "google-cloud-bigquery[pandas]",
-    "google-cloud-bigquery-storage"
-]
 # bigframes has to be separate to support environments with an older google-cloud-bigquery pin
 # this is because that pin pulls in an older bigframes and the bigframes team
 # pinned an older SQLGlot which is incompatible with SQLMesh
 bigframes = ["bigframes>=1.32.0"]
+bigquery = [
+    "google-cloud-bigquery[pandas]",
+    "google-cloud-bigquery-storage",
+]
 clickhouse = ["clickhouse-connect"]
 databricks = ["databricks-sql-connector[pyarrow]"]
+dbt = ["dbt-core<2"]
 dev = [
     "agate",
     "beautifulsoup4",
     "clickhouse-connect",
     "cryptography<46.0.0",
     "databricks-sql-connector",
+    "dbt-athena-community",
     "dbt-bigquery",
+    "dbt-clickhouse",
     "dbt-core",
+    "dbt-databricks",
     "dbt-duckdb>=1.7.1",
+    "dbt-redshift",
     # version 1.10.1 of dbt-snowflake declares that it's compatible with dbt-adapters>=1.16 but in reality
     # it depends on the 'InvalidCatalogIntegrationConfigError' class that only exists as of dbt-adapters==1.16.6
     # so we exclude it to prevent failures and hope that upstream releases a new version with the correct constraint
     "dbt-snowflake!=1.10.1",
-    "dbt-athena-community",
-    "dbt-clickhouse",
-    "dbt-databricks",
-    "dbt-redshift",
     "dbt-trino",
     "Faker",
     "google-auth",
     "google-cloud-bigquery",
     "google-cloud-bigquery-storage",
-    "httpx",
-    "mypy~=1.13.0",
     "numpy",
-    "pandas-stubs",
     "pre-commit",
     "psycopg2-binary",
-    "pydantic",
     "PyAthena[Pandas]",
+    "pydantic",
     "PyGithub>=2.6.0",
     "pyodbc>=5.0.0",
     "pyperf",
@@ -95,22 +93,20 @@ dev = [
     "redshift_connector",
     "ruff~=0.11.0",
     "snowflake-connector-python[pandas,secure-local-storage]>=3.0.2",
-    "sqlalchemy-stubs",
     "trino",
-    "types-croniter",
-    "types-dateparser",
-    "types-PyMySQL",
-    "types-python-dateutil",
-    "types-pytz",
-    "types-requests==2.28.8",
+    "ty~=0.0.17",
     "typing-extensions",
 ]
-dbt = ["dbt-core<2"]
 dlt = ["dlt"]
 duckdb = []
 fabric = ["pyodbc>=5.0.0"]
 gcppostgres = ["cloud-sql-python-connector[pg8000]>=1.8.0"]
 github = ["PyGithub>=2.6.0"]
+lsp = [
+    "lsprotocol",
+    "pyarrow",
+    "pygls>=1.2.0,<2.0.0",
+]
 motherduck = ["duckdb>=1.3.2"]
 mssql = ["pymssql"]
 mssql-odbc = ["pyodbc>=5.0.0"]
@@ -118,6 +114,7 @@ mysql = ["pymysql"]
 mwaa = ["boto3"]
 postgres = ["psycopg2"]
 redshift = ["redshift_connector"]
+risingwave = ["psycopg2"]
 slack = ["slack_sdk"]
 snowflake = [
     "cryptography<46.0.0",
@@ -125,24 +122,18 @@ snowflake = [
     "snowflake-snowpark-python",
 ]
 trino = ["trino"]
-lsp = [
-    "pyarrow",
-    "pygls>=1.2.0,<2.0.0",
-    "lsprotocol",
-]
-risingwave = ["psycopg2"]
 
 [project.scripts]
 sqlmesh = "sqlmesh.cli.main:cli"
-sqlmesh_dbt = "sqlmesh_dbt.cli:dbt"
 sqlmesh_cicd = "sqlmesh.cicd.bot:bot"
+sqlmesh_dbt = "sqlmesh_dbt.cli:dbt"
 sqlmesh_lsp = "sqlmesh.lsp.main:main"
 
 [project.urls]
-Homepage = "https://sqlmesh.com/"
 Documentation = "https://sqlmesh.readthedocs.io/en/stable/"
-Repository = "https://github.com/TobikoData/sqlmesh"
+Homepage = "https://sqlmesh.com/"
 Issues = "https://github.com/TobikoData/sqlmesh/issues"
+Repository = "https://github.com/TobikoData/sqlmesh"
 
 [build-system]
 requires = ["setuptools >= 61.0", "setuptools_scm"]
@@ -162,60 +153,45 @@ include = ["sqlmesh", "sqlmesh.*", "sqlmesh_dbt", "sqlmesh_dbt.*"]
 [tool.setuptools.package-data]
 "*" = ["py.typed"]
 
-# MyPy Rules
-[tool.mypy]
-plugins = "pydantic.mypy"
-no_implicit_optional = true
-disallow_untyped_defs = true
+[tool.ty.environment]
+python-platform = "all"
 
-[[tool.mypy.overrides]]
-module = [
-    "examples.*.macros.*",
-    "tests.*",
-    "sqlmesh.migrations.*"
+[tool.ty.src]
+exclude = [
+    "tests/",
+    "examples/",
 ]
-disallow_untyped_defs = false
-# Sometimes it's helpful to use types within an "untyped" function because it allows IDE assistance
-# Unfortunately this causes MyPy to print an annoying 'By default the bodies of untyped functions are not checked'
-# warning so we disable that warning here
-disable_error_code = "annotation-unchecked"
 
-[[tool.mypy.overrides]]
-module = [
-    "api.*",
-    "astor.*",
-    "IPython.*",
-    "hyperscript.*",
-    "py.*",
-    "ruamel.*",
-    "setuptools.*",
-    "graphviz.*",
-    "ipywidgets.*",
-    "google.*",
-    "snowflake.*",
-    "redshift_connector",
-    "databricks.*",
-    "faker.*",
-    "agate.*",
-    "databricks_cli.*",
-    "mysql.*",
-    "pymssql.*",
-    "pyodbc.*",
-    "psycopg2.*",
-    "pytest_lazyfixture.*",
-    "dbt.adapters.*",
-    "slack_sdk.*",
-    "py4j.*",
-    "boto3.*",
-    "trino.*",
-    "bs4.*",
-    "pydantic_core.*",
-    "dlt.*",
-    "bigframes.*",
-    "json_stream.*",
-    "duckdb.*"
+[tool.ruff]
+line-length = 100
+force-exclude = true
+
+[tool.ruff.lint]
+select = [
+    "F401",
+    "RET505",
+    "T100",
 ]
-ignore_missing_imports = true
+extend-select = ["TID"]
+ignore = ["E721", "E741"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+banned-module-level-imports = [
+    "duckdb",
+    "numpy",
+    "pandas",
+]
+
+# Bans imports from sqlmesh.lsp in files outside of sqlmesh/lsp
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"sqlmesh.lsp".msg = "Only files within sqlmesh/lsp can import from sqlmesh.lsp"
+
+[tool.ruff.lint.per-file-ignores]
+# TID251 is used to ignore the import of sqlmesh.lsp in files outside sqlmesh/lsp
+"benchmarks/lsp*.py" = ["TID251"]
+"sqlmesh/dbt/builtin.py" = ["T100"]
+"sqlmesh/lsp/**/*.py" = ["TID251"]
+"tests/lsp/**/*.py" = ["TID251"]
 
 [tool.pytest.ini_options]
 markers = [
@@ -258,7 +234,7 @@ markers = [
 
     # Other
     "set_default_connection",
-    "registry_isolation"
+    "registry_isolation",
 ]
 addopts = "-n 0 --dist=loadgroup"
 asyncio_default_fixture_loop_scope = "session"
@@ -266,36 +242,6 @@ log_cli = false # Set this to true to enable logging during tests
 log_cli_format = "%(asctime)s.%(msecs)03d %(filename)s:%(lineno)d %(levelname)s %(message)s"
 log_cli_level = "INFO"
 filterwarnings = [
-    "ignore:The localize method is no longer necessary, as this time zone supports the fold attribute"
+    "ignore:The localize method is no longer necessary, as this time zone supports the fold attribute",
 ]
 reruns_delay = 10
-
-[tool.ruff]
-line-length = 100
-
-[tool.ruff.lint]
-select = [
-    "F401",
-    "RET505",
-    "T100",
-]
-extend-select = ["TID"]
-
-
-[tool.ruff.lint.flake8-tidy-imports]
-banned-module-level-imports = [
-    "duckdb",
-    "numpy",
-    "pandas",
-]
-
-# Bans imports from sqlmesh.lsp in files outside of sqlmesh/lsp
-[tool.ruff.lint.flake8-tidy-imports.banned-api]
-"sqlmesh.lsp".msg = "Only files within sqlmesh/lsp can import from sqlmesh.lsp"
-
-[tool.ruff.lint.per-file-ignores]
-# TID251 is used to ignore the import of sqlmesh.lsp in files outside sqlmesh/lsp
-"sqlmesh/lsp/**/*.py" = ["TID251"]
-"tests/lsp/**/*.py" = ["TID251"]
-"benchmarks/lsp*.py" = ["TID251"]
-"sqlmesh/dbt/builtin.py" = ["T100"]

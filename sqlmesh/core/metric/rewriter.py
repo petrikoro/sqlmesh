@@ -88,7 +88,8 @@ class Rewriter:
 
             joins.update(explicit_joins)
             query = self._add_joins(source, name, joins, group_by, mapping).select(
-                *sorted(aggs, key=str), copy=False
+                *sorted(aggs, key=str),  # ty:ignore[invalid-argument-type]
+                copy=False,
             )
 
             if not query.selects:

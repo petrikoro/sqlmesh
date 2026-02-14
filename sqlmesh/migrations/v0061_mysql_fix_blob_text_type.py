@@ -9,7 +9,7 @@ from sqlglot import exp
 from sqlmesh.utils.migration import blob_text_type
 
 
-def migrate_schemas(engine_adapter, schema, **kwargs):  # type: ignore
+def migrate_schemas(engine_adapter, schema, **kwargs):
     if engine_adapter.dialect != "mysql":
         return
     environments_table = "_environments"
@@ -43,5 +43,5 @@ def migrate_schemas(engine_adapter, schema, **kwargs):  # type: ignore
         engine_adapter.execute(alter_table_exp)
 
 
-def migrate_rows(engine_adapter, schema, **kwargs):  # type: ignore
+def migrate_rows(engine_adapter, schema, **kwargs):
     pass

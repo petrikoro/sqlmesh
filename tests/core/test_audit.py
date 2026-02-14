@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import pytest
 from sqlglot import exp, parse_one
 
@@ -65,7 +66,7 @@ def test_load(assert_exp_eq):
     """
     )
 
-    audit = load_audit(expressions, path="/path/to/audit", dialect="duckdb")
+    audit = load_audit(expressions, path=Path("/path/to/audit"), dialect="duckdb")
     assert isinstance(audit, ModelAudit)
     assert audit.dialect == "spark"
     assert audit.blocking is False
@@ -106,7 +107,7 @@ def test_load_standalone(assert_exp_eq):
     """
     )
 
-    audit = load_audit(expressions, path="/path/to/audit", dialect="duckdb")
+    audit = load_audit(expressions, path=Path("/path/to/audit"), dialect="duckdb")
     assert isinstance(audit, StandaloneAudit)
     assert audit.dialect == "spark"
     assert audit.blocking is False
@@ -150,7 +151,7 @@ def test_load_standalone_default_catalog(assert_exp_eq):
     )
 
     audit = load_audit(
-        expressions, path="/path/to/audit", dialect="duckdb", default_catalog="test_catalog"
+        expressions, path=Path("/path/to/audit"), dialect="duckdb", default_catalog="test_catalog"
     )
     assert isinstance(audit, StandaloneAudit)
     assert audit.dialect == "spark"
@@ -284,7 +285,7 @@ def test_load_multiple(assert_exp_eq):
     """
     )
 
-    first_audit, second_audit = load_multiple_audits(expressions, path="/path/to/audit")
+    first_audit, second_audit = load_multiple_audits(expressions, path=Path("/path/to/audit"))
     assert first_audit.dialect == "spark"
     assert first_audit.blocking is True
     assert first_audit.skip is False
@@ -360,7 +361,7 @@ def test_no_audit_statement():
     """
     )
     with pytest.raises(AuditConfigError) as ex:
-        load_audit(expressions, path="/path/to/audit", dialect="duckdb")
+        load_audit(expressions, path=Path("/path/to/audit"), dialect="duckdb")
     assert "Incomplete audit definition" in str(ex.value)
 
 
@@ -376,7 +377,7 @@ def test_unordered_audit_statements():
     )
 
     with pytest.raises(AuditConfigError) as ex:
-        load_audit(expressions, path="/path/to/audit", dialect="duckdb")
+        load_audit(expressions, path=Path("/path/to/audit"), dialect="duckdb")
     assert "AUDIT statement is required as the first statement" in str(ex.value)
 
 
@@ -392,7 +393,7 @@ def test_no_query():
     )
 
     with pytest.raises(AuditConfigError) as ex:
-        load_audit(expressions, path="/path/to/audit", dialect="duckdb")
+        load_audit(expressions, path=Path("/path/to/audit"), dialect="duckdb")
     assert "Missing SELECT query" in str(ex.value)
 
 
@@ -436,7 +437,7 @@ def test_load_with_defaults(model, assert_exp_eq):
             AND @field3 != @field4
     """
     )
-    audit = load_audit(expressions, path="/path/to/audit", dialect="duckdb")
+    audit = load_audit(expressions, path=Path("/path/to/audit"), dialect="duckdb")
     assert audit.defaults == {
         "field1": exp.to_column("some_column"),
         "field2": exp.Literal.number(3),
@@ -860,7 +861,7 @@ def test_variables(assert_exp_eq):
 
     audit = load_audit(
         expressions,
-        path="/path/to/audit",
+        path=Path("/path/to/audit"),
         dialect="bigquery",
         variables={"test_var": "test_val", "test_var_unused": "unused_val"},
     )
@@ -1115,7 +1116,7 @@ def test_audit_formatting_flag_serde():
 
     audit = load_audit(
         expressions,
-        path="/path/to/audit",
+        path=Path("/path/to/audit"),
         dialect="bigquery",
         variables={"test_var": "test_val", "test_var_unused": "unused_val"},
     )

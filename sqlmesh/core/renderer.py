@@ -297,7 +297,7 @@ class BaseExpressionRenderer:
             for expression in t.cast(t.List[exp.Expression], transformed_expressions):
                 with self._normalize_and_quote(expression) as expression:
                     if hasattr(expression, "selects"):
-                        for select in expression.selects:
+                        for select in expression.selects:  # ty:ignore[not-iterable]
                             if not isinstance(select, exp.Alias) and select.output_name not in (
                                 "*",
                                 "",
@@ -593,7 +593,7 @@ class QueryRenderer(BaseExpressionRenderer):
             if len(expressions) > 1:
                 raise ConfigError(f"Too many statements in query:\n{self._expression}")
 
-            query = expressions[0]  # type: ignore
+            query = expressions[0]
 
             if not query:
                 return None

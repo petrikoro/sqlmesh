@@ -15,6 +15,7 @@ from sqlglot import ParseError, exp, parse_one, Dialect
 from sqlglot.errors import SchemaError
 
 import sqlmesh.core.constants
+import sqlmesh.core.snapshot.definition
 from sqlmesh.cli.project_init import init_example_project
 from sqlmesh.core.console import TerminalConsole
 from sqlmesh.core import dialect as d, constants as c

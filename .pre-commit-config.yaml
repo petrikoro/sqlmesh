@@ -3,26 +3,24 @@ repos:
     hooks:
       - id: ruff
         name: ruff
-        entry: ruff check --force-exclude --fix --ignore E721 --ignore E741
+        entry: ruff check --fix
         language: python
         types_or: [python, pyi]
         require_serial: true
         files: &files ^(sqlmesh/|sqlmesh_dbt/|tests/|examples/|setup.py)
       - id: ruff-format
         name: ruff-format
-        entry: ruff format --force-exclude --line-length 100
+        entry: ruff format
         language: python
         types_or: [python, pyi]
         require_serial: true
         files: *files
-      - id: mypy
-        name: mypy
+      - id: ty
+        name: ty
         language: system
-        entry: mypy
-        "types": [python]
-        files: *files
+        entry: ty check
+        pass_filenames: false
         require_serial: true
-        exclude: ^(tests/fixtures)
       - id: valid migrations
         name: valid migrations
         entry: .github/scripts/validating_migration_numbers.sh

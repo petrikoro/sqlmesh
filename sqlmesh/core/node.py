@@ -334,6 +334,8 @@ class _Node(DbtInfoMixin, PydanticModel):
             return None
 
         v = str_or_exp_to_str(v)
+        if not v:
+            return None
 
         try:
             return zoneinfo.ZoneInfo(v)

@@ -56,7 +56,9 @@ def _gen_config(
             required_fields = []
             non_required_fields = []
 
-            for name, field in CONNECTION_CONFIG_TO_TYPE[engine_type].model_fields.items():
+            for name, field in CONNECTION_CONFIG_TO_TYPE[
+                engine_type
+            ].model_fields.items():  # ty:ignore[unresolved-attribute]
                 field_name = field.alias or name
 
                 default_value = field.get_default()

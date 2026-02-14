@@ -1,6 +1,7 @@
 from lsprotocol.types import Position
 from sqlmesh.core.context import Context
 from sqlmesh.lsp.context import LSPContext, ModelTarget
+from sqlmesh.lsp.helpers import to_lsp_range
 from sqlmesh.lsp.rename import prepare_rename, rename_symbol
 from sqlmesh.lsp.uri import URI
 from tests.lsp.test_reference_cte import find_ranges_from_regex
@@ -29,7 +30,7 @@ def test_prepare_rename_cte():
 
     assert result is not None
     assert result.placeholder == "cte_name"
-    assert result.range == ranges[0]  # Should return the definition range
+    assert result.range == to_lsp_range(ranges[0])  # Should return the definition range
 
     # Test clicking on CTE usage
     position = Position(line=ranges[1].start.line, character=ranges[1].start.character + 4)
@@ -37,7 +38,7 @@ def test_prepare_rename_cte():
 
     assert result is not None
     assert result.placeholder == "cte_name"
-    assert result.range == ranges[0]  # Should still return the definition range
+    assert result.range == to_lsp_range(ranges[0])  # Should still return the definition range
 
 
 def test_prepare_rename_cte_outer():
@@ -63,7 +64,7 @@ def test_prepare_rename_cte_outer():
 
     assert result is not None
     assert result.placeholder == "cte_name"
-    assert result.range == ranges[0]  # Should return the definition range
+    assert result.range == to_lsp_range(ranges[0])  # Should return the definition range
 
 
 def test_prepare_rename_non_cte():

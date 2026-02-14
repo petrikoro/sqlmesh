@@ -131,13 +131,16 @@ class registry_decorator:
         self.func = func
 
         registry = self.registry()
-        func_name = (self.name or func.__name__).lower()
+        func_name = (self.name or func.__name__).lower()  # ty:ignore[unresolved-attribute]
 
         try:
             registry[func_name] = self
         except ValueError:
             # No need to raise due to duplicate key if the functions are identical
-            if func.__code__.co_code != registry[func_name].func.__code__.co_code:
+            if (
+                func.__code__.co_code  # ty:ignore[unresolved-attribute]
+                != registry[func_name].func.__code__.co_code
+            ):
                 raise ValueError(f"Duplicate name: '{func_name}'.")
 
         @wraps(func)
@@ -178,8 +181,8 @@ def sys_path(*paths: Path) -> t.Iterator[None]:
 
 def format_exception(exception: BaseException) -> t.List[str]:
     if sys.version_info < (3, 10):
-        return traceback.format_exception(type(exception), exception, exception.__traceback__)  # type: ignore
-    return traceback.format_exception(exception)  # type: ignore
+        return traceback.format_exception(type(exception), exception, exception.__traceback__)
+    return traceback.format_exception(exception)
 
 
 def word_characters_only(s: str, replacement_char: str = "_") -> str:

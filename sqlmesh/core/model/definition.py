@@ -173,7 +173,7 @@ class _Model(ModelMeta, frozen=True):
 
     def copy(self, **kwargs: t.Any) -> Self:
         model = super().copy(**kwargs)
-        model._statement_renderer_cache = {}
+        model._statement_renderer_cache = {}  # ty:ignore[invalid-assignment]
         return model
 
     def render(
@@ -1055,7 +1055,7 @@ class _Model(ModelMeta, frozen=True):
         """
         raise NotImplementedError
 
-    def is_metadata_only_change(self, other: _Node) -> bool:
+    def is_metadata_only_change(self, other: _Node) -> bool:  # ty:ignore[invalid-method-override]
         if self._is_metadata_only_change_cache.get(id(other), None) is not None:
             return self._is_metadata_only_change_cache[id(other)]
 
@@ -1103,7 +1103,7 @@ class _Model(ModelMeta, frozen=True):
             The data hash for the node.
         """
         if self._data_hash is None:
-            self._data_hash = hash_data(self._data_hash_values)
+            self._data_hash = hash_data(self._data_hash_values)  # ty:ignore[invalid-assignment]
         return self._data_hash
 
     @property
@@ -1226,7 +1226,7 @@ class _Model(ModelMeta, frozen=True):
 
             metadata.extend(self._additional_metadata)
 
-            self._metadata_hash = hash_data(metadata)
+            self._metadata_hash = hash_data(metadata)  # ty:ignore[invalid-assignment]
         return self._metadata_hash
 
     @property
@@ -1290,7 +1290,7 @@ class _Model(ModelMeta, frozen=True):
                 depends_on |= d.find_tables(
                     query, default_catalog=self.default_catalog, dialect=self.dialect
                 )
-            self._full_depends_on = depends_on
+            self._full_depends_on = depends_on  # ty:ignore[invalid-assignment]
 
         return self._full_depends_on
 
@@ -1380,9 +1380,9 @@ class SqlModel(_Model):
         model = super().copy(**kwargs)
         model.__dict__.pop("_query_renderer", None)
         model.__dict__.pop("column_descriptions", None)
-        model._columns_to_types = None
+        model._columns_to_types = None  # ty:ignore[invalid-assignment]
         if kwargs.get("update", {}).keys() & {"depends_on_", "query"}:
-            model._full_depends_on = None
+            model._full_depends_on = None  # ty:ignore[invalid-assignment]
         return model
 
     @property
@@ -1449,7 +1449,7 @@ class SqlModel(_Model):
     @property
     def columns_to_types(self) -> t.Optional[t.Dict[str, exp.DataType]]:
         if self.columns_to_types_ is not None:
-            self._columns_to_types = self.columns_to_types_
+            self._columns_to_types = self.columns_to_types_  # ty:ignore[invalid-assignment]
         elif self._columns_to_types is None:
             try:
                 query = self._query_renderer.render()
@@ -1475,7 +1475,7 @@ class SqlModel(_Model):
                 # this can change the parent which will mess up the diffing algo
                 columns_to_types[output_name] = (select.type or unknown).copy()
 
-            self._columns_to_types = columns_to_types
+            self._columns_to_types = columns_to_types  # ty:ignore[invalid-assignment]
 
         if "*" in self._columns_to_types:
             return None
@@ -1506,7 +1506,7 @@ class SqlModel(_Model):
         self._on_mapping_schema_set()
 
     def _on_mapping_schema_set(self) -> None:
-        self._columns_to_types = None
+        self._columns_to_types = None  # ty:ignore[invalid-assignment]
         self._query_renderer.update_schema(self.mapping_schema)
 
     def validate_definition(self) -> None:
@@ -1584,7 +1584,9 @@ class SqlModel(_Model):
 
         return False
 
-    def is_metadata_only_change(self, previous: _Node) -> bool:
+    def is_metadata_only_change(
+        self, previous: _Node
+    ) -> bool:  # ty:ignore[invalid-method-override]
         if self._is_metadata_only_change_cache.get(id(previous), None) is not None:
             return self._is_metadata_only_change_cache[id(previous)]
 
@@ -1726,7 +1728,7 @@ class SeedModel(_Model):
             for column in [*date_columns, *datetime_columns]:
                 import pandas as pd
 
-                df[column] = pd.to_datetime(df[column], infer_datetime_format=True, errors="ignore")  # type: ignore
+                df[column] = pd.to_datetime(df[column], infer_datetime_format=True, errors="ignore")
 
             # extract datetime.date from pandas timestamp for DATE columns
             for column in date_columns:
@@ -1744,8 +1746,8 @@ class SeedModel(_Model):
                 df[column] = df[column].apply(lambda i: str_to_bool(str(i)))
 
             df.loc[:, string_columns] = df[string_columns].mask(
-                cond=lambda x: x.notna(),  # type: ignore
-                other=df[string_columns].astype(str),  # type: ignore
+                cond=lambda x: x.notna(),
+                other=df[string_columns].astype(str),
             )
             yield df.replace({np.nan: None})
 
@@ -2307,7 +2309,7 @@ Learn more at https://sqlmesh.readthedocs.io/en/stable/concepts/models/overview
                 meta_fields["kind"].expressions[idx] = unrendered_merge_filter
 
     if isinstance(meta_fields.get("dialect"), exp.Expression):
-        meta_fields["dialect"] = meta_fields["dialect"].name
+        meta_fields["dialect"] = meta_fields["dialect"].name  # ty:ignore[unresolved-attribute]
 
     # The name of the model will be inferred from its path relative to `models/`, if it's not explicitly specified
     name = meta_fields.pop("name", "")
@@ -2348,7 +2350,7 @@ Learn more at https://sqlmesh.readthedocs.io/en/stable/concepts/models/overview
 
     kind = common_kwargs.pop("kind", ModelMeta.all_field_infos()["kind"].default)
 
-    if kind.name != ModelKindName.SEED:
+    if kind.name != ModelKindName.SEED:  # ty:ignore[unresolved-attribute]
         return create_sql_model(
             name,
             query_or_seed_insert,
@@ -2357,11 +2359,14 @@ Learn more at https://sqlmesh.readthedocs.io/en/stable/concepts/models/overview
             **common_kwargs,
         )
 
-    seed_properties = {p.name.lower(): p.args.get("value") for p in kind.expressions}
+    seed_properties = {
+        p.name.lower(): p.args.get("value")
+        for p in kind.expressions  # ty:ignore[unresolved-attribute]
+    }
     return create_seed_model(
         name,
         SeedKind(**seed_properties),
-        **common_kwargs,
+        **common_kwargs,  # ty:ignore[invalid-argument-type]
     )
 
 
@@ -2637,7 +2642,9 @@ def _create_model(
             statements.extend(property_values.expressions)
 
     if isinstance(getattr(kwargs.get("kind"), "merge_filter", None), exp.Expression):
-        statements.append(kwargs["kind"].merge_filter)
+        statements.append(
+            kwargs["kind"].merge_filter  # ty:ignore[invalid-argument-type, unresolved-attribute]
+        )
 
     jinja_macro_references, referenced_variables = extract_macro_references_and_variables(
         *(gen(e if isinstance(e, exp.Expression) else e[0]) for e in statements)
@@ -2660,7 +2667,7 @@ def _create_model(
         kwargs["audits"] = default_audits + d.extract_function_calls(kwargs.pop("audits", []))
 
     model = klass(
-        name=name,
+        name=name,  # ty:ignore[invalid-argument-type]
         **{
             **(defaults or {}),
             "jinja_macros": jinja_macros or JinjaMacroRegistry(),
@@ -2668,7 +2675,7 @@ def _create_model(
             "depends_on": depends_on,
             "physical_schema_override": physical_schema_override,
             **kwargs,
-        },
+        },  # ty:ignore[invalid-argument-type]
     )
 
     audit_definitions = {
@@ -2733,7 +2740,7 @@ def _create_model(
 
     model.python_env.update(python_env)
     model.python_env.update(serialize_env(env, path=module_path))
-    model._path = path
+    model._path = path  # ty:ignore[invalid-assignment]
     model.set_time_format(time_column_format)
 
     return t.cast(Model, model)
@@ -3099,7 +3106,7 @@ def clickhouse_partition_func(
     col_type = (columns_to_types and columns_to_types.get(column.name)) or exp.DataType.build(
         "UNKNOWN"
     )
-    col_type_is_conformable = col_type.is_type(
+    col_type_is_conformable = col_type.is_type(  # ty:ignore[unresolved-attribute]
         exp.DataType.Type.DATE,
         exp.DataType.Type.DATE32,
         exp.DataType.Type.DATETIME,
@@ -3111,7 +3118,7 @@ def clickhouse_partition_func(
         return exp.func("toMonday", column, dialect="clickhouse")
 
     # if input column type is not known, cast input to DateTime64
-    if col_type.is_type(exp.DataType.Type.UNKNOWN):
+    if col_type.is_type(exp.DataType.Type.UNKNOWN):  # ty:ignore[unresolved-attribute]
         return exp.func(
             "toMonday",
             exp.cast(column, exp.DataType.build("DateTime64(9, 'UTC')", dialect="clickhouse")),
@@ -3125,7 +3132,7 @@ def clickhouse_partition_func(
             exp.cast(column, exp.DataType.build("DateTime64(9, 'UTC')", dialect="clickhouse")),
             dialect="clickhouse",
         ),
-        col_type,
+        col_type,  # ty:ignore[invalid-argument-type]
     )
 
 

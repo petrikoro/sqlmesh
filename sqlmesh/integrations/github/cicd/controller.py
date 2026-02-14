@@ -459,8 +459,11 @@ class GithubController:
 
     @property
     def bot_config(self) -> GithubCICDBotConfig:
-        bot_config = self._context.config.cicd_bot or GithubCICDBotConfig(
-            auto_categorize_changes=self._context.auto_categorize_changes
+        bot_config = (
+            self._context.config.cicd_bot
+            or GithubCICDBotConfig(
+                auto_categorize_changes=self._context.auto_categorize_changes  # ty:ignore[unknown-argument]
+            )
         )
         return bot_config
 

@@ -78,9 +78,9 @@ class RuntimeEnv(str, Enum):
             shell = get_ipython()  # type: ignore
             if os.getenv("DATABRICKS_RUNTIME_VERSION"):
                 return RuntimeEnv.DATABRICKS
-            if "google.colab" in str(shell.__class__):  # type: ignore
+            if "google.colab" in str(shell.__class__):
                 return RuntimeEnv.GOOGLE_COLAB
-            if shell.__class__.__name__ == "ZMQInteractiveShell":  # type: ignore
+            if shell.__class__.__name__ == "ZMQInteractiveShell":
                 return RuntimeEnv.JUPYTER
         except NameError:
             pass

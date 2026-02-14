@@ -107,5 +107,7 @@ class SnapshotCache:
 
     @staticmethod
     def _update_node_hash_cache(snapshot: Snapshot) -> None:
-        snapshot.node._data_hash = snapshot.fingerprint.data_hash
-        snapshot.node._metadata_hash = snapshot.fingerprint.metadata_hash
+        snapshot.node._data_hash = snapshot.fingerprint.data_hash  # ty:ignore[invalid-assignment]
+        snapshot.node._metadata_hash = (  # ty:ignore[invalid-assignment]
+            snapshot.fingerprint.metadata_hash
+        )

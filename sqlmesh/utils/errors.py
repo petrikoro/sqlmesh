@@ -230,10 +230,16 @@ def raise_config_error(
 def raise_for_status(response: Response) -> None:
     if response.status_code == 404:
         raise NotFoundError(response.text)
-    if 400 <= response.status_code < 500:
-        raise ApiClientError(response.text, response.status_code)
-    if 500 <= response.status_code < 600:
-        raise ApiServerError(response.text, response.status_code)
+    if 400 <= response.status_code < 500:  # type: ignore
+        raise ApiClientError(
+            response.text,
+            response.status_code,  # type: ignore
+        )
+    if 500 <= response.status_code < 600:  # type: ignore
+        raise ApiServerError(
+            response.text,
+            response.status_code,  # type: ignore
+        )
 
 
 def _format_schema_change_msg(

@@ -153,7 +153,9 @@ class Selector(abc.ABC):
 
                     parent_schema = {
                         c: t.sql(dialect=model.dialect)
-                        for c, t in ((parent and parent.columns_to_types) or {}).items()
+                        for c, t in (
+                            (parent and parent.columns_to_types) or {}
+                        ).items()  # ty:ignore[unresolved-attribute]
                     }
 
                     if schema != parent_schema:

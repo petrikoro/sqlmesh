@@ -38,7 +38,7 @@ atexit.register(collector.shutdown, flush=True)
 
 def disable_analytics() -> None:
     global collector
-    collector.shutdown(flush=False)
+    collector.shutdown(flush=False)  # ty:ignore[unresolved-attribute]
     collector = AnalyticsCollector(dispatcher=NoopEventDispatcher())
 
 
@@ -75,9 +75,11 @@ def cli_analytics(func: t.Callable[_P, _T]) -> t.Callable[_P, _T]:
             github_controller = cli_context.obj.get("github")
             if github_controller:
                 cicd_bot_config = github_controller._context.config.cicd_bot
-            collector.on_cicd_command(**common_context, cicd_bot_config=cicd_bot_config)
+            collector.on_cicd_command(  # ty:ignore[unresolved-attribute]
+                **common_context, cicd_bot_config=cicd_bot_config
+            )
         else:
-            collector.on_cli_command(**common_context)
+            collector.on_cli_command(**common_context)  # ty:ignore[unresolved-attribute]
 
         return func(*args, **kwargs)
 
@@ -105,7 +107,10 @@ def python_api_analytics(func: t.Callable[_P, _T]) -> t.Callable[_P, _T]:
                 break
 
         if should_log:
-            collector.on_python_api_command(command_name=func.__name__, command_args=kwargs)
+            collector.on_python_api_command(  # ty:ignore[unresolved-attribute]
+                command_name=func.__name__,  # ty:ignore[unresolved-attribute]
+                command_args=kwargs,
+            )
 
         return func(*args, **kwargs)
 

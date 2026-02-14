@@ -89,7 +89,7 @@ from sqlmesh.utils.jinja import MacroReturnVal
 if sys.version_info >= (3, 12):
     from importlib import metadata
 else:
-    import importlib_metadata as metadata  # type: ignore
+    import importlib_metadata as metadata
 
 if t.TYPE_CHECKING:
     from sqlmesh.core.engine_adapter._typing import DF, QueryOrDF
@@ -136,7 +136,9 @@ class SnapshotEvaluator:
         )
         self.execution_tracker = QueryExecutionTracker()
         self.adapters = {
-            gateway: adapter.with_settings(query_execution_tracker=self.execution_tracker)
+            gateway: adapter.with_settings(  # ty:ignore[unresolved-attribute]
+                query_execution_tracker=self.execution_tracker
+            )
             for gateway, adapter in self.adapters.items()
         }
         self.adapter = (
@@ -323,7 +325,7 @@ class SnapshotEvaluator:
                     snapshots=snapshots,
                     table_mapping=table_mapping,
                     environment_naming_info=environment_naming_info,
-                    deployability_index=deployability_index,  # type: ignore
+                    deployability_index=deployability_index,
                     on_complete=on_complete,
                 ),
                 self.ddl_concurrent_tasks,
@@ -651,7 +653,7 @@ class SnapshotEvaluator:
         except the calling one."""
         try:
             for adapter in self.adapters.values():
-                adapter.recycle()
+                adapter.recycle()  # ty:ignore[unresolved-attribute]
 
         except Exception:
             logger.exception("Failed to recycle Snapshot Evaluator")
@@ -660,16 +662,18 @@ class SnapshotEvaluator:
         """Closes all open connections and releases all allocated resources."""
         try:
             for adapter in self.adapters.values():
-                adapter.close()
+                adapter.close()  # ty:ignore[unresolved-attribute]
         except Exception:
             logger.exception("Failed to close Snapshot Evaluator")
 
     def set_correlation_id(self, correlation_id: CorrelationId) -> SnapshotEvaluator:
         return SnapshotEvaluator(
             {
-                gateway: adapter.with_settings(correlation_id=correlation_id)
+                gateway: adapter.with_settings(  # ty:ignore[unresolved-attribute]
+                    correlation_id=correlation_id
+                )
                 for gateway, adapter in self.adapters.items()
-            },
+            },  # ty:ignore[invalid-argument-type]
             self.ddl_concurrent_tasks,
             self.selected_gateway,
         )
@@ -1028,10 +1032,10 @@ class SnapshotEvaluator:
 
             query_or_df = reduce(
                 lambda a, b: (
-                    pd.concat([a, b], ignore_index=True)  # type: ignore
+                    pd.concat([a, b], ignore_index=True)
                     if isinstance(a, pd.DataFrame)
-                    else a.union_all(b)  # type: ignore
-                ),  # type: ignore
+                    else a.union_all(b)
+                ),
                 queries_or_dfs,
                 first_query_or_df,
             )
@@ -1460,7 +1464,7 @@ class SnapshotEvaluator:
     def get_adapter(self, gateway: t.Optional[str] = None) -> EngineAdapter:
         """Returns the adapter for the specified gateway or the default adapter if none is provided."""
         if gateway:
-            if adapter := self.adapters.get(gateway):
+            if adapter := self.adapters.get(gateway):  # ty:ignore[invalid-argument-type]
                 return adapter
             raise SQLMeshError(f"Gateway '{gateway}' not found in the available engine adapters.")
         return self.adapter
@@ -1664,7 +1668,8 @@ def _evaluation_strategy(snapshot: SnapshotInfoLike, adapter: EngineAdapter) -> 
         klass = SCDType2Strategy
     elif snapshot.is_dbt_custom:
         if hasattr(snapshot, "model") and isinstance(
-            (model_kind := snapshot.model.kind), DbtCustomKind
+            (model_kind := snapshot.model.kind),  # ty:ignore[unresolved-attribute]
+            DbtCustomKind,
         ):
             return DbtCustomMaterializationStrategy(
                 adapter=adapter,
@@ -2183,7 +2188,7 @@ class MaterializableStrategy(PromotableStrategy, abc.ABC):
             target_column_to_types = self.adapter.columns(table_name)
         else:
             target_column_to_types = (
-                model.columns_to_types  # type: ignore
+                model.columns_to_types
                 if model.annotated
                 and not model.on_destructive_change.is_ignore
                 and not model.on_additive_change.is_ignore
@@ -2761,16 +2766,20 @@ class ViewStrategy(PromotableStrategy):
     ) -> None:
         logger.info("Migrating view '%s'", target_table_name)
         model = snapshot.model
-        render_kwargs = dict(
-            execution_time=now(), snapshots=kwargs["snapshots"], engine_adapter=self.adapter
-        )
+        _execution_time = now()
+        _snapshots = kwargs["snapshots"]
+        _engine_adapter = self.adapter
 
         self.adapter.create_view(
             target_table_name,
-            model.render_query_or_raise(**render_kwargs),
+            model.render_query_or_raise(
+                execution_time=_execution_time, snapshots=_snapshots, engine_adapter=_engine_adapter
+            ),
             model.columns_to_types,
             materialized=self._is_materialized_view(model),
-            view_properties=model.render_physical_properties(**render_kwargs),
+            view_properties=model.render_physical_properties(
+                execution_time=_execution_time, snapshots=_snapshots, engine_adapter=_engine_adapter
+            ),
             table_description=model.description,
             column_descriptions=model.column_descriptions,
         )
@@ -2849,7 +2858,7 @@ def get_custom_materialization_kind_type(st: t.Type[CustomMaterialization]) -> t
     # >>>> class MyCustomMaterialization(CustomMaterialization[MyCustomKind])
     # and fall back to base CustomKind if there is no generic type declared
     if hasattr(st, "__orig_bases__"):
-        for base in st.__orig_bases__:
+        for base in st.__orig_bases__:  # ty:ignore[not-iterable]
             if hasattr(base, "__origin__") and base.__origin__ == CustomMaterialization:
                 for generic_arg in t.get_args(base):
                     if not issubclass(generic_arg, CustomKind):

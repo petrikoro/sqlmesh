@@ -335,7 +335,7 @@ class JinjaMacroRegistry(PydanticModel):
         if reference.package is not None:
             package = env.globals.get(reference.package, {})
             return package.get(reference.name)  # type: ignore
-        return env.globals.get(reference.name)  # type: ignore
+        return env.globals.get(reference.name)
 
     def build_environment(self, **kwargs: t.Any) -> Environment:
         """Builds a new Jinja environment based on this registry."""

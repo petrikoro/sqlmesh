@@ -157,7 +157,7 @@ class BaseAdapter(abc.ABC):
                 {
                     (macro_package, macro_name): macro_callable
                     for macro_name, macro_callable in macros.items()
-                    if macro_name.endswith(macro_suffix)
+                    if macro_name.endswith(macro_suffix)  # ty:ignore[unresolved-attribute]
                 }
             )
 
@@ -419,7 +419,7 @@ class RuntimeAdapter(BaseAdapter):
 
         # mypy bug: https://github.com/python/mypy/issues/10740
         exec_func: t.Callable[..., None | pd.DataFrame] = (
-            self.engine_adapter.fetchdf if fetch else self.engine_adapter.execute  # type: ignore
+            self.engine_adapter.fetchdf if fetch else self.engine_adapter.execute
         )
 
         expression = parse_one(sql, read=self.project_dialect)

@@ -186,11 +186,11 @@ class ConnectionConfig(abc.ABC, BaseConfig):
     def get_catalog(self) -> t.Optional[str]:
         """The catalog for this connection"""
         if hasattr(self, "catalog"):
-            return self.catalog
+            return self.catalog  # ty:ignore[invalid-return-type]
         if hasattr(self, "database"):
-            return self.database
+            return self.database  # ty:ignore[invalid-return-type]
         if hasattr(self, "db"):
-            return self.db
+            return self.db  # ty:ignore[invalid-return-type]
         return None
 
     @model_validator(mode="before")
@@ -419,7 +419,7 @@ class BaseDuckDBConnectionConfig(ConnectionConfig):
                                 raise ConfigError(f"Failed to create secret: {e}")
 
             if self.filesystems:
-                from fsspec import filesystem  # type: ignore
+                from fsspec import filesystem
 
                 for file_system in self.filesystems:
                     options = file_system.copy()
@@ -627,7 +627,7 @@ class SnowflakeConnectionConfig(ConnectionConfig):
         auth = auth.upper() if auth else DEFAULT_AUTHENTICATOR
         user = data.get("user")
         password = data.get("password")
-        data["private_key"] = cls._get_private_key(data, auth)  # type: ignore
+        data["private_key"] = cls._get_private_key(data, auth)
 
         if (
             auth == DEFAULT_AUTHENTICATOR
@@ -936,7 +936,7 @@ class DatabricksConnectionConfig(ConnectionConfig):
 
             return connection
 
-        from databricks import sql  # type: ignore
+        from databricks import sql
 
         return sql.connect
 
@@ -978,7 +978,7 @@ class DatabricksConnectionConfig(ConnectionConfig):
                 catalog=self.catalog,
             )
 
-        from databricks.connect import DatabricksSession
+        from databricks.connect import DatabricksSession  # ty:ignore[unresolved-import]
 
         if t.TYPE_CHECKING:
             assert self.databricks_connect_server_hostname is not None
@@ -1110,6 +1110,7 @@ class BigQueryConnectionConfig(ConnectionConfig):
     def _static_connection_kwargs(self) -> t.Dict[str, t.Any]:
         """The static connection kwargs for this connection"""
         import google.auth
+        import google.cloud.bigquery
         from google.auth import impersonated_credentials
         from google.api_core import client_info, client_options
         from google.oauth2 import credentials, service_account
@@ -1260,7 +1261,7 @@ class GCPPostgresConnectionConfig(ConnectionConfig):
 
     @property
     def _connection_factory(self) -> t.Callable:
-        from google.cloud.sql.connector import Connector
+        from google.cloud.sql.connector import Connector  # ty:ignore[unresolved-import]
         from google.oauth2 import service_account
 
         creds = None
@@ -1281,7 +1282,7 @@ class GCPPostgresConnectionConfig(ConnectionConfig):
         if self.timeout:
             kwargs["timeout"] = self.timeout
 
-        return Connector(**kwargs).connect  # type: ignore
+        return Connector(**kwargs).connect
 
 
 class RedshiftConnectionConfig(ConnectionConfig):
@@ -1496,7 +1497,7 @@ class MySQLConnectionConfig(ConnectionConfig):
 
     @property
     def _connection_factory(self) -> t.Callable:
-        from pymysql import connect
+        from pymysql import connect  # type: ignore
 
         return connect
 
@@ -1598,7 +1599,7 @@ class MSSQLConnectionConfig(ConnectionConfig):
     @property
     def _connection_factory(self) -> t.Callable:
         if self.driver == "pymssql":
-            import pymssql
+            import pymssql  # ty:ignore[unresolved-import]
 
             return pymssql.connect
 
@@ -1688,7 +1689,7 @@ class MSSQLConnectionConfig(ConnectionConfig):
 
             conn.add_output_converter(-155, handle_datetimeoffset)
 
-            return conn
+            return conn  # ty:ignore[invalid-return-type]
 
         return connect
 
@@ -1698,9 +1699,9 @@ class MSSQLConnectionConfig(ConnectionConfig):
 
 
 class AzureSQLConnectionConfig(MSSQLConnectionConfig):
-    type_: t.Literal["azuresql"] = Field(alias="type", default="azuresql")  # type: ignore
-    DISPLAY_NAME: t.ClassVar[t.Literal["Azure SQL"]] = "Azure SQL"  # type: ignore
-    DISPLAY_ORDER: t.ClassVar[t.Literal[10]] = 10  # type: ignore
+    type_: t.Literal["azuresql"] = Field(alias="type", default="azuresql")
+    DISPLAY_NAME: t.ClassVar[t.Literal["Azure SQL"]] = "Azure SQL"
+    DISPLAY_ORDER: t.ClassVar[t.Literal[10]] = 10
 
     @property
     def _extra_engine_config(self) -> t.Dict[str, t.Any]:
@@ -1714,10 +1715,10 @@ class FabricConnectionConfig(MSSQLConnectionConfig):
     It is recommended to use the 'pyodbc' driver for Fabric.
     """
 
-    type_: t.Literal["fabric"] = Field(alias="type", default="fabric")  # type: ignore
-    DIALECT: t.ClassVar[t.Literal["fabric"]] = "fabric"  # type: ignore
-    DISPLAY_NAME: t.ClassVar[t.Literal["Fabric"]] = "Fabric"  # type: ignore
-    DISPLAY_ORDER: t.ClassVar[t.Literal[17]] = 17  # type: ignore
+    type_: t.Literal["fabric"] = Field(alias="type", default="fabric")
+    DIALECT: t.ClassVar[t.Literal["fabric"]] = "fabric"
+    DISPLAY_NAME: t.ClassVar[t.Literal["Fabric"]] = "Fabric"
+    DISPLAY_ORDER: t.ClassVar[t.Literal[17]] = 17
     driver: t.Literal["pyodbc"] = "pyodbc"
     workspace_id: str
     tenant_id: str
@@ -2014,7 +2015,7 @@ class TrinoConnectionConfig(ConnectionConfig):
         )
 
         if self.method.is_basic or self.method.is_ldap:
-            auth = BasicAuthentication(self.user, self.password)
+            auth = BasicAuthentication(self.user or "", self.password or "")
         elif self.method.is_kerberos:
             if self.keytab:
                 os.environ["KRB5_CLIENT_KTNAME"] = self.keytab
@@ -2032,9 +2033,11 @@ class TrinoConnectionConfig(ConnectionConfig):
         elif self.method.is_oauth:
             auth = OAuth2Authentication()
         elif self.method.is_jwt:
-            auth = JWTAuthentication(self.jwt_token)
+            auth = JWTAuthentication(self.jwt_token or "")
         elif self.method.is_certificate:
-            auth = CertificateAuthentication(self.client_certificate, self.client_private_key)
+            auth = CertificateAuthentication(
+                self.client_certificate or "", self.client_private_key or ""
+            )
         else:
             auth = None
 
@@ -2126,8 +2129,8 @@ class ClickhouseConnectionConfig(ConnectionConfig):
 
     @property
     def _connection_factory(self) -> t.Callable:
-        from clickhouse_connect.dbapi import connect  # type: ignore
-        from clickhouse_connect.driver import httputil  # type: ignore
+        from clickhouse_connect.dbapi import connect
+        from clickhouse_connect.driver import httputil
         from functools import partial
 
         pool_manager_options: t.Dict[str, t.Any] = dict(
@@ -2269,7 +2272,7 @@ class AthenaConnectionConfig(ConnectionConfig):
 
     @property
     def _connection_factory(self) -> t.Callable:
-        from pyathena import connect  # type: ignore
+        from pyathena import connect
 
         return connect
 
@@ -2330,32 +2333,32 @@ class RisingwaveConnectionConfig(ConnectionConfig):
 
 CONNECTION_CONFIG_TO_TYPE = {
     # Map all subclasses of ConnectionConfig to the value of their `type_` field.
-    tpe.all_field_infos()["type_"].default: tpe
+    tpe.all_field_infos()["type_"].default: tpe  # ty:ignore[unresolved-attribute]
     for tpe in subclasses(
         __name__,
         ConnectionConfig,
-        exclude={ConnectionConfig, BaseDuckDBConnectionConfig},
+        exclude={ConnectionConfig, BaseDuckDBConnectionConfig},  # type: ignore
     )
 }
 
 DIALECT_TO_TYPE = {
-    tpe.all_field_infos()["type_"].default: tpe.DIALECT
+    tpe.all_field_infos()["type_"].default: tpe.DIALECT  # ty:ignore[unresolved-attribute]
     for tpe in subclasses(
         __name__,
         ConnectionConfig,
-        exclude={ConnectionConfig, BaseDuckDBConnectionConfig},
+        exclude={ConnectionConfig, BaseDuckDBConnectionConfig},  # type: ignore
     )
 }
 
 INIT_DISPLAY_INFO_TO_TYPE = {
-    tpe.all_field_infos()["type_"].default: (
-        tpe.DISPLAY_ORDER,
-        tpe.DISPLAY_NAME,
+    tpe.all_field_infos()["type_"].default: (  # ty:ignore[unresolved-attribute]
+        tpe.DISPLAY_ORDER,  # ty:ignore[unresolved-attribute]
+        tpe.DISPLAY_NAME,  # ty:ignore[unresolved-attribute]
     )
     for tpe in subclasses(
         __name__,
         ConnectionConfig,
-        exclude={ConnectionConfig, BaseDuckDBConnectionConfig},
+        exclude={ConnectionConfig, BaseDuckDBConnectionConfig},  # type: ignore
     )
 }
 
@@ -2409,4 +2412,4 @@ else:
     import pydantic
 
     # Workaround for https://docs.pydantic.dev/latest/concepts/serialization/#serializing-with-duck-typing
-    SerializableConnectionConfig = pydantic.SerializeAsAny[ConnectionConfig]  # type: ignore
+    SerializableConnectionConfig = pydantic.SerializeAsAny[ConnectionConfig]

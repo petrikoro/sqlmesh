@@ -495,19 +495,21 @@ class SchemaDiffer(PydanticModel):
         root_struct: exp.DataType,
         table_name: TableName,
     ) -> t.List[TableAlterColumnOperation]:
-        columns = ensure_list(columns)
+        columns_list: t.List[TableAlterColumn] = ensure_list(
+            columns
+        )  # ty:ignore[invalid-assignment]
         operations: t.List[TableAlterColumnOperation] = []
-        column_pos, column_kwarg = self._get_matching_kwarg(columns[-1].name, struct, pos)
+        column_pos, column_kwarg = self._get_matching_kwarg(columns_list[-1].name, struct, pos)
         if column_pos is None or not column_kwarg:
             raise SQLMeshError(
-                f"Cannot drop column '{columns[-1].name}' from table '{table_name}' - column not found. "
+                f"Cannot drop column '{columns[-1].name}' from table '{table_name}' - column not found. "  # ty:ignore[not-subscriptable]
                 f"This may indicate a mismatch between the expected and actual table schemas."
             )
         struct.expressions.pop(column_pos)
         operations.append(
             TableAlterDropColumnOperation(
                 target_table=exp.to_table(table_name),
-                column_parts=columns,
+                column_parts=columns_list,
                 expected_table_struct=root_struct.copy(),
                 cascade=self.drop_cascade,
                 array_element_selector=self.array_element_selector,

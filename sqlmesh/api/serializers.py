@@ -104,7 +104,7 @@ def serialize_model(context: Context, model: SQLMeshModel, render_query: bool = 
         query = model.render_query() or (
             model.query if hasattr(model, "query") else exp.select('"FAILED TO RENDER QUERY"')
         )
-        sql = query.sql(pretty=True, dialect=model.dialect)
+        sql = query.sql(pretty=True, dialect=model.dialect)  # ty:ignore[unresolved-attribute]
 
     path = model._path
     return Model(
@@ -182,7 +182,7 @@ def serialize_table_diff(
     return TableDiff(
         schema_diff=schema_diff,
         row_diff=row_diff,
-        on=[(s.name, t.name) for s, t in zip(s_index, t_index)],
+        on=[(s.name, t.name) for s, t in zip(s_index, t_index)],  # ty:ignore[invalid-argument-type]
     )
 
 

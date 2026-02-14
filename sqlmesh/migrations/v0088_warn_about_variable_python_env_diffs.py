@@ -35,11 +35,11 @@ SQLMESH_BLUEPRINT_VARS = "__sqlmesh__blueprint__vars__"
 METADATA_HASH_EXPRESSIONS = {"on_virtual_update", "audits", "signals", "audit_definitions"}
 
 
-def migrate_schemas(engine_adapter, schema, **kwargs):  # type: ignore
+def migrate_schemas(engine_adapter, schema, **kwargs):
     pass
 
 
-def migrate_rows(engine_adapter, schema, **kwargs):  # type: ignore
+def migrate_rows(engine_adapter, schema, **kwargs):
     snapshots_table = "_snapshots"
     if schema:
         snapshots_table = f"{schema}.{snapshots_table}"

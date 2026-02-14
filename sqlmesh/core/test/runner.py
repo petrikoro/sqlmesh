@@ -6,7 +6,7 @@ import typing as t
 import unittest
 from io import StringIO
 
-import concurrent
+import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 
 from sqlmesh.core.engine_adapter import EngineAdapter
@@ -108,7 +108,7 @@ def run_tests(
     from sqlmesh.core.console import get_console
 
     combined_results = ModelTextTestResult(
-        stream=unittest.runner._WritelnDecorator(stream or StringIO()),  # type: ignore
+        stream=unittest.runner._WritelnDecorator(stream or StringIO()),
         verbosity=2 if verbosity >= Verbosity.VERBOSE else 1,
         descriptions=True,
         console=get_console(),
