@@ -1,4 +1,0 @@
-:where(:root) {
-  --color-metadata-label: var(--color-neutral-600);
-  --color-metadata-value: var(--color-prose);
-}
