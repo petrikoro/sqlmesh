@@ -29,7 +29,6 @@ nav:
       - guides/testing.md
       - guides/model_selection.md
     - SQLMesh tools:
-      - guides/vscode.md
       - guides/tablediff.md
       - guides/linter.md
     - Advanced usage:

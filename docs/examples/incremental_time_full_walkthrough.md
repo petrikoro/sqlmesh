@@ -599,7 +599,7 @@ sqlmesh create_external_models
     currency: STRING
 ```
 
-Now, I can inspect column-level lineage directly in the SQLMesh VSCode extension's Lineage panel.
+Now, I can inspect the column-level lineage.
 
 ![image.png](./incremental_time/node_level_audit_trail.png)
 

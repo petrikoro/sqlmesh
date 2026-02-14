@@ -99,14 +99,6 @@ make bigquery-test   # Needs GOOGLE_APPLICATION_CREDENTIALS
 make databricks-test # Needs DATABRICKS_* env vars
 ```
 
-### UI Development
-```bash
-# In vscode/react directory
-pnpm run dev   # Start development server
-pnpm run build # Production build
-pnpm run test  # Run tests
-```
-
 ## Architecture Overview
 
 ### Core Components
@@ -136,8 +128,6 @@ pnpm run test  # Run tests
 - `sqlmesh/core/context.py`: Main orchestration class
 - `examples/sushi/`: Reference implementation used in tests
 - `sqlmesh/api/handlers.py`: API handler functions (models, lineage, table diff) used by LSP and other integration surfaces
-- `vscode/react/src/main.tsx`: VS Code extension React UI entry point
-- `vscode/extension/src/extension.ts`: VSCode extension entry point
 
 ## GitHub CI/CD Bot Architecture
 

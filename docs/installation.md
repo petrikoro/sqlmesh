@@ -30,12 +30,11 @@ In your `pip` command, specify the extra's name in brackets to automatically ins
 
 There are two types of extras.
 
-Some extras add features, like the SQLMesh VSCode extension or Github CI/CD bot:
+Some extras add features, like the Github CI/CD bot:
 
 ??? info "Feature extras commands"
     | Feature             | `pip` command                   |
     | ------------------- | ------------------------------- |
-    | VSCode extension    | `pip install "sqlmesh[lsp]"`    |
     | Github CI/CD bot    | `pip install "sqlmesh[github]"` |
     | dbt projects        | `pip install "sqlmesh[dbt]"`    |
     | dlt projects        | `pip install "sqlmesh[dlt]"`    |

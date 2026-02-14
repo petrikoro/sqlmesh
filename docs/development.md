@@ -72,16 +72,3 @@ Run docs tests:
 make doc-test
 ```
 
-## Developing the VSCode extension
-
-You can develop the VSCode extension and its React-based UI. To do so, make sure you have the dependencies installed by running the following command inside the `vscode/extension` directory.
-
-```bash
-pnpm install
-```
-
-Once that is done, developing the VSCode extension is most easily done by launching the `Run Extensions` debug task from a Visual Studio Code workspace opened at the root of the SQLMesh repository. By default, the VSCode extension will run the SQLMesh server locally and open a new Visual Studio Code window that allows you to try out the SQLMesh IDE. It opens the `examples/sushi` project by default. To set up Visual Studio Code to run the `Run Extensions` debug task, you can run the following command which will copy the `launch.json` and `tasks.json` files to the `.vscode` directory.
-
-```bash 
-make vscode_settings
-```

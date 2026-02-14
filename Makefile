@@ -65,12 +65,6 @@ install-dev-dbt-%:
 style:
 	pre-commit run --all-files
 
-py-style:
-	SKIP=prettier,eslint pre-commit run --all-files
-
-ui-style:
-	pnpm run lint
-
 doc-test:
 	python -m pytest --doctest-modules sqlmesh/core sqlmesh/utils
 
@@ -228,14 +222,6 @@ fabric-test: guard-FABRIC_HOST guard-FABRIC_CLIENT_ID guard-FABRIC_CLIENT_SECRET
 
 gcp-postgres-test: guard-GCP_POSTGRES_INSTANCE_CONNECTION_STRING guard-GCP_POSTGRES_USER guard-GCP_POSTGRES_PASSWORD guard-GCP_POSTGRES_KEYFILE_JSON engine-gcppostgres-install
 	pytest -n auto -m "gcp_postgres" --reruns 3 --junitxml=test-results/junit-gcp-postgres.xml
-
-vscode_settings:
-	mkdir -p .vscode
-	cp -r ./tooling/vscode/*.json .vscode/
-
-vscode-generate-openapi:
-	pnpm run fmt
-	cd vscode/react && pnpm run generate:api
 
 benchmark-ci:
 	python benchmarks/lsp_render_model_bench.py --debug-single-value

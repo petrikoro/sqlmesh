@@ -324,7 +324,7 @@ seeds:
 SQLMesh does not have its own package manager; however, SQLMesh's dbt adapter is compatible with dbt's package manager. Continue to use [dbt deps](https://docs.getdbt.com/reference/commands/deps) and [dbt clean](https://docs.getdbt.com/reference/commands/clean) to update, add, or remove packages.
 
 ## Documentation
-Model documentation and lineage are available in the [SQLMesh VSCode extension](../guides/vscode.md).
+Model documentation and lineage are available in the SQLMesh CLI.
 
 ## Supported dbt jinja methods
 

@@ -147,10 +147,7 @@ dmypy.json
 *.duckdb
 *.duckdb.wal
 
-# UI
 **/.DS_Store
-**/node_modules
-.local/
 
 # Version file
 sqlmesh/_version.py
