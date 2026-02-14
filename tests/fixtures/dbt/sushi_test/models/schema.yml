@@ -72,9 +72,9 @@ models:
     config:
       # Exercise pre and post hooks
       pre_hook:
-        - SELECT 1 
-      post_hook: 
-        - SELECT 1 
+        - SELECT 1
+      post_hook:
+        - SELECT 1
   - name: waiter_as_customer_by_day
   - name: waiter_revenue_by_day
     versions:

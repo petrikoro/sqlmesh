@@ -1,3 +1,6 @@
 {
-    "sqlmesh.projectPaths": ["./repo_1", "./repo_2"]
+  "sqlmesh.projectPaths": [
+    "./repo_1",
+    "./repo_2"
+  ]
 }

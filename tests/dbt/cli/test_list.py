@@ -63,9 +63,7 @@ def test_list_select_exclude(jaffle_shop_duckdb: Path, invoke_cli: t.Callable[..
 
 
 def test_list_with_vars(jaffle_shop_duckdb: Path, invoke_cli: t.Callable[..., Result]):
-    (
-        jaffle_shop_duckdb / "models" / "vars_model.sql"
-    ).write_text("""                                                          
+    (jaffle_shop_duckdb / "models" / "vars_model.sql").write_text("""
     select * from {{ ref('custom' + var('foo')) }}
     """)
 

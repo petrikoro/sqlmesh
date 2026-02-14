@@ -15,7 +15,7 @@ MODEL (
     )
 );
 
-SELECT 
+SELECT
    COUNT(customer_id) AS count_customers
 FROM sushi.customers
 WHERE status = @blueprint_status;

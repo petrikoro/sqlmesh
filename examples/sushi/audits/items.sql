@@ -4,4 +4,3 @@ AUDIT (
 SELECT *
 FROM @this_model
 WHERE price <= @price;
-

@@ -31,8 +31,8 @@ The project metadata can be migrated to the latest metadata format using SQLMesh
 > sqlmesh migrate
 ```
 
-Migration should be issued manually by a single user and the migration will affect all users of the project. 
-Migrations should ideally run when no one will be running plan/apply. 
-Migrations should not be run in parallel. 
-Due to these constraints, it is better for a person responsible for managing SQLMesh to manually issue migrations. 
+Migration should be issued manually by a single user and the migration will affect all users of the project.
+Migrations should ideally run when no one will be running plan/apply.
+Migrations should not be run in parallel.
+Due to these constraints, it is better for a person responsible for managing SQLMesh to manually issue migrations.
 Therefore, it is not recommended to issue migrations from CI/CD pipelines.

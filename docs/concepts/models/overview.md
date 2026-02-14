@@ -426,7 +426,7 @@ Learn more about these properties and their default values in the [model configu
 
     Setting `allow_partials` to `true` overrides this behavior, indicating that the model may process a segment of input data that is missing some of the data points.
 
-    NOTE: To force the model to run every time, set `allow_partials` to `true` and use the `--ignore-cron` argument: `sqlmesh run --ignore-cron`. Simply setting `allow_partials` to `true` does not guarantee that the model will run on every `sqlmesh run` command invocation. The model’s configured `cron` schedule is still respected, even when partial intervals are allowed. 
+    NOTE: To force the model to run every time, set `allow_partials` to `true` and use the `--ignore-cron` argument: `sqlmesh run --ignore-cron`. Simply setting `allow_partials` to `true` does not guarantee that the model will run on every `sqlmesh run` command invocation. The model’s configured `cron` schedule is still respected, even when partial intervals are allowed.
 
     Similarly, using `--ignore-cron` without setting `allow_partials` to `true` does not guarantee the model will run every time. Depending on the time of day, the interval might not be complete and ready for execution, even when ignoring the `cron` schedule. Therefore, both are required to ensure that the model runs on every `sqlmesh run` invocation.
 
@@ -458,7 +458,7 @@ to `false` causes SQLMesh to disable query canonicalization & simplification. Th
 : Specifies which linter rules should be ignored/excluded for this model.
 
 ### formatting
-:   Whether the model will be formatted. All models are formatted by default. Setting this to `false` causes SQLMesh to ignore this model during `sqlmesh format`. 
+:   Whether the model will be formatted. All models are formatted by default. Setting this to `false` causes SQLMesh to ignore this model during `sqlmesh format`.
 
 ## Incremental Model Properties
 

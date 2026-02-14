@@ -1,3 +1,3 @@
 {% macro select_distinct() %}
-    SELECT DISTINCT 
+    SELECT DISTINCT
 {% endmacro %}

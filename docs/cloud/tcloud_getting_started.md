@@ -42,17 +42,17 @@ Technical Requirements:
     At the time of writing, these are the suggested commands to install uv and Python:
 
     === "macOS and Linux"
-   
+
         ```bash
         curl -LsSf https://astral.sh/uv/install.sh | sh
         ```
-   
+
     === "Windows"
-   
+
         ```powershell
         powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
         ```
-    
+
     ```bash
     uv python install 3.12
     ```
@@ -66,8 +66,8 @@ The first step to setting up Tobiko Cloud is logging in to the web interface:
     ```bash
     https://cloud.tobikodata.com/auth/login
     ```
-2. Once logged in, you should see the home page. If you are not redirected, then input your Tobiko Cloud URL in the browser (ex: 
-https://cloud.tobikodata.com/sqlmesh/tobiko/public-demo/observer/)  
+2. Once logged in, you should see the home page. If you are not redirected, then input your Tobiko Cloud URL in the browser (ex:
+https://cloud.tobikodata.com/sqlmesh/tobiko/public-demo/observer/)
 
     Your view should be empty, but the figure below shows a populated example with Tobiko Cloud running in production:
 
@@ -150,10 +150,10 @@ Now we're ready to connect your data warehouse to Tobiko Cloud:
 2. If you are going through the SSO flow then, run the following command:
     ``` bash
     tcloud auth login
-    ``` 
-    This will fire off the SSO flow and open a link in your browser to authenticate. 
+    ```
+    This will fire off the SSO flow and open a link in your browser to authenticate.
 
-    Once authenticated, you will see the following screen. 
+    Once authenticated, you will see the following screen.
 
     ![tcloud_auth_success](./tcloud_getting_started/tcloud_auth_success.png)
 

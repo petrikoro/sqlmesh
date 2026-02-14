@@ -1283,11 +1283,11 @@ This is the most accurate representation of the menu based on the source data pr
 
 ### Processing Source Table with Historical Data
 
-The most common case for SCD Type 2 is creating history for a table that it doesn't have it already. 
+The most common case for SCD Type 2 is creating history for a table that it doesn't have it already.
 In the example of the restaurant menu, the menu just tells you what is offered right now, but you want to know what was offered over time.
 In this case, the default setting of `None` for `batch_size` is the best option.
 
-Another use case though is processing a source table that already has history in it. 
+Another use case though is processing a source table that already has history in it.
 A common example of this is a "daily snapshot" table that is created by a source system that takes a snapshot of the data at the end of each day.
 If your source table has historical records, like a "daily snapshot" table, then set `batch_size` to `1` to process each interval (each day if a `@daily` cron) in sequential order.
 That way the historical records will be properly captured in the SCD Type 2 table.

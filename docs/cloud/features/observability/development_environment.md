@@ -1,6 +1,6 @@
 # Development Environment
 
-Tobiko Cloud extends the SQLMesh CLI to advance your development workflow. Instead of relying on a static terminal output isolated to your local machine when running `tcloud sqlmesh plan dev`, Tobiko Cloud tracks development history automatically displayed in a rich user interface. We want mental load at a minimum so you can focus on your most important work. 
+Tobiko Cloud extends the SQLMesh CLI to advance your development workflow. Instead of relying on a static terminal output isolated to your local machine when running `tcloud sqlmesh plan dev`, Tobiko Cloud tracks development history automatically displayed in a rich user interface. We want mental load at a minimum so you can focus on your most important work.
 
 At its core, this transforms development from a single-player to a multi-player experience. Instead of sharing screenshots and scrolling through terminal history, all you have to do now is share a link to your work.
 
@@ -45,14 +45,14 @@ The page begins with an at-a-glance summary of the most recent plan applied to t
 
 ??? "ProTip:"
 
-    If a stakeholder or else anyone on your team is looking to understand an environment you own and are working on, you can share the link with them and they will be able to access and see all of the information about your environment. 
-    
-    It's a great place to start to have open conversations about what was recently added, removed or changed in an environment! 
+    If a stakeholder or else anyone on your team is looking to understand an environment you own and are working on, you can share the link with them and they will be able to access and see all of the information about your environment.
+
+    It's a great place to start to have open conversations about what was recently added, removed or changed in an environment!
 
 
 ## Differences from Prod section
 
-Development environments are used to prepare and test changes before deploying them to `prod`, with separate tabs for each type of change (directly modified, indirectly modified, metadata-only changes, added, removed). Below is a screenshot from an environment version that shows all these tab options. 
+Development environments are used to prepare and test changes before deploying them to `prod`, with separate tabs for each type of change (directly modified, indirectly modified, metadata-only changes, added, removed). Below is a screenshot from an environment version that shows all these tab options.
 
 
 ![Prod Differences section with all options](./development_environment/dev_env_comprehensive.png)
@@ -66,10 +66,10 @@ The plan applications chart is a calendar visualization of all plans that have b
 ![Plan History Information](./development_environment/plan_history.png)
 <a id="plan-history-image"></a>
 
-The chart represents days on its `x-axis` (each column is a day with the corresponding date across the top) and the time of day on its `y-axis` (each day begins at the top and ends at the bottom). 
+The chart represents days on its `x-axis` (each column is a day with the corresponding date across the top) and the time of day on its `y-axis` (each day begins at the top and ends at the bottom).
 
 Each day displays zero or more horizantal bars representing `plan` duration. If no `plans` occurred on a day, no bars will be displayed. If multiple `plans` occurred on the same day, their horizantal bars will be stacked.
 
 The chart uses color to convey the staus of a `plan` at a glance. Green is completed, grey is in progress, red is failed.
 
-Hovering over a bar reveals summary information about the `plan`, including its completion status, start time, end time, total duration, and change summary. The summary includes a link to [the `plan`'s page](./plan.md). 
+Hovering over a bar reveals summary information about the `plan`, including its completion status, start time, end time, total duration, and change summary. The summary includes a link to [the `plan`'s page](./plan.md).

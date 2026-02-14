@@ -159,7 +159,7 @@ def test_select_by_dbt_names(
 ):
     (jaffle_shop_duckdb / "models" / "agg_orders.sql").write_text("""
      {{ config(tags=["agg"]) }}
-      select order_date, count(*) as num_orders from {{ ref('orders') }}                                                             
+      select order_date, count(*) as num_orders from {{ ref('orders') }}
     """)
 
     ctx = jaffle_shop_duckdb_context
@@ -210,7 +210,7 @@ def test_exclude_by_dbt_names(
 ):
     (jaffle_shop_duckdb / "models" / "agg_orders.sql").write_text("""
      {{ config(tags=["agg"]) }}
-      select order_date, count(*) as num_orders from {{ ref('orders') }}                                                             
+      select order_date, count(*) as num_orders from {{ ref('orders') }}
     """)
 
     ctx = jaffle_shop_duckdb_context
@@ -257,7 +257,7 @@ def test_selection_and_exclusion_by_dbt_names(
 ):
     (jaffle_shop_duckdb / "models" / "agg_orders.sql").write_text("""
      {{ config(tags=["agg"]) }}
-      select order_date, count(*) as num_orders from {{ ref('orders') }}                                                             
+      select order_date, count(*) as num_orders from {{ ref('orders') }}
     """)
 
     ctx = jaffle_shop_duckdb_context

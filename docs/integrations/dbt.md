@@ -235,7 +235,7 @@ To enable incremental_by_time_range incrementality, the model configuration must
 
 ### Incremental logic
 
-Unlike dbt incremental strategies, SQLMesh does not require the use of `is_incremental` jinja blocks to implement incremental logic. 
+Unlike dbt incremental strategies, SQLMesh does not require the use of `is_incremental` jinja blocks to implement incremental logic.
 Instead, SQLMesh provides predefined time macro variables that can be used in the model's SQL to filter data based on the time column.
 
 For example, the SQL `WHERE` clause with the "ds" column goes in a new jinja block gated by `{% if sqlmesh_incremental is defined %}` as follows:

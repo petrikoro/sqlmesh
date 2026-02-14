@@ -5,20 +5,20 @@ The model overview page provides comprehensive observability features that let y
 Model owners typically use this page to monitor and check their models. It provides essential information in an easy-to-scan format, eliminating the need to debug issues through the command line interface. From this page you can quickly diagnose:
 
 1. Model anomalies
-    1. Did the model suddenly take a really long time to run? 
-    2. Is the model repeatedly failing due to audits or schema evolution? 
-2. Downstream impacts 
-    1. If the model fails to run, lineage lets you immediately see what other models are affected 
+    1. Did the model suddenly take a really long time to run?
+    2. Is the model repeatedly failing due to audits or schema evolution?
+2. Downstream impacts
+    1. If the model fails to run, lineage lets you immediately see what other models are affected
 3. Which version introduced errors
     1. Use the model's version history to identify which changes caused a problem
 
 
 ## Navigate to a model
 
-There are a number of ways you can navigate to a model's page. This method shows you how to find your model directly from the Environments page. 
+There are a number of ways you can navigate to a model's page. This method shows you how to find your model directly from the Environments page.
 
 1. Select "Environments" from the left hand menu
-2. Click the environment you want to explore from the list. 
+2. Click the environment you want to explore from the list.
     ![Tobiko Cloud environment page](./model/tcloud_environments.png)
 3. Navigate to the Models section and click "Explore" to view available models
     ![Tobiko Cloud environment page explore models link](./model/tcloud_environment_explore-models.png)
@@ -27,7 +27,7 @@ There are a number of ways you can navigate to a model's page. This method shows
 
 ## Model page information
 
-Each model page presents a comprehensive summary that includes the key components and metrics used to monitor model behavior. 
+Each model page presents a comprehensive summary that includes the key components and metrics used to monitor model behavior.
 
 From here, you can identify anomalies in the model's run time based on historical run times and how they have been changing over time (or not!).
 

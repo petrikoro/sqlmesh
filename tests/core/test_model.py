@@ -2737,8 +2737,8 @@ def test_dialect_pattern():
             ),
             {text}
         );
-    
-        SELECT 1;  
+
+        SELECT 1;
         """
 
     def assert_match(test_sql: str, expected_value: t.Optional[str] = "duckdb"):

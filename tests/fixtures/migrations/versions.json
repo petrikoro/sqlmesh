@@ -1,1 +1,11 @@
-{"schema_version":{"0":60},"sqlglot_version":{"0":"25.31.4"},"sqlmesh_version":{"0":"0.134.0"}}
+{
+  "schema_version": {
+    "0": 60
+  },
+  "sqlglot_version": {
+    "0": "25.31.4"
+  },
+  "sqlmesh_version": {
+    "0": "0.134.0"
+  }
+}

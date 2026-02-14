@@ -8,13 +8,13 @@ For transformation pipelines, those range from upstream source timeouts to SQL q
 
 Tobiko Cloud makes it easy to detect and respond to changes in your pipelines:
 
-- Did a problem occur? 
+- Did a problem occur?
     - **Alerts notify you immediately.**
-- When did the problem occur? 
+- When did the problem occur?
     - **Historical pipeline information reveals the moment.**
--  Where is the problem coming from? 
+-  Where is the problem coming from?
     - **Easy navigation through pipeline components lets you pinpoint the source.**
--  What is causing the problem? 
+-  What is causing the problem?
     - **Centralized logs and errors have all the details.**
 
 ## How it works
@@ -31,7 +31,7 @@ This information allows you to:
 - Creation of custom visualizations and metrics
 - Troubleshoot problems and optimize inefficient operations
 
-Observability features are seamlessly integrated into Tobiko Cloud, making it simple to monitor and understand your project's behavior. For example, on the Tobiko Cloud Homepage, there is run history, plan executions, and freshness displayed for the production environment: 
+Observability features are seamlessly integrated into Tobiko Cloud, making it simple to monitor and understand your project's behavior. For example, on the Tobiko Cloud Homepage, there is run history, plan executions, and freshness displayed for the production environment:
 
 ![Observability on the Homepage](./overview/observability_section_home.png)
 
@@ -40,7 +40,7 @@ Instead of digging through complex logs or piecing together information from mul
 <!---
 Learn more about Tobiko Cloud Observability features on these pages:
 
-- [`prod` environment](prod_environment.md) health and recent activity 
+- [`prod` environment](prod_environment.md) health and recent activity
 - [Development environment](development_environment.md) differences from `prod` and recent activity
 - [Plan](plan.md) status and detailed model execution data
 - [Run](run.md) status and detailed model execution data

@@ -14,5 +14,5 @@ clean-targets:
 models:
   dbt_repo:
     +materialized: view
-    
+
   +start: Jan 1 2000

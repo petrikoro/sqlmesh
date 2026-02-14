@@ -373,7 +373,7 @@ from sqlmesh import signal
 
     _write_user_signal(
         """
-def my_signal(batch): 
+def my_signal(batch):
   return True
     """,
         tmp_path,
@@ -410,7 +410,7 @@ def my_signal(batch):
     # Case 2: By changing the signal to return False, both models should not be evaluated.
     _write_user_signal(
         """
-def my_signal(batch): 
+def my_signal(batch):
   return False
     """,
         tmp_path,
