@@ -530,7 +530,7 @@ def diff(ctx: click.Context, environment: t.Optional[str] = None) -> None:
 @click.option(
     "--ignore-cron",
     is_flag=True,
-    help="Run all missing intervals, ignoring individual cron schedules. Only applies if --run is set.",
+    help="Run all missing intervals, ignoring individual cron schedules.",
     default=None,
 )
 @click.option(
