@@ -12,9 +12,9 @@ It is more than just a [dbt alternative](https://tobikodata.com/reduce_costs_wit
 
 ## Core Features
 
-<img src="https://github.com/TobikoData/sqlmesh-public-assets/blob/main/vscode.gif?raw=true" alt="SQLMesh Plan Mode">
+<img src="https://github.com/TobikoData/sqlmesh-public-assets/blob/main/sqlmesh_plan_mode.gif?raw=true" alt="SQLMesh Plan Mode">
 
-> Get instant SQL impact and context of your changes, both in the CLI and in the [SQLMesh VSCode Extension](https://sqlmesh.readthedocs.io/en/latest/guides/vscode/?h=vs+cod)
+> Get instant SQL impact analysis of your changes in the CLI
 
   <details>
   <summary><b>Virtual Data Environments</b></summary>
@@ -143,7 +143,7 @@ mkdir sqlmesh-example
 cd sqlmesh-example
 python -m venv .venv
 source .venv/bin/activate
-pip install 'sqlmesh[lsp]' # install the sqlmesh package with extensions to work with VSCode
+pip install sqlmesh
 source .venv/bin/activate # reactivate the venv to ensure you're using the right installation
 sqlmesh init # follow the prompts to get started (choose DuckDB)
 ```
@@ -160,7 +160,7 @@ mkdir sqlmesh-example
 cd sqlmesh-example
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install 'sqlmesh[lsp]' # install the sqlmesh package with extensions to work with VSCode
+pip install sqlmesh
 .\.venv\Scripts\Activate.ps1 # reactivate the venv to ensure you're using the right installation
 sqlmesh init # follow the prompts to get started (choose DuckDB)
 ```

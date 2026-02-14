@@ -99,18 +99,6 @@ make bigquery-test   # Needs GOOGLE_APPLICATION_CREDENTIALS
 make databricks-test # Needs DATABRICKS_* env vars
 ```
 
-### UI Development
-```bash
-# In web/client directory
-pnpm run dev   # Start development server
-pnpm run build # Production build
-pnpm run test  # Run tests
-
-# Docker-based UI
-make ui-up     # Start UI in Docker
-make ui-down   # Stop UI
-```
-
 ## Architecture Overview
 
 ### Core Components
@@ -139,9 +127,7 @@ make ui-down   # Stop UI
 
 - `sqlmesh/core/context.py`: Main orchestration class
 - `examples/sushi/`: Reference implementation used in tests
-- `web/server/main.py`: Web UI backend entry point
-- `web/client/src/App.tsx`: Web UI frontend entry point
-- `vscode/extension/src/extension.ts`: VSCode extension entry point
+- `sqlmesh/api/handlers.py`: API handler functions (models, lineage, table diff) used by LSP and other integration surfaces
 
 ## GitHub CI/CD Bot Architecture
 

@@ -125,21 +125,8 @@ snowflake = [
     "snowflake-snowpark-python",
 ]
 trino = ["trino"]
-web = [
-    "fastapi==0.115.5",
-    "watchfiles>=0.19.0",
-    "uvicorn[standard]==0.22.0",
-    "sse-starlette>=0.2.2",
-    "pyarrow",
-]
 lsp = [
-    # Duplicate of web
-    "fastapi==0.115.5",
-    "watchfiles>=0.19.0",
-    # "uvicorn[standard]==0.22.0",
-    "sse-starlette>=0.2.2",
     "pyarrow",
-    # For lsp
     "pygls>=1.2.0,<2.0.0",
     "lsprotocol",
 ]
@@ -170,10 +157,9 @@ fallback_version = "0.0.0"
 local_scheme = "no-local-version"
 
 [tool.setuptools.packages.find]
-include = ["sqlmesh", "sqlmesh.*", "sqlmesh_dbt", "sqlmesh_dbt.*", "web*"]
+include = ["sqlmesh", "sqlmesh.*", "sqlmesh_dbt", "sqlmesh_dbt.*"]
 
 [tool.setuptools.package-data]
-web = ["client/dist/**"]
 "*" = ["py.typed"]
 
 # MyPy Rules
@@ -249,8 +235,6 @@ markers = [
     "dbt: test for dbt adapter",
     "github: test for Github CI/CD bot",
     "jupyter: tests for Jupyter integration",
-    "web: tests for web UI",
-
     # Engine Adapters
     "engine: test all engine adapters",
     "athena: test for Athena",

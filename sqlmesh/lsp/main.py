@@ -5,7 +5,6 @@ from itertools import chain
 import logging
 import typing as t
 from pathlib import Path
-import urllib.parse
 import uuid
 
 from lsprotocol import types
@@ -14,18 +13,20 @@ from lsprotocol.types import (
     WorkspaceInlayHintRefreshRequest,
 )
 from pygls.server import LanguageServer
-from sqlglot import exp
 from sqlmesh._version import __version__
-from sqlmesh.core.context import Context
-from sqlmesh.utils.date import to_timestamp
-from sqlmesh.lsp.api import (
-    API_FEATURE,
-    ApiRequest,
+from sqlmesh.api.handlers import (
+    column_lineage,
+    get_models,
+    get_table_diff,
+    model_lineage,
+)
+from sqlmesh.api.protocol import (
     ApiResponseGetColumnLineage,
     ApiResponseGetLineage,
     ApiResponseGetModels,
     ApiResponseGetTableDiff,
 )
+from sqlmesh.core.context import Context
 
 from sqlmesh.lsp.commands import EXTERNAL_MODEL_UPDATE_COLUMNS
 from sqlmesh.lsp.completions import get_sql_completions
@@ -41,6 +42,10 @@ from sqlmesh.lsp.custom import (
     FORMAT_PROJECT_FEATURE,
     GET_ENVIRONMENTS_FEATURE,
     GET_MODELS_FEATURE,
+    GET_API_MODELS_FEATURE,
+    GET_MODEL_LINEAGE_FEATURE,
+    GET_COLUMN_LINEAGE_FEATURE,
+    GET_TABLE_DIFF_FEATURE,
     AllModelsRequest,
     AllModelsResponse,
     AllModelsForRenderRequest,
@@ -68,6 +73,10 @@ from sqlmesh.lsp.custom import (
     GetModelsRequest,
     GetModelsResponse,
     ModelInfo,
+    GetApiModelsRequest,
+    GetModelLineageRequest,
+    GetColumnLineageRequest,
+    GetTableDiffRequest,
 )
 from sqlmesh.lsp.errors import ContextFailedError, context_error_to_diagnostic
 from sqlmesh.lsp.helpers import to_lsp_range, to_sqlmesh_position
@@ -80,16 +89,12 @@ from sqlmesh.lsp.reference import (
 )
 from sqlmesh.lsp.rename import prepare_rename, rename_symbol, get_document_highlights
 from sqlmesh.lsp.uri import URI
+from sqlmesh.utils.date import to_timestamp
 from sqlmesh.utils.errors import ConfigError
 from sqlmesh.utils.lineage import ExternalModelReference
 from sqlmesh.utils.pydantic import PydanticModel
-from web.server.api.endpoints.lineage import column_lineage, model_lineage
-from web.server.api.endpoints.models import get_models
-from web.server.api.endpoints.table_diff import _process_sample_data
 from typing import Union
 from dataclasses import dataclass, field
-
-from web.server.models import RowDiff, SchemaDiff, TableDiff
 
 
 class InitializationOptions(PydanticModel):
@@ -162,7 +167,6 @@ class SQLMeshLanguageServer:
             ALL_MODELS_FEATURE: self._custom_all_models,
             RENDER_MODEL_FEATURE: self._custom_render_model,
             ALL_MODELS_FOR_RENDER_FEATURE: self._custom_all_models_for_render,
-            API_FEATURE: self._custom_api,
             SUPPORTED_METHODS_FEATURE: self._custom_supported_methods,
             FORMAT_PROJECT_FEATURE: self._custom_format_project,
             LIST_WORKSPACE_TESTS_FEATURE: self._list_workspace_tests,
@@ -170,6 +174,10 @@ class SQLMeshLanguageServer:
             RUN_TEST_FEATURE: self._run_test,
             GET_ENVIRONMENTS_FEATURE: self._custom_get_environments,
             GET_MODELS_FEATURE: self._custom_get_models,
+            GET_API_MODELS_FEATURE: self._custom_get_api_models,
+            GET_MODEL_LINEAGE_FEATURE: self._custom_get_model_lineage,
+            GET_COLUMN_LINEAGE_FEATURE: self._custom_get_column_lineage,
+            GET_TABLE_DIFF_FEATURE: self._custom_get_table_diff,
         }
 
         # Register LSP features (e.g., formatting, hover, etc.)
@@ -315,115 +323,65 @@ class SQLMeshLanguageServer:
                 models=[],
             )
 
-    def _custom_api(
-        self, ls: LanguageServer, request: ApiRequest
-    ) -> t.Union[
-        ApiResponseGetModels,
-        ApiResponseGetColumnLineage,
-        ApiResponseGetLineage,
-        ApiResponseGetTableDiff,
-    ]:
-        ls.log_trace(f"API request: {request}")
-        context = self._context_get_or_load()
+    def _custom_get_api_models(
+        self, ls: LanguageServer, params: GetApiModelsRequest
+    ) -> ApiResponseGetModels:
+        """Get all models with full details for the lineage webview."""
+        try:
+            context = self._context_get_or_load()
+            return ApiResponseGetModels(data=get_models(context.context))
+        except Exception as e:
+            ls.log_trace(f"Error getting API models: {e}")
+            return ApiResponseGetModels(response_error=str(e), data=[])
 
-        parsed_url = urllib.parse.urlparse(request.url)
-        path_parts = parsed_url.path.strip("/").split("/")
+    def _custom_get_model_lineage(
+        self, ls: LanguageServer, params: GetModelLineageRequest
+    ) -> ApiResponseGetLineage:
+        """Get a model's lineage graph."""
+        try:
+            context = self._context_get_or_load()
+            lineage = model_lineage(params.modelName, context.context)
+            non_set_lineage = {k: v for k, v in lineage.items() if v is not None}
+            return ApiResponseGetLineage(data=non_set_lineage)
+        except Exception as e:
+            ls.log_trace(f"Error getting model lineage: {e}")
+            return ApiResponseGetLineage(response_error=str(e), data={})
 
-        if request.method == "GET":
-            if path_parts == ["api", "models"]:
-                # /api/models
-                return ApiResponseGetModels(data=get_models(context.context))
+    def _custom_get_column_lineage(
+        self, ls: LanguageServer, params: GetColumnLineageRequest
+    ) -> ApiResponseGetColumnLineage:
+        """Get a column's lineage graph."""
+        try:
+            context = self._context_get_or_load()
+            return ApiResponseGetColumnLineage(
+                data=column_lineage(
+                    params.modelName, params.columnName, params.modelsOnly, context.context
+                )
+            )
+        except Exception as e:
+            ls.log_trace(f"Error getting column lineage: {e}")
+            return ApiResponseGetColumnLineage(response_error=str(e), data={})
 
-            if path_parts[:2] == ["api", "lineage"]:
-                if len(path_parts) == 3:
-                    # /api/lineage/{model}
-                    model_name = urllib.parse.unquote(path_parts[2])
-                    lineage = model_lineage(model_name, context.context)
-                    non_set_lineage = {k: v for k, v in lineage.items() if v is not None}
-                    return ApiResponseGetLineage(data=non_set_lineage)
-
-                if len(path_parts) == 4:
-                    # /api/lineage/{model}/{column}
-                    model_name = urllib.parse.unquote(path_parts[2])
-                    column = urllib.parse.unquote(path_parts[3])
-                    models_only = False
-                    if hasattr(request, "params"):
-                        models_only = bool(getattr(request.params, "models_only", False))
-                    column_lineage_response = column_lineage(
-                        model_name, column, models_only, context.context
-                    )
-                    return ApiResponseGetColumnLineage(data=column_lineage_response)
-
-            if path_parts[:2] == ["api", "table_diff"]:
-                import numpy as np
-
-                # /api/table_diff
-                params = request.params
-                table_diff_result: t.Optional[TableDiff] = None
-                if params := request.params:
-                    source = getattr(params, "source", "") if params else ""
-                    target = getattr(params, "target", "") if params else ""
-                    on = getattr(params, "on", None) if params else None
-                    model_or_snapshot = (
-                        getattr(params, "model_or_snapshot", None) if params else None
-                    )
-                    where = getattr(params, "where", None) if params else None
-                    temp_schema = getattr(params, "temp_schema", None) if params else None
-                    limit = getattr(params, "limit", 20) if params else 20
-
-                    table_diffs = context.context.table_diff(
-                        source=source,
-                        target=target,
-                        on=exp.condition(on) if on else None,
-                        select_models={model_or_snapshot} if model_or_snapshot else None,
-                        where=where,
-                        limit=limit,
-                        show=False,
-                    )
-
-                    if table_diffs:
-                        diff = table_diffs[0] if isinstance(table_diffs, list) else table_diffs
-
-                        _schema_diff = diff.schema_diff()
-                        _row_diff = diff.row_diff(temp_schema=temp_schema)
-                        schema_diff = SchemaDiff(
-                            source=_schema_diff.source,
-                            target=_schema_diff.target,
-                            source_schema=_schema_diff.source_schema,
-                            target_schema=_schema_diff.target_schema,
-                            added=_schema_diff.added,
-                            removed=_schema_diff.removed,
-                            modified=_schema_diff.modified,
-                        )
-
-                        # create a readable column-centric sample data structure
-                        processed_sample_data = _process_sample_data(_row_diff, source, target)
-
-                        row_diff = RowDiff(
-                            source=_row_diff.source,
-                            target=_row_diff.target,
-                            stats=_row_diff.stats,
-                            sample=_row_diff.sample.replace({np.nan: None}).to_dict(),
-                            joined_sample=_row_diff.joined_sample.replace({np.nan: None}).to_dict(),
-                            s_sample=_row_diff.s_sample.replace({np.nan: None}).to_dict(),
-                            t_sample=_row_diff.t_sample.replace({np.nan: None}).to_dict(),
-                            column_stats=_row_diff.column_stats.replace({np.nan: None}).to_dict(),
-                            source_count=_row_diff.source_count,
-                            target_count=_row_diff.target_count,
-                            count_pct_change=_row_diff.count_pct_change,
-                            decimals=getattr(_row_diff, "decimals", 3),
-                            processed_sample_data=processed_sample_data,
-                        )
-
-                        s_index, t_index, _ = diff.key_columns
-                        table_diff_result = TableDiff(
-                            schema_diff=schema_diff,
-                            row_diff=row_diff,
-                            on=[(s.name, t.name) for s, t in zip(s_index, t_index)],
-                        )
-                return ApiResponseGetTableDiff(data=table_diff_result)
-
-        raise NotImplementedError(f"API request not implemented: {request.url}")
+    def _custom_get_table_diff(
+        self, ls: LanguageServer, params: GetTableDiffRequest
+    ) -> ApiResponseGetTableDiff:
+        """Get a table diff between two environments."""
+        try:
+            context = self._context_get_or_load()
+            result = get_table_diff(
+                context=context.context,
+                source=params.source,
+                target=params.target,
+                on=params.on,
+                model_or_snapshot=params.model_or_snapshot,
+                where=params.where,
+                temp_schema=params.temp_schema,
+                limit=params.limit,
+            )
+            return ApiResponseGetTableDiff(data=result)
+        except Exception as e:
+            ls.log_trace(f"Error getting table diff: {e}")
+            return ApiResponseGetTableDiff(response_error=str(e), data=None)
 
     def _custom_supported_methods(
         self, ls: LanguageServer, params: SupportedMethodsRequest

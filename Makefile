@@ -14,7 +14,7 @@ else
 endif
 
 install-dev:
-	$(PIP) install -e ".[dev,web,slack,dlt,lsp]" ./examples/custom_materializations
+	$(PIP) install -e ".[dev,slack,dlt,lsp]" ./examples/custom_materializations
 
 install-doc:
 	$(PIP) install -r ./docs/requirements.txt
@@ -65,12 +65,6 @@ install-dev-dbt-%:
 style:
 	pre-commit run --all-files
 
-py-style:
-	SKIP=prettier,eslint pre-commit run --all-files
-
-ui-style:
-	pnpm run lint
-
 doc-test:
 	python -m pytest --doctest-modules sqlmesh/core sqlmesh/utils
 
@@ -95,22 +89,13 @@ api-docs:
 api-docs-serve:
 	python pdoc/cli.py
 
-ui-up:
-	docker compose -f ./web/docker-compose.yml up --build -d && $(if $(shell which open), open http://localhost:8001, echo "Open http://localhost:8001 in your browser.")
-
-ui-down:
-	docker compose -f ./web/docker-compose.yml down
-
-ui-build:
-	docker compose -f ./web/docker-compose.yml -f ./web/docker-compose.build.yml run app
-
 clean-build:
 	rm -rf build/ && rm -rf dist/ && rm -rf *.egg-info
 
 clear-caches:
 	find . -type d -name ".cache" -exec rm -rf {} + 2>/dev/null && echo "Successfully removed all .cache directories"
 
-dev-publish: ui-build clean-build publish
+dev-publish: clean-build publish
 
 jupyter-example:
 	jupyter lab tests/slows/jupyter/example_outputs.ipynb
@@ -168,7 +153,7 @@ guard-%:
 	fi
 
 engine-%-install:
-	$(PIP) install -e ".[dev,web,slack,lsp,${*}]" ./examples/custom_materializations
+	$(PIP) install -e ".[dev,slack,lsp,${*}]" ./examples/custom_materializations
 
 engine-docker-%-up:
 	docker compose -f ./tests/core/engine_adapter/integration/docker/compose.${*}.yaml up -d
@@ -237,15 +222,6 @@ fabric-test: guard-FABRIC_HOST guard-FABRIC_CLIENT_ID guard-FABRIC_CLIENT_SECRET
 
 gcp-postgres-test: guard-GCP_POSTGRES_INSTANCE_CONNECTION_STRING guard-GCP_POSTGRES_USER guard-GCP_POSTGRES_PASSWORD guard-GCP_POSTGRES_KEYFILE_JSON engine-gcppostgres-install
 	pytest -n auto -m "gcp_postgres" --reruns 3 --junitxml=test-results/junit-gcp-postgres.xml
-
-vscode_settings:
-	mkdir -p .vscode
-	cp -r ./tooling/vscode/*.json .vscode/
-
-vscode-generate-openapi:
-	python3 web/server/openapi.py --output vscode/openapi.json
-	pnpm run fmt
-	cd vscode/react && pnpm run generate:api
 
 benchmark-ci:
 	python benchmarks/lsp_render_model_bench.py --debug-single-value

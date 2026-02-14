@@ -1,6 +1,0 @@
-packages:
-  - vscode/bus
-  - vscode/extension
-  - vscode/react
-  - web/client
-  - web/common

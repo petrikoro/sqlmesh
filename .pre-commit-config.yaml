@@ -7,7 +7,7 @@ repos:
         language: python
         types_or: [python, pyi]
         require_serial: true
-        files: &files ^(sqlmesh/|sqlmesh_dbt/|tests/|web/|examples/|setup.py)
+        files: &files ^(sqlmesh/|sqlmesh_dbt/|tests/|examples/|setup.py)
       - id: ruff-format
         name: ruff-format
         entry: ruff format --force-exclude --line-length 100
@@ -25,6 +25,6 @@ repos:
         exclude: ^(tests/fixtures)
       - id: valid migrations
         name: valid migrations
-        entry: tooling/validating_migration_numbers.sh
+        entry: .github/scripts/validating_migration_numbers.sh
         language: system
         pass_filenames: false

@@ -599,19 +599,7 @@ sqlmesh create_external_models
     currency: STRING
 ```
 
-Now, when I run the command below in my terminal and click on the link it will open up my browser to show the column level lineage I know and love.
-
-```bash
-sqlmesh ui
-```
-
-```bash
-(venv) ✗ sqlmesh ui
-INFO:     Started server process [89705]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-```
+Now, I can inspect the column-level lineage.
 
 ![image.png](./incremental_time/node_level_audit_trail.png)
 

@@ -617,20 +617,6 @@ Options:
   --help               Show this message and exit.
 ```
 
-## ui
-
-```
-Usage: sqlmesh ui [OPTIONS]
-
-  Start a browser-based SQLMesh UI.
-
-Options:
-  --host TEXT                     Bind socket to this host. Default: 127.0.0.1
-  --port INTEGER                  Bind socket to this port. Default: 8000
-  --mode [ide|catalog|docs|plan]  Mode to start the UI in. Default: ide
-  --help                          Show this message and exit.
-```
-
 ## lint
 ```
 Usage: sqlmesh lint [OPTIONS]

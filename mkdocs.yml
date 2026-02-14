@@ -9,7 +9,6 @@ nav:
     - installation.md
     - quickstart/cli.md
     - quickstart/notebook.md
-    - quickstart/ui.md
   - Guides:
     - Project structure:
       - guides/projects.md
@@ -30,10 +29,8 @@ nav:
       - guides/testing.md
       - guides/model_selection.md
     - SQLMesh tools:
-      - guides/vscode.md
       - guides/tablediff.md
       - guides/linter.md
-      - guides/ui.md
     - Advanced usage:
       - guides/customizing_sqlmesh.md
       - guides/signals.md
