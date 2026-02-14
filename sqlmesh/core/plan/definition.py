@@ -247,8 +247,8 @@ class Plan(PydanticModel, frozen=True):
             plan_id=self.plan_id,
             previous_plan_id=self.previous_plan_id,
             expiration_ts=expiration_ts,
-            promoted_snapshot_ids=promoted_snapshot_ids,
-            previous_finalized_snapshots=previous_finalized_snapshots,
+            promoted_snapshot_ids=promoted_snapshot_ids,  # ty:ignore[unknown-argument]
+            previous_finalized_snapshots=previous_finalized_snapshots,  # ty:ignore[unknown-argument]
             requirements=self.context_diff.requirements,
             **self.environment_naming_info.dict(),
         )

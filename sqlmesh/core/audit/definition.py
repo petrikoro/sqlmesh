@@ -486,7 +486,7 @@ def load_audit(
     try:
         audit = audit_class(
             query=parsable_query,
-            expressions=parsable_statements,
+            expressions=parsable_statements,  # ty:ignore[unknown-argument]
             dialect=dialect,
             **extra_kwargs,
             **meta_fields,
@@ -494,7 +494,7 @@ def load_audit(
     except Exception as ex:
         _raise_config_error(str(ex), path)
 
-    audit._path = path
+    audit._path = path  # ty:ignore[invalid-assignment]
     return audit
 
 

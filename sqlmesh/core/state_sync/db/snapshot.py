@@ -99,8 +99,7 @@ class SnapshotState:
 
         for snapshot in snapshots:
             if isinstance(snapshot.node, SeedModel):
-                seed_model = t.cast(SeedModel, snapshot.node)
-                snapshot = snapshot.copy(update={"node": seed_model.to_dehydrated()})
+                snapshot = snapshot.copy(update={"node": snapshot.node.to_dehydrated()})
             snapshots_to_store.append(snapshot)
 
         self.engine_adapter.insert_append(
@@ -364,7 +363,7 @@ class SnapshotState:
                 name=name,
                 identifier=identifier,
                 version=version,
-                kind_name=kind_name or None,
+                kind_name=kind_name or None,  # ty:ignore[unknown-argument]
                 dev_version=dev_version,
                 fingerprint=fingerprint,
             )
@@ -494,8 +493,7 @@ class SnapshotState:
         snapshots_to_store = []
         for snapshot in snapshots:
             if isinstance(snapshot.node, SeedModel):
-                seed_model = t.cast(SeedModel, snapshot.node)
-                snapshot = snapshot.copy(update={"node": seed_model.to_dehydrated()})
+                snapshot = snapshot.copy(update={"node": snapshot.node.to_dehydrated()})
             snapshots_to_store.append(snapshot)
 
         self.engine_adapter.insert_append(
@@ -708,7 +706,7 @@ class SnapshotState:
                 name=name,
                 identifier=identifier,
                 version=version,
-                kind_name=kind_name or None,
+                kind_name=kind_name or None,  # ty:ignore[unknown-argument]
                 dev_version=dev_version,
                 fingerprint=SnapshotFingerprint.parse_raw(fingerprint),
             )
@@ -732,7 +730,7 @@ def parse_snapshot(
             "unrestorable": unrestorable,
             "forward_only": forward_only,
             "next_auto_restatement_ts": next_auto_restatement_ts,
-        }
+        }  # ty:ignore[invalid-argument-type]
     )
 
 

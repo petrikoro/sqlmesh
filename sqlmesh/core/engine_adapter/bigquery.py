@@ -313,7 +313,7 @@ class BigQueryEngineAdapter(ClusteredByMixin, RowDiffMixin, GrantsFromInfoSchema
             self.execute(exp.select("*").from_(table).limit(0))
             query_job = self._query_job
             assert query_job is not None
-            return query_job._query_results.schema
+            return query_job._query_results.schema  # ty:ignore[unresolved-attribute]
         return self._get_table(table).schema
 
     def columns(
@@ -372,7 +372,7 @@ class BigQueryEngineAdapter(ClusteredByMixin, RowDiffMixin, GrantsFromInfoSchema
             assert query_job is not None
 
             query_results = query_job._query_results
-            columns = create_mapping_schema(query_results.schema)
+            columns = create_mapping_schema(query_results.schema)  # ty:ignore[unresolved-attribute]
         else:
             bq_table = self._get_table(table)
             columns = create_mapping_schema(bq_table.schema)
@@ -1125,13 +1125,13 @@ class BigQueryEngineAdapter(ClusteredByMixin, RowDiffMixin, GrantsFromInfoSchema
 
         results = self._db_call(
             query_job.result,
-            timeout=self._extra_config.get("job_execution_timeout_seconds"),  # type: ignore
+            timeout=self._extra_config.get("job_execution_timeout_seconds"),
         )
 
         self._query_data = iter(results) if results.total_rows else iter([])
         query_results = query_job._query_results
         self.cursor._set_rowcount(query_results)
-        self.cursor._set_description(query_results.schema)
+        self.cursor._set_description(query_results.schema)  # ty:ignore[unresolved-attribute]
 
         if (
             track_rows_processed
@@ -1257,10 +1257,14 @@ class BigQueryEngineAdapter(ClusteredByMixin, RowDiffMixin, GrantsFromInfoSchema
                 )
             )
 
-    def _normalize_decimal_value(self, col: exp.Expression, precision: int) -> exp.Expression:
+    def _normalize_decimal_value(
+        self, col: exp.Expression, precision: int
+    ) -> exp.Expression:  # ty:ignore[invalid-method-override]
         return exp.func("FORMAT", exp.Literal.string(f"%.{precision}f"), col)
 
-    def _normalize_nested_value(self, col: exp.Expression) -> exp.Expression:
+    def _normalize_nested_value(
+        self, col: exp.Expression
+    ) -> exp.Expression:  # ty:ignore[invalid-method-override]
         return exp.func("TO_JSON_STRING", col, dialect=self.dialect)
 
     @t.overload
@@ -1430,7 +1434,7 @@ class BigQueryEngineAdapter(ClusteredByMixin, RowDiffMixin, GrantsFromInfoSchema
             if object_kind:
                 args["kind"] = exp.Var(this=object_kind)
 
-            expressions.append(dcl_cmd(**args))  # type: ignore[arg-type]
+            expressions.append(dcl_cmd(**args))
 
         return expressions
 

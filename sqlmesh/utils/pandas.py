@@ -33,11 +33,11 @@ def get_pandas_type_mappings() -> t.Dict[t.Any, exp.DataType]:
         pd.Int64Dtype(): exp.DataType.build("bigint"),
         pd.Float32Dtype(): exp.DataType.build("float"),
         pd.Float64Dtype(): exp.DataType.build("double"),
-        pd.StringDtype(): exp.DataType.build("text"),  # type: ignore
+        pd.StringDtype(): exp.DataType.build("text"),
         pd.BooleanDtype(): exp.DataType.build("boolean"),
     }
     try:
-        import pyarrow  # type: ignore  # noqa
+        import pyarrow  # noqa
 
         # Only add this if pyarrow is installed
         mappings[pd.StringDtype("pyarrow")] = exp.DataType.build("text")

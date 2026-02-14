@@ -105,7 +105,7 @@ class PostgresEngineAdapter(
         Uses prefix '_' instead of '__temp' to keep table names shorter for PostgreSQL's
         63-character identifier limit.
         """
-        table = t.cast(exp.Table, exp.to_table(table).copy())
+        table = exp.to_table(table).copy()
         table.set(
             "this", exp.to_identifier(f"_{table.name}_{random_id(short=True)}", quoted=quoted)
         )
@@ -153,7 +153,7 @@ class PostgresEngineAdapter(
         # Merge isn't supported until Postgres 15
         major, minor = self.server_version
         merge_impl = super().merge if major >= 15 else partial(logical_merge, self)
-        merge_impl(  # type: ignore
+        merge_impl(
             target_table,
             source_table,
             target_columns_to_types,

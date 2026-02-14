@@ -119,6 +119,7 @@ class model(registry_decorator):
             )
             if not blueprints:
                 raise_config_error("Failed to render blueprints property", path)
+                raise  # unreachable, but helps type narrowing
 
             if len(blueprints) > 1:
                 blueprints = [exp.Tuple(expressions=blueprints)]
@@ -159,7 +160,7 @@ class model(registry_decorator):
     ) -> Model:
         """Get the model registered by this function."""
         env: t.Dict[str, t.Tuple[t.Any, t.Optional[bool]]] = {}
-        entrypoint = self.func.__name__
+        entrypoint = self.func.__name__  # ty:ignore[unresolved-attribute]
 
         if not self.name_provided and not infer_names:
             raise ConfigError("Python model must have a name.")
@@ -238,11 +239,22 @@ class model(registry_decorator):
             statements = common_kwargs.get(key)
             if statements:
                 common_kwargs[key] = [
-                    parse_one(s, dialect=common_kwargs.get("dialect")) if isinstance(s, str) else s
-                    for s in statements
+                    parse_one(
+                        s,
+                        dialect=common_kwargs.get("dialect"),  # ty:ignore[invalid-argument-type]
+                    )
+                    if isinstance(s, str)
+                    else s
+                    for s in statements  # ty:ignore[not-iterable]
                 ]
 
         if self.is_sql:
             query = MacroFunc(this=exp.Anonymous(this=entrypoint))
-            return create_sql_model(query=query, **common_kwargs)
-        return create_python_model(entrypoint=entrypoint, **common_kwargs)
+            return create_sql_model(
+                query=query,
+                **common_kwargs,  # ty:ignore[invalid-argument-type]
+            )
+        return create_python_model(
+            entrypoint=entrypoint,
+            **common_kwargs,  # ty:ignore[invalid-argument-type]
+        )

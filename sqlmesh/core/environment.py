@@ -95,9 +95,9 @@ class EnvironmentNamingInfo(PydanticModel):
             if re.match(re_pattern, name):
                 return cls(
                     catalog_name_override=catalog_name,
-                    **construction_kwargs,
+                    **construction_kwargs,  # ty:ignore[invalid-argument-type]
                 )
-        return cls(**construction_kwargs)
+        return cls(**construction_kwargs)  # ty:ignore[invalid-argument-type]
 
 
 class EnvironmentSummary(PydanticModel):

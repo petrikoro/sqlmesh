@@ -221,7 +221,7 @@ class ConsoleNotificationTarget(BaseTextBasedNotificationTarget):
     @property
     def console(self) -> Console:
         if not self._console:
-            self._console = get_console()
+            self._console = get_console()  # ty:ignore[invalid-assignment]
         return self._console
 
     def send_text_message(self, notification_status: NotificationStatus, msg: str) -> None:
@@ -310,7 +310,7 @@ class SlackWebhookNotificationTarget(BaseSlackNotificationTarget):
             if not self.url:
                 raise ConfigError("Missing Slack webhook URL")
 
-            self._client = WebhookClient(url=self.url)
+            self._client = WebhookClient(url=self.url)  # ty:ignore[invalid-assignment]
         return self._client
 
     def _send_slack_message(self, composed: slack.TSlackMessage) -> None:
@@ -341,7 +341,7 @@ class SlackApiNotificationTarget(BaseSlackNotificationTarget):
                     "Missing Slack dependencies. Run `pip install 'sqlmesh[slack]'` to install them."
                 ) from e
 
-            self._client = WebClient(token=self.token)
+            self._client = WebClient(token=self.token)  # ty:ignore[invalid-assignment]
         return self._client
 
     def _send_slack_message(self, composed: slack.TSlackMessage) -> None:

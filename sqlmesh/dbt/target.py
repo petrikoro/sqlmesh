@@ -503,7 +503,7 @@ class DatabricksConfig(TargetConfig):
     host: str
     http_path: str
     token: t.Optional[str] = None  # only required if auth_type is not set to 'oauth'
-    database: t.Optional[str] = Field(alias="catalog")  # type: ignore
+    database: t.Optional[str] = Field(alias="catalog")
     auth_type: t.Optional[str] = None
     client_id: t.Optional[str] = None
     client_secret: t.Optional[str] = None
@@ -639,7 +639,7 @@ class BigQueryConfig(TargetConfig):
             else self.timeout_seconds
         )
         return BigQueryConnectionConfig(
-            method=self.method,
+            method=self.method,  # ty:ignore[invalid-argument-type]
             project=self.database,
             execution_project=self.execution_project,
             quota_project=self.quota_project,
@@ -760,7 +760,9 @@ class MSSQLConfig(TargetConfig):
     def column_class(cls) -> t.Type[Column]:
         try:
             # 1.8.0+
-            from dbt.adapters.sqlserver.sqlserver_column import SQLServerColumn
+            from dbt.adapters.sqlserver.sqlserver_column import (  # ty:ignore[unresolved-import]
+                SQLServerColumn,
+            )
         except ImportError:
             # <1.8.0
             from dbt.adapters.sqlserver.sql_server_column import SQLServerColumn  # type: ignore
@@ -774,7 +776,7 @@ class MSSQLConfig(TargetConfig):
     @with_schema_differ_overrides
     def to_sqlmesh(self, **kwargs: t.Any) -> ConnectionConfig:
         return MSSQLConnectionConfig(
-            host=self.host,
+            host=self.host,  # ty:ignore[invalid-argument-type]
             user=self.user,
             password=self.password,
             port=self.port,
@@ -891,10 +893,10 @@ class TrinoConfig(TargetConfig):
         return TrinoConnectionConfig(
             method=self._method_to_auth_enum[self.method],
             host=self.host,
-            user=self.user,
+            user=self.user,  # ty:ignore[invalid-argument-type]
             catalog=self.database,
             port=self.port,
-            http_scheme=self.http_scheme,
+            http_scheme=self.http_scheme,  # ty:ignore[invalid-argument-type]
             roles=self.roles,
             http_headers=self.http_headers,
             session_properties=self.session_properties,
@@ -1084,7 +1086,7 @@ class AthenaConfig(TargetConfig):
     @with_schema_differ_overrides
     def to_sqlmesh(self, **kwargs: t.Any) -> ConnectionConfig:
         return AthenaConnectionConfig(
-            type="athena",
+            type="athena",  # ty:ignore[unknown-argument]
             aws_access_key_id=self.aws_access_key_id,
             aws_secret_access_key=self.aws_secret_access_key,
             region_name=self.region_name,

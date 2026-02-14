@@ -4,7 +4,7 @@ from importlib import import_module
 from pathlib import Path
 from unittest import mock
 
-from pdoc.__main__ import cli, parser
+from pdoc.__main__ import cli, parser  # ty:ignore[unresolved-import]
 
 # Need this import or else import_module doesn't work
 import sqlmesh

@@ -111,7 +111,7 @@ class PackageLoader:
         sources = self._context.manifest.sources(package_name)
 
         config_paths = {
-            config.path.absolute()  # type: ignore
+            config.path.absolute()
             for configs in [models.values(), seeds.values(), macros.values()]
             for config in configs
         }

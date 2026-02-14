@@ -7,7 +7,7 @@ import agate
 from sqlmesh.dbt.util import DBT_VERSION
 
 if DBT_VERSION >= (1, 8, 0):
-    from dbt_common.clients import agate_helper  # type: ignore
+    from dbt_common.clients import agate_helper
 
     SUPPORTS_DELIMITER = True
 else:

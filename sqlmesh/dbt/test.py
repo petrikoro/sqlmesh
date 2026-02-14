@@ -155,7 +155,7 @@ class TestConfig(GeneralConfig):
         jinja_macros.add_globals(
             {
                 "config": self.config_attribute_dict,
-                **test_context.jinja_globals,  # type: ignore
+                **test_context.jinja_globals,
             }
         )
 
@@ -169,16 +169,16 @@ class TestConfig(GeneralConfig):
             jinja_macros.add_globals({"this": self.relation_info})
             audit = StandaloneAudit(
                 name=self.name,
-                dbt_node_info=self.node_info,
+                dbt_node_info=self.node_info,  # ty:ignore[unknown-argument]
                 dialect=self.dialect(context),
                 skip=skip,
-                query=query,
+                query=query,  # ty:ignore[invalid-argument-type]
                 jinja_macros=jinja_macros,
                 depends_on={
                     model.canonical_name(context) for model in test_context.refs.values()
                 }.union(
                     {source.canonical_name(context) for source in test_context.sources.values()}
-                ),
+                ),  # ty:ignore[unknown-argument]
                 tags=self.tags,
                 default_catalog=context.target.database,
                 **self.sqlmesh_config_kwargs,
@@ -186,15 +186,15 @@ class TestConfig(GeneralConfig):
         else:
             audit = ModelAudit(
                 name=self.name,
-                dbt_node_info=self.node_info,
+                dbt_node_info=self.node_info,  # ty:ignore[unknown-argument]
                 dialect=self.dialect(context),
                 skip=skip,
                 blocking=blocking,
-                query=query,
+                query=query,  # ty:ignore[invalid-argument-type]
                 jinja_macros=jinja_macros,
             )
 
-        audit._path = self.path
+        audit._path = self.path  # ty:ignore[invalid-assignment]
         return audit
 
     def _kwargs(self) -> str:

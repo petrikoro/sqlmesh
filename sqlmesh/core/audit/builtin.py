@@ -29,7 +29,7 @@ WHERE @AND(
   ),
   @condition,
 )
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # unique_values(columns=(column_1, column_2))
@@ -54,7 +54,7 @@ WHERE @REDUCE(
   ),
   (l, r) -> l OR r
 )
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # accepted_values(column=column_name, is_in=(1, 2, 3))
@@ -65,7 +65,7 @@ accepted_values_audit = ModelAudit(
 SELECT *
 FROM @this_model
 WHERE @AND(@column NOT IN @is_in, @condition)
-""",
+""",  # ty:ignore[invalid-argument-type]
 )
 
 # number_of_rows(threshold=100)
@@ -81,7 +81,7 @@ FROM (
   LIMIT @threshold + 1
 )
 HAVING COUNT(*) <= @threshold
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # forall(criteria=(
@@ -106,7 +106,7 @@ WHERE
     ),
     @condition,
   )
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # accepted_range(column=age, min_v=0, max_v=100)
@@ -133,7 +133,7 @@ WHERE
     ),
     @condition,
   )
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # at_least_one(column=column_name)
@@ -146,7 +146,7 @@ FROM @this_model
 WHERE @condition
 GROUP BY 1
 HAVING COUNT(@column) = 0
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # not_constant(column=column_name)
@@ -161,7 +161,7 @@ FROM (
   WHERE @condition
 ) AS r
 WHERE r.t_cardinality <= 1
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # not_empty_string(column=column_name)
@@ -172,7 +172,7 @@ not_empty_string_audit = ModelAudit(
 SELECT *
 FROM @this_model
 WHERE @AND(@column = '', @condition)
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # not_null_proportion(column=column_name, threshold=0.9)
@@ -190,7 +190,7 @@ FROM (
   WHERE @condition
 ) AS s
 WHERE s.cnt_not_null <= s.cnt_tot * @threshold
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # not_accepted_values(column=column_name, is_in=(1, 2, 3))
@@ -201,7 +201,7 @@ not_accepted_values_audit = ModelAudit(
 SELECT *
 FROM @this_model
 WHERE @AND(@column IN @is_in, @condition)
-""",
+""",  # ty:ignore[invalid-argument-type]
 )
 
 # sequential_values(column=column_name, interval=1)
@@ -226,7 +226,7 @@ WITH windowed AS (
 
 SELECT *
 FROM validation_errors
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # unique_combination_of_columns(columns=(column_1, column_2))
@@ -239,7 +239,7 @@ FROM @this_model
 WHERE @condition
 GROUP BY @EACH(@columns, c -> c)
 HAVING COUNT(*) > 1
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # mutually_exclusive_ranges(lower_bound_column=date_from, upper_bound_column=date_to)
@@ -286,7 +286,7 @@ WITH window_functions AS (
 
 SELECT *
 FROM validation_errors
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # valid_uuid(column=column_name)
@@ -301,7 +301,7 @@ WHERE @AND(
   @condition,
 )
 
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # valid_url(column=column_name)
@@ -312,7 +312,7 @@ valid_url_audit = ModelAudit(
 SELECT *
 FROM @this_model
 WHERE @AND(NOT REGEXP_LIKE(@column, '^(https?|ftp)://[^\s/$.?#].[^\s]*$'), @condition)
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # valid_http_method(column=column_name)
@@ -322,7 +322,7 @@ valid_http_method_audit = ModelAudit(
 SELECT *
 FROM @this_model
 WHERE NOT @column IN ('GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS', 'TRACE', 'CONNECT')
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # valid_email(column=column_name)
@@ -333,7 +333,7 @@ valid_email_audit = ModelAudit(
 SELECT *
 FROM @this_model
 WHERE @AND(NOT REGEXP_LIKE(@column, '^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'), @condition)
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # match_regex_pattern_list(column=column_name, patterns=('^pattern_1', 'pattern_2$'))
@@ -353,7 +353,7 @@ WHERE @AND(
   ),
   @condition,
 )
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # not_match_regex_pattern_list(column=column_name, patterns=('^pattern_1', 'pattern_2$'))
@@ -373,7 +373,7 @@ WHERE @AND(
   ),
   @condition,
 )
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # match_like_pattern_list(column=column_name, patterns=('%pattern_1%', 'pattern_2%'))
@@ -393,7 +393,7 @@ WHERE @AND(
   ),
   @condition,
 )
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # not_match_like_pattern_list(column=column_name, patterns=('%pattern_1%', 'pattern_2%'))
@@ -413,7 +413,7 @@ WHERE @AND(
   ),
   @condition,
 )
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # z_score(column=column_name, threshold=3)
@@ -433,7 +433,7 @@ SELECT
   (@column - mean_@column) / NULLIF(stddev_@column, 0) AS z_score
 FROM @this_model, stats
 WHERE ABS((@column - mean_@column) / NULLIF(stddev_@column, 0)) > @threshold
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # string_length_between(column=column_name, max_v=22)
@@ -458,7 +458,7 @@ WHERE
     ),
     @condition,
   )
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # string_length_equal(column=column_name, v=22)
@@ -469,7 +469,7 @@ string_length_equal_audit = ModelAudit(
 SELECT *
 FROM @this_model
 WHERE @AND(LENGTH(@column) != @v, @condition)
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # stddev_in_range(column=age, min_v=2.5, max_v=25)
@@ -495,7 +495,7 @@ WHERE
     @IF(@max_v IS NOT NULL AND @inclusive, stddev_@column > @max_v, NULL),
     @IF(@max_v IS NOT NULL AND NOT @inclusive, stddev_@column >= @max_v, NULL),
   )
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # mean_in_range(column=age, min_v=2.5, max_v=25)
@@ -521,7 +521,7 @@ WHERE
     @IF(@max_v IS NOT NULL AND @inclusive, mean_@column > @max_v, NULL),
     @IF(@max_v IS NOT NULL AND NOT @inclusive, mean_@column >= @max_v, NULL),
   )
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # kl_divergence(column=age, target_column=normalized_age, threshold=0.1)
@@ -610,7 +610,7 @@ SELECT
 FROM unioned
 GROUP BY @source_column, @target_column
 HAVING kl_divergence > @threshold
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # chi_square(column_a=account_tier, column_b=account_user_segment, dependent=true, critical_value=9.48773)
@@ -625,7 +625,7 @@ chi_square_audit = ModelAudit(
         "@def(c, (SELECT COUNT(DISTINCT x_a) FROM contingency_table))",
         "@def(r, (SELECT COUNT(DISTINCT x_b) FROM contingency_table))",
         "@def(E, (tot_a * tot_b / g_t))",
-    ],
+    ],  # ty:ignore[unknown-argument]
     defaults={"dependent": exp.true(), "condition": exp.true()},
     query="""
 WITH
@@ -657,7 +657,7 @@ FROM contingency_table
 -- if chi_square > critical_value, reject H0
 -- if chi_square <= critical_value, fail to reject H0
 HAVING NOT @IF(@dependent, chi_square > @critical_value, chi_square <= @critical_value)
-    """,
+    """,  # ty:ignore[invalid-argument-type]
 )
 
 # The following audits are not yet implemented

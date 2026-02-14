@@ -5,7 +5,6 @@ import logging
 import typing as t
 
 from sqlglot import exp
-from sqlglot.helper import ensure_list
 from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 
@@ -347,7 +346,8 @@ class SnowflakeEngineAdapter(
                     table_properties.pop(prop, None)
 
             table_type = self._pop_creatable_type_from_properties(table_properties)
-            properties.extend(ensure_list(table_type))
+            if table_type is not None:
+                properties.append(table_type)
 
             properties.extend(self._table_or_view_properties_to_expressions(table_properties))
 
@@ -420,17 +420,17 @@ class SnowflakeEngineAdapter(
                 # See: https://stackoverflow.com/a/75627721
                 for column, kind in source_columns_to_types.items():
                     if is_datetime64_any_dtype(ordered_df.dtypes[column]):
-                        if kind.is_type("date"):  # type: ignore
-                            ordered_df[column] = pd.to_datetime(ordered_df[column]).dt.date  # type: ignore
-                        elif getattr(ordered_df.dtypes[column], "tz", None) is not None:  # type: ignore
+                        if kind.is_type("date"):
+                            ordered_df[column] = pd.to_datetime(ordered_df[column]).dt.date
+                        elif getattr(ordered_df.dtypes[column], "tz", None) is not None:
                             ordered_df[column] = pd.to_datetime(ordered_df[column]).dt.strftime(
                                 "%Y-%m-%d %H:%M:%S.%f%z"
-                            )  # type: ignore
+                            )
                         # https://github.com/snowflakedb/snowflake-connector-python/issues/1677
-                        else:  # type: ignore
+                        else:
                             ordered_df[column] = pd.to_datetime(ordered_df[column]).dt.strftime(
                                 "%Y-%m-%d %H:%M:%S.%f"
-                            )  # type: ignore
+                            )
 
                 # create the table first using our usual method ensure the column datatypes match what we parsed with sqlglot
                 # otherwise we would be trusting `write_pandas()` from the snowflake lib to do this correctly
@@ -717,7 +717,7 @@ class SnowflakeEngineAdapter(
 
     def close(self) -> t.Any:
         if snowpark_session := self._connection_pool.get_attribute(self.SNOWPARK):
-            snowpark_session.close()  # type: ignore
+            snowpark_session.close()
             self._connection_pool.set_attribute(self.SNOWPARK, None)
 
         return super().close()

@@ -35,7 +35,7 @@ from sqlmesh.utils.jinja import (
 if sys.version_info >= (3, 12):
     from importlib import metadata
 else:
-    import importlib_metadata as metadata  # type: ignore
+    import importlib_metadata as metadata
 
 if t.TYPE_CHECKING:
     from sqlmesh.core.audit import Audit, ModelAudit
@@ -118,9 +118,9 @@ def sqlmesh_config(
                     state_connection=state_connection,
                     **gateway_kwargs,
                 )
-            },  # type: ignore
+            },
             **kwargs,
-        },
+        },  # ty:ignore[invalid-argument-type]
     )
 
 
@@ -410,7 +410,7 @@ class DbtLoader(Loader):
                 loader=loader,
             )
             for model in models:
-                model._path = target_path
+                model._path = target_path  # ty:ignore[invalid-assignment]
 
             return models
 

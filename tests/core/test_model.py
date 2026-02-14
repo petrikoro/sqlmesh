@@ -1272,7 +1272,7 @@ def test_seed_case_sensitive_columns(tmp_path):
         "camelCaseString": exp.DataType.build("text"),
         "camelCaseTimestamp": exp.DataType.build("TIMESTAMP"),
     }
-    df = next(model.render(context=None))
+    df = next(model.render_seed())
 
     assert df["camelCaseId"].dtype == "int64"
     assert df["camelCaseId"].iloc[0] == 1
@@ -1510,7 +1510,7 @@ def test_seed_model_custom_types(tmp_path):
         },
     )
 
-    df = next(model.render(context=None))
+    df = next(model.render_seed())
 
     assert df["ds_date"].dtype == "object"
     assert df["ds_date"].iloc[0] == date(2022, 1, 1)
@@ -10386,7 +10386,7 @@ def test_seed_dont_coerce_na_into_null(tmp_path):
     assert isinstance(model.kind, SeedKind)
     assert model.seed is not None
     assert len(model.seed.content) > 0
-    assert next(model.render(context=None)).to_dict() == {"code": {0: "NA"}}
+    assert next(model.render_seed()).to_dict() == {"code": {0: "NA"}}
 
 
 def test_seed_coerce_datetime(tmp_path):
@@ -10410,7 +10410,7 @@ def test_seed_coerce_datetime(tmp_path):
     )
 
     model = load_sql_based_model(expressions, path=Path("./examples/sushi/models/test_model.sql"))
-    df = next(model.render(context=None))
+    df = next(model.render_seed())
     assert df["bad_datetime"].iloc[0] == "9999-12-31 23:59:59"
 
 
@@ -10435,7 +10435,7 @@ def test_seed_invalid_date_column(tmp_path):
     )
 
     model = load_sql_based_model(expressions, path=Path("./examples/sushi/models/test_model.sql"))
-    df = next(model.render(context=None))
+    df = next(model.render_seed())
     # The conversion to date should not raise an error
     assert df["bad_date"].to_list() == ["9999-12-31", "2025-01-01", "1000-01-01"]
 
@@ -10466,7 +10466,7 @@ def test_seed_missing_columns(tmp_path):
     with pytest.raises(
         ConfigError, match="Seed model 'db.seed' has missing columns: {'missing_column'}.*"
     ):
-        next(model.render(context=None))
+        next(model.render_seed())
 
 
 def test_missing_column_data_in_columns_key():

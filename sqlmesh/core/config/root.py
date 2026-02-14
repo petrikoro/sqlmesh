@@ -197,7 +197,7 @@ class Config(BaseConfig):
     }
 
     _connection_config_validator = connection_config_validator
-    _scheduler_config_validator = scheduler_config_validator  # type: ignore
+    _scheduler_config_validator = scheduler_config_validator
     _variables_validator = variables_validator
 
     @model_validator(mode="before")

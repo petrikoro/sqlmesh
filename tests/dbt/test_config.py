@@ -13,6 +13,7 @@ from sqlmesh import Context
 from sqlmesh.core.audit import StandaloneAudit
 from sqlmesh.core.config import Config, ModelDefaultsConfig
 from sqlmesh.core.dialect import jinja_query
+from sqlmesh.dbt.test import Severity
 from sqlmesh.core.model import SqlModel
 from sqlmesh.core.model.kind import OnDestructiveChange, OnAdditiveChange
 from sqlmesh.core.state_sync import CachingStateSync, EngineAdapterStateSync
@@ -197,7 +198,7 @@ def test_test_to_sqlmesh_fields():
         sql=sql,
         model_name="Foo",
         column_name="cost",
-        severity="ERROR",
+        severity=Severity.ERROR,
         enabled=True,
     )
 
@@ -220,7 +221,7 @@ def test_test_to_sqlmesh_fields():
         sql=sql,
         model_name="Foo",
         column_name="id",
-        severity="WARN",
+        severity=Severity.WARN,
         enabled=False,
     )
 
@@ -237,7 +238,7 @@ def test_test_to_sqlmesh_fields():
         sql=sql,
         model_name="Foo",
         column_name="id",
-        severity="WARN",
+        severity=Severity.WARN,
         enabled=False,
         dialect="bigquery",
     )
@@ -282,7 +283,7 @@ def test_singular_test_to_standalone_audit(dbt_dummy_postgres_config: PostgresCo
         cron="@monthly",
         interval_unit="Day",
         sql=sql,
-        severity="ERROR",
+        severity=Severity.ERROR,
         enabled=True,
         dependencies=Dependencies(refs=["bar"]),
     )
@@ -988,7 +989,7 @@ def test_clickhouse_config():
 
 
 def test_connection_args(tmp_path):
-    dbt_project_dir = "tests/fixtures/dbt/sushi_test"
+    dbt_project_dir = Path("tests/fixtures/dbt/sushi_test")
 
     config = sqlmesh_config(dbt_project_dir)
     assert not config.gateways["in_memory"].connection.register_comments
@@ -1001,7 +1002,7 @@ def test_custom_dbt_loader():
     from sqlmesh.core.loader import SqlMeshLoader
     from sqlmesh.dbt.loader import DbtLoader
 
-    dbt_project_dir = "tests/fixtures/dbt/sushi_test"
+    dbt_project_dir = Path("tests/fixtures/dbt/sushi_test")
     with pytest.raises(ConfigError, match="The loader must be a DbtLoader."):
         sqlmesh_config(dbt_project_dir, loader=SqlMeshLoader)
 

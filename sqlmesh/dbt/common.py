@@ -21,7 +21,7 @@ from sqlmesh.utils.yaml import load
 T = t.TypeVar("T", bound="GeneralConfig")
 
 PROJECT_FILENAME = DBT_PROJECT_FILENAME
-RAW_CODE_KEY = "raw_code" if DBT_VERSION >= (1, 3, 0) else "raw_sql"  # type: ignore
+RAW_CODE_KEY = "raw_code" if DBT_VERSION >= (1, 3, 0) else "raw_sql"
 
 JINJA_ONLY = {
     "adapter",

@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 
 
 def yaml_to_columns(
-    yaml: t.Dict[str, ColumnConfig] | t.List[t.Dict[str, ColumnConfig]],
+    yaml: t.Dict[str, t.Any] | t.List[t.Dict[str, t.Any]],
 ) -> t.Dict[str, ColumnConfig]:
     columns = {}
-    mappings: t.List[t.Dict[str, ColumnConfig]] = ensure_list(yaml)
+    mappings: t.List[t.Dict[str, t.Any]] = ensure_list(yaml)  # ty:ignore[invalid-assignment]
     for column in mappings:
         config = ColumnConfig(**column)
         columns[config.name] = config

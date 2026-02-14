@@ -415,7 +415,7 @@ class GenericContext(BaseContext, t.Generic[C]):
         self._loaded: bool = False
         self._selector_cls = selector or NativeSelector
 
-        self.path, self.config = t.cast(t.Tuple[Path, C], next(iter(self.configs.items())))
+        self.path, self.config = next(iter(self.configs.items()))
 
         self._all_dialects: t.Set[str] = {self.config.dialect or ""}
 
@@ -531,7 +531,7 @@ class GenericContext(BaseContext, t.Generic[C]):
         path = model._path
 
         model = model.copy(update=kwargs)
-        model._path = path
+        model._path = path  # ty:ignore[invalid-assignment]
 
         self.dag.add(model.fqn, model.depends_on)
 
@@ -614,7 +614,7 @@ class GenericContext(BaseContext, t.Generic[C]):
                 self.console.log_status_update("Initializing new project state...")
                 self._state_sync.migrate()
             self._state_sync.get_versions()
-            self._state_sync = CachingStateSync(self._state_sync)  # type: ignore
+            self._state_sync = CachingStateSync(self._state_sync)
         return self._state_sync
 
     @property
@@ -700,7 +700,7 @@ class GenericContext(BaseContext, t.Generic[C]):
 
         if update_schemas:
             for fqn in self.dag:
-                model = self._models.get(fqn)  # type: ignore
+                model = self._models.get(fqn)
 
                 if not model or fqn in uncached:
                     continue
@@ -1052,7 +1052,7 @@ class GenericContext(BaseContext, t.Generic[C]):
         path = node._path
         if path is None:
             return self.config
-        return self.config_for_path(path)[0]  # type: ignore
+        return self.config_for_path(path)[0]
 
     @property
     def models(self) -> MappingProxyType[str, Model]:

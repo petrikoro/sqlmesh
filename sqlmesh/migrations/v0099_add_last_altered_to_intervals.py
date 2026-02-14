@@ -3,7 +3,7 @@
 from sqlglot import exp
 
 
-def migrate_schemas(engine_adapter, schema, **kwargs):  # type: ignore
+def migrate_schemas(engine_adapter, schema, **kwargs):
     intervals_table = "_intervals"
     if schema:
         intervals_table = f"{schema}.{intervals_table}"
@@ -21,5 +21,5 @@ def migrate_schemas(engine_adapter, schema, **kwargs):  # type: ignore
     engine_adapter.execute(alter_table_exp)
 
 
-def migrate_rows(engine_adapter, schema, **kwargs):  # type: ignore
+def migrate_rows(engine_adapter, schema, **kwargs):
     pass

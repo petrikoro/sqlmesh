@@ -348,7 +348,7 @@ class Loader(abc.ABC):
                                 "dialect": self.config.model_defaults.dialect,
                                 "default_catalog": self.context.default_catalog,
                                 **row,
-                            },
+                            },  # ty:ignore[invalid-argument-type]
                         )
                         for row in yaml
                     ]
@@ -628,7 +628,7 @@ class SqlMeshLoader(Loader):
                                     path,
                                 )
                             elif model.enabled:
-                                model._path = path
+                                model._path = path  # ty:ignore[invalid-assignment]
                                 models[model.fqn] = model
                     except Exception as ex:
                         raise ConfigError(self._failed_to_load_model_error(path, ex), path)
@@ -824,7 +824,9 @@ class SqlMeshLoader(Loader):
 
             return [
                 EnvironmentStatements(
-                    **statements, python_env=python_env, project=self.config.project or None
+                    **statements,  # ty:ignore[invalid-argument-type]
+                    python_env=python_env,
+                    project=self.config.project or None,
                 )
             ]
         return []
@@ -840,9 +842,15 @@ class SqlMeshLoader(Loader):
             if os.path.getsize(path):
                 self._track_file(path)
                 module = import_python_file(path, self.config_path)
-                module_rules = subclasses(module.__name__, Rule, exclude={Rule})
+                module_rules = subclasses(
+                    module.__name__,
+                    Rule,
+                    exclude={Rule},  # type: ignore
+                )
                 for user_rule in module_rules:
-                    user_rules[user_rule.name] = user_rule
+                    user_rules[user_rule.name] = (  # ty:ignore[unresolved-attribute]
+                        user_rule  # ty:ignore[invalid-assignment]
+                    )
 
         return RuleSet(user_rules.values())
 
@@ -902,7 +910,7 @@ class SqlMeshLoader(Loader):
             )
 
             for model in models:
-                model._path = target_path
+                model._path = target_path  # ty:ignore[invalid-assignment]
 
             return models
 
@@ -920,7 +928,7 @@ class SqlMeshLoader(Loader):
             )
 
             for model in models:
-                model._path = path
+                model._path = path  # ty:ignore[invalid-assignment]
 
             return models
 

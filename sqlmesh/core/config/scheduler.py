@@ -145,8 +145,12 @@ class BuiltInSchedulerConfig(_EngineAdapterStateSyncSchedulerConfig, BaseConfig)
 
 
 SCHEDULER_CONFIG_TO_TYPE = {
-    tpe.all_field_infos()["type_"].default: tpe
-    for tpe in subclasses(__name__, BaseConfig, exclude={BaseConfig})
+    tpe.all_field_infos()["type_"].default: tpe  # ty:ignore[unresolved-attribute]
+    for tpe in subclasses(
+        __name__,
+        BaseConfig,
+        exclude={BaseConfig},  # type: ignore
+    )
 }
 
 

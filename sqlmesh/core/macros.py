@@ -99,7 +99,7 @@ def get_supported_types() -> t.Dict[str, t.Any]:
 
 
 for klass in sqlglot.Parser.EXPRESSION_PARSERS:
-    name = klass if isinstance(klass, str) else klass.__name__  # type: ignore
+    name = klass if isinstance(klass, str) else klass.__name__
     EXPRESSIONS_NAME_MAP[name.lower()] = name
 
 
@@ -142,7 +142,7 @@ class CaseInsensitiveMapping(t.Dict[str, t.Any]):
 class MacroDialect(Python):
     class Generator(Python.Generator):
         TRANSFORMS = {
-            **Python.Generator.TRANSFORMS,  # type: ignore
+            **Python.Generator.TRANSFORMS,
             exp.Column: lambda self, e: f"exp.to_column('{self.sql(e, 'this')}')",
             exp.Lambda: lambda self, e: f"lambda {self.expressions(e)}: {self.sql(e, 'this')}",
             MacroFunc: _macro_func_sql,
@@ -230,7 +230,7 @@ class MacroEvaluator:
                             if isinstance(var_value, SqlValue)
                             else var_value
                         )
-                        for var_name, var_value in value.items()
+                        for var_name, var_value in value.items()  # ty:ignore[unresolved-attribute]
                     }
 
                 self.locals[k] = value
@@ -246,7 +246,7 @@ class MacroEvaluator:
         try:
             return call_macro(
                 func, self.dialect, self._path, provided_args=(self, *args), provided_kwargs=kwargs
-            )  # type: ignore
+            )
         except Exception as e:
             raise MacroEvalError(
                 f"An error occurred during evaluation of '{name}'\n\n"
@@ -713,7 +713,7 @@ def each(
         A list of items that is the result of func
     """
     *items, func = args
-    items, func = _norm_var_arg_lambda(evaluator, func, *items)  # type: ignore
+    items, func = _norm_var_arg_lambda(evaluator, func, *items)
     return [item for item in map(func, ensure_collection(items)) if item is not None]
 
 
@@ -763,7 +763,7 @@ def reduce_(evaluator: MacroEvaluator, *args: t.Any) -> t.Any:
         A single item that is the result of applying func cumulatively to items
     """
     *items, func = args
-    items, func = _norm_var_arg_lambda(evaluator, func, *items)  # type: ignore
+    items, func = _norm_var_arg_lambda(evaluator, func, *items)
     return reduce(lambda a, b: func(exp.Tuple(expressions=[a, b])), ensure_collection(items))
 
 
@@ -791,7 +791,7 @@ def filter_(evaluator: MacroEvaluator, *args: t.Any) -> t.List[t.Any]:
         The items for which the func returned True
     """
     *items, func = args
-    items, func = _norm_var_arg_lambda(evaluator, func, *items)  # type: ignore
+    items, func = _norm_var_arg_lambda(evaluator, func, *items)
     return list(filter(lambda arg: evaluator.eval_expression(func(arg)), items))
 
 
@@ -858,7 +858,7 @@ def eval_(evaluator: MacroEvaluator, condition: exp.Condition) -> t.Any:
 def star(
     evaluator: MacroEvaluator,
     relation: exp.Table,
-    alias: exp.Column = t.cast(exp.Column, exp.column("")),
+    alias: exp.Column = exp.column(""),
     exclude: t.Union[exp.Array, exp.Tuple] = exp.Tuple(expressions=[]),
     prefix: exp.Literal = exp.Literal.string(""),
     suffix: exp.Literal = exp.Literal.string(""),
@@ -993,7 +993,7 @@ def safe_add(_: MacroEvaluator, *fields: exp.Expression) -> exp.Case:
     return (
         exp.Case()
         .when(exp.and_(*(field.is_(exp.null()) for field in fields)), exp.null())
-        .else_(reduce(lambda a, b: a + b, [exp.func("COALESCE", field, 0) for field in fields]))  # type: ignore
+        .else_(reduce(lambda a, b: a + b, [exp.func("COALESCE", field, 0) for field in fields]))
     )
 
 
@@ -1011,7 +1011,7 @@ def safe_sub(_: MacroEvaluator, *fields: exp.Expression) -> exp.Case:
     return (
         exp.Case()
         .when(exp.and_(*(field.is_(exp.null()) for field in fields)), exp.null())
-        .else_(reduce(lambda a, b: a - b, [exp.func("COALESCE", field, 0) for field in fields]))  # type: ignore
+        .else_(reduce(lambda a, b: a - b, [exp.func("COALESCE", field, 0) for field in fields]))
     )
 
 
@@ -1069,7 +1069,7 @@ def union(
     # Check for union type
     type_ = exp.Literal.string("ALL")
     if isinstance(args[arg_idx], exp.Literal):
-        type_ = args[arg_idx]  # type: ignore
+        type_ = args[arg_idx]
         arg_idx += 1
     kind = type_.name.upper()
     if kind not in ("ALL", "DISTINCT"):
@@ -1083,7 +1083,7 @@ def union(
     columns = {
         column
         for column, _ in reduce(
-            lambda a, b: a & b,  # type: ignore
+            lambda a, b: a & b,
             (evaluator.columns_to_types(table).items() for table in tables),
         )
     }
@@ -1099,7 +1099,7 @@ def union(
         return exp.select(*projections).from_(tables[0])
 
     return reduce(
-        lambda a, b: a.union(b, distinct=kind == "DISTINCT"),  # type: ignore
+        lambda a, b: a.union(b, distinct=kind == "DISTINCT"),
         [exp.select(*projections).from_(t) for t in tables],
     )
 

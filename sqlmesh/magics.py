@@ -13,7 +13,7 @@ from pathlib import Path
 from hyperscript import h
 
 try:
-    from IPython.core.display import display  # type: ignore
+    from IPython.core.display import display
 except ImportError:
     from IPython.display import display
 
@@ -65,7 +65,7 @@ def pass_sqlmesh_context(func: t.Callable) -> t.Callable:
         set_console(new_console)
         context.refresh()
 
-        magic_name = func.__name__
+        magic_name = func.__name__  # ty:ignore[unresolved-attribute]
         bound_method = getattr(self, magic_name, None)
         if bound_method:
             args_split = arg_split(args[0])
@@ -208,7 +208,7 @@ class SQLMeshMagics(Magics):
     @argument(
         "engine",
         type=str,
-        help=f"Project SQL engine. Supported values: '{', '.join([info[1] for info in sorted(INIT_DISPLAY_INFO_TO_TYPE.values(), key=lambda x: x[0])])}'.",  # type: ignore
+        help=f"Project SQL engine. Supported values: '{', '.join([info[1] for info in sorted(INIT_DISPLAY_INFO_TO_TYPE.values(), key=lambda x: x[0])])}'.",
     )
     @argument(
         "--template",

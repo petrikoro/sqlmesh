@@ -74,20 +74,22 @@ pytestmark = [pytest.mark.dbt, pytest.mark.slow]
 def test_model_name(dbt_dummy_postgres_config: PostgresConfig):
     context = DbtContext()
     context._target = dbt_dummy_postgres_config
-    assert ModelConfig(schema="foo", path="models/bar.sql").canonical_name(context) == "foo.bar"
     assert (
-        ModelConfig(schema="foo", path="models/bar.sql", alias="baz").canonical_name(context)
+        ModelConfig(schema="foo", path=Path("models/bar.sql")).canonical_name(context) == "foo.bar"
+    )
+    assert (
+        ModelConfig(schema="foo", path=Path("models/bar.sql"), alias="baz").canonical_name(context)
         == "foo.baz"
     )
     assert (
         ModelConfig(
-            database="dbname", schema="foo", path="models/bar.sql", alias="baz"
+            database="dbname", schema="foo", path=Path("models/bar.sql"), alias="baz"
         ).canonical_name(context)
         == "foo.baz"
     )
     assert (
         ModelConfig(
-            database="other", schema="foo", path="models/bar.sql", alias="baz"
+            database="other", schema="foo", path=Path("models/bar.sql"), alias="baz"
         ).canonical_name(context)
         == "other.foo.baz"
     )

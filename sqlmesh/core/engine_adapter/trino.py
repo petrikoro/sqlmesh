@@ -284,7 +284,7 @@ class TrinoEngineAdapter(
         source_columns: t.Optional[t.List[str]] = None,
     ) -> t.List[SourceQuery]:
         import pandas as pd
-        from pandas.api.types import is_datetime64_any_dtype  # type: ignore
+        from pandas.api.types import is_datetime64_any_dtype
 
         assert isinstance(df, pd.DataFrame)
         source_columns_to_types = get_source_columns_to_types(

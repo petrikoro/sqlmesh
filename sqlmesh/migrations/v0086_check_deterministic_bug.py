@@ -10,11 +10,11 @@ logger = logging.getLogger(__name__)
 KEYS_TO_MAKE_DETERMINISTIC = ["__sqlmesh__vars__", "__sqlmesh__blueprint__vars__"]
 
 
-def migrate_schemas(engine_adapter, schema, **kwargs):  # type: ignore
+def migrate_schemas(engine_adapter, schema, **kwargs):
     pass
 
 
-def migrate_rows(engine_adapter, schema, **kwargs):  # type: ignore
+def migrate_rows(engine_adapter, schema, **kwargs):
     snapshots_table = "_snapshots"
     versions_table = "_versions"
     if schema:

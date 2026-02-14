@@ -23,11 +23,12 @@ if DBT_VERSION >= (1, 6, 0):
 
     dbt_constants.PARTIAL_PARSE_FILE_NAME = "sqlmesh_partial_parse.msgpack"  # type: ignore
 else:
-    from dbt.parser import manifest as dbt_manifest  # type: ignore
+    from dbt.parser import manifest as dbt_manifest
 
     dbt_manifest.PARTIAL_PARSE_FILE_NAME = "sqlmesh_partial_parse.msgpack"  # type: ignore
 
 import jinja2
+import jinja2.nodes
 from dbt.adapters.factory import register_adapter, reset_adapters
 from dbt.config import Profile, Project, RuntimeConfig
 from dbt.config.profile import read_profile
@@ -39,7 +40,7 @@ try:
 except ImportError:
     # merge_freshness was renamed to merge_source_freshness in dbt 1.10
     # ref: https://github.com/dbt-labs/dbt-core/commit/14fc39a76ff4830cdf2fcbe73f57ca27db500018#diff-1f09db95588f46879a83378c2a86d6b16b7cdfcaddbfe46afc5d919ee5e9a4d9R430
-    from dbt.parser.sources import merge_source_freshness as merge_freshness  # type: ignore[no-redef,attr-defined]
+    from dbt.parser.sources import merge_source_freshness as merge_freshness
 
 from dbt.tracking import do_not_track
 
@@ -87,7 +88,7 @@ BUILTIN_CALLS = {*BUILTIN_GLOBALS, *BUILTIN_FILTERS}
 # Patch Semantic Manifest to skip validation and avoid Pydantic v1 errors on DBT 1.6
 # We patch for 1.7+ since we don't care about semantic models
 if DBT_VERSION >= (1, 6, 0):
-    from dbt.contracts.graph.semantic_manifest import SemanticManifest  # type: ignore
+    from dbt.contracts.graph.semantic_manifest import SemanticManifest
 
     SemanticManifest.validate = lambda _: True  # type: ignore
 
@@ -252,7 +253,7 @@ class ManifestHelper:
                     **source_dict,
                     **source_config_dict,
                     "freshness": freshness.to_dict() if freshness else None,
-                }
+                }  # ty:ignore[invalid-argument-type]
             )
             self._sources_per_package[source.package_name][source_config.config_name] = (
                 source_config
@@ -360,9 +361,11 @@ class ManifestHelper:
             node_config["name"] = _build_test_name(node, dependencies)
 
             test = TestConfig(
-                sql=sql,
+                sql=sql,  # ty:ignore[invalid-argument-type]
                 model_name=test_model,
-                test_kwargs=node.test_metadata.kwargs if hasattr(node, "test_metadata") else {},
+                test_kwargs=node.test_metadata.kwargs  # ty:ignore[unresolved-attribute]
+                if hasattr(node, "test_metadata")
+                else {},
                 dependencies=dependencies,
                 **node_config,
             )
@@ -416,7 +419,7 @@ class ManifestHelper:
                         sql=sql,
                         dependencies=dependencies,
                         tests=tests,
-                    )
+                    )  # ty:ignore[invalid-argument-type]
                 )
             else:
                 self._seeds_per_package[node.package_name][node_name] = SeedConfig(
@@ -424,7 +427,7 @@ class ManifestHelper:
                         node_config,
                         dependencies=Dependencies(macros=macro_references),
                         tests=tests,
-                    )
+                    )  # ty:ignore[invalid-argument-type]
                 )
 
     def _load_on_run_start_end(self) -> None:
@@ -491,7 +494,7 @@ class ManifestHelper:
         flags.set_from_args(args, None)
 
         if DBT_VERSION >= (1, 8, 0):
-            from dbt_common.context import set_invocation_context  # type: ignore
+            from dbt_common.context import set_invocation_context
 
             set_invocation_context(os.environ)
 
@@ -511,9 +514,9 @@ class ManifestHelper:
         self._project_name = project.project_name
 
         if DBT_VERSION >= (1, 8, 0):
-            from dbt.mp_context import get_mp_context  # type: ignore
+            from dbt.mp_context import get_mp_context
 
-            register_adapter(runtime_config, get_mp_context())  # type: ignore
+            register_adapter(runtime_config, get_mp_context())
         else:
             register_adapter(runtime_config)  # type: ignore
 
@@ -702,10 +705,10 @@ def _config(node: t.Union[ManifestNode, SourceDefinition]) -> t.Dict[str, t.Any]
 
 def _macro_references(
     manifest: Manifest, node: t.Union[ManifestNode, Macro]
-) -> t.Set[MacroReference]:
+) -> t.List[MacroReference]:
     result: t.Set[MacroReference] = set()
     if not hasattr(node, "depends_on"):
-        return result
+        return result  # ty:ignore[invalid-return-type]
 
     for macro_node_id in node.depends_on.macros:
         if not macro_node_id or macro_node_id == "None":
@@ -717,7 +720,7 @@ def _macro_references(
             macro_node.package_name if macro_node.package_name != node.package_name else None
         )
         _macro_reference_if_not_overridden(macro_package, macro_name, result.add)
-    return result
+    return list(result)
 
 
 def _refs(node: ManifestNode) -> t.Set[str]:
@@ -726,9 +729,9 @@ def _refs(node: ManifestNode) -> t.Set[str]:
         if not hasattr(node, "refs"):
             return result
         for r in node.refs:
-            ref_name = f"{r.package}.{r.name}" if r.package else r.name  # type: ignore
+            ref_name = f"{r.package}.{r.name}" if r.package else r.name
             if getattr(r, "version", None):
-                ref_name = f"{ref_name}_v{r.version}"  # type: ignore
+                ref_name = f"{ref_name}_v{r.version}"
             result.add(ref_name)
         return result
     return {".".join(r) for r in node.refs}  # type: ignore
@@ -839,7 +842,7 @@ def _build_test_name(node: ManifestNode, dependencies: Dependencies) -> str:
     if source_name and not model_name:
         name_prefix += "source_"
 
-    metadata_kwargs = node.test_metadata.kwargs
+    metadata_kwargs = node.test_metadata.kwargs  # ty:ignore[unresolved-attribute]
     arg_val_parts = []
     for arg, val in sorted(metadata_kwargs.items()):
         if arg == "model":
@@ -851,7 +854,7 @@ def _build_test_name(node: ManifestNode, dependencies: Dependencies) -> str:
     unique_args = "__".join(arg_val_parts) if arg_val_parts else ""
     unique_args = f"_{unique_args}" if unique_args else ""
 
-    auto_name = f"{name_prefix}{node.test_metadata.name}{entity_name}{unique_args}"
+    auto_name = f"{name_prefix}{node.test_metadata.name}{entity_name}{unique_args}"  # ty:ignore[unresolved-attribute]
 
     if node.name == auto_name:
         return node.name

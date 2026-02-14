@@ -176,7 +176,7 @@ class TestEntry(PydanticModel):
 
     name: str
     uri: str
-    range: Range
+    range: t.Optional[Range] = None
 
 
 class ListWorkspaceTestsResponse(CustomMethodResponseBaseClass):

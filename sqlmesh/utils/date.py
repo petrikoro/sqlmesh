@@ -33,9 +33,9 @@ warnings.filterwarnings(
 
 
 # The Freshness Date Data Parser doesn't support plural units so we add the `s?` to the expression
-freshness_date_parser_module.PATTERN = re.compile(  # type: ignore
+freshness_date_parser_module.PATTERN = re.compile(
     r"(\d+[.,]?\d*)\s*(%s)s?\b" % freshness_date_parser_module._UNITS,  # type: ignore
-    re.I | re.S | re.U,  # type: ignore
+    re.I | re.S | re.U,
 )
 DAY_SHORTCUT_EXPRESSIONS = {"today", "yesterday", "tomorrow"}
 TIME_UNITS = {"hours", "minutes", "seconds"}
@@ -447,7 +447,7 @@ def pandas_timestamp_to_pydatetime(
     df: pd.DataFrame, columns_to_types: t.Optional[t.Dict[str, exp.DataType]] = None
 ) -> pd.DataFrame:
     import pandas as pd
-    from pandas.api.types import is_datetime64_any_dtype  # type: ignore
+    from pandas.api.types import is_datetime64_any_dtype
 
     for column in df.columns:
         if is_datetime64_any_dtype(df.dtypes[column]):

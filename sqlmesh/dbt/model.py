@@ -425,7 +425,7 @@ class ModelConfig(BaseModelConfig):
                     ).transform(d.replace_merge_table_aliases)
 
                 return IncrementalByUniqueKeyKind(
-                    unique_key=self.unique_key,
+                    unique_key=self.unique_key,  # ty:ignore[invalid-argument-type]
                     merge_filter=merge_filter,
                     **incremental_kind_kwargs,
                     **incremental_by_kind_kwargs,
@@ -461,10 +461,14 @@ class ModelConfig(BaseModelConfig):
             }
             if self.snapshot_strategy.is_check:
                 return SCDType2ByColumnKind(
-                    columns=self.check_cols, execution_time_as_valid_from=True, **shared_kwargs
+                    columns=self.check_cols,  # ty:ignore[invalid-argument-type]
+                    execution_time_as_valid_from=True,
+                    **shared_kwargs,  # ty:ignore[invalid-argument-type]
                 )
             return SCDType2ByTimeKind(
-                updated_at_name=self.updated_at, updated_at_as_valid_from=True, **shared_kwargs
+                updated_at_name=self.updated_at,  # ty:ignore[invalid-argument-type]
+                updated_at_as_valid_from=True,
+                **shared_kwargs,  # ty:ignore[invalid-argument-type]
             )
 
         if materialization == Materialization.DYNAMIC_TABLE:
