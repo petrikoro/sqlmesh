@@ -139,7 +139,7 @@ make ui-down   # Stop UI
 
 - `sqlmesh/core/context.py`: Main orchestration class
 - `examples/sushi/`: Reference implementation used in tests
-- `web/server/main.py`: Web UI backend entry point
+- `sqlmesh/api/dispatcher.py`: Shared API request dispatcher used by integration surfaces
 - `web/client/src/App.tsx`: Web UI frontend entry point
 - `vscode/extension/src/extension.ts`: VSCode extension entry point
 

@@ -95,22 +95,13 @@ api-docs:
 api-docs-serve:
 	python pdoc/cli.py
 
-ui-up:
-	docker compose -f ./web/docker-compose.yml up --build -d && $(if $(shell which open), open http://localhost:8001, echo "Open http://localhost:8001 in your browser.")
-
-ui-down:
-	docker compose -f ./web/docker-compose.yml down
-
-ui-build:
-	docker compose -f ./web/docker-compose.yml -f ./web/docker-compose.build.yml run app
-
 clean-build:
 	rm -rf build/ && rm -rf dist/ && rm -rf *.egg-info
 
 clear-caches:
 	find . -type d -name ".cache" -exec rm -rf {} + 2>/dev/null && echo "Successfully removed all .cache directories"
 
-dev-publish: ui-build clean-build publish
+dev-publish: clean-build publish
 
 jupyter-example:
 	jupyter lab tests/slows/jupyter/example_outputs.ipynb
@@ -243,7 +234,6 @@ vscode_settings:
 	cp -r ./tooling/vscode/*.json .vscode/
 
 vscode-generate-openapi:
-	python3 web/server/openapi.py --output vscode/openapi.json
 	pnpm run fmt
 	cd vscode/react && pnpm run generate:api
 

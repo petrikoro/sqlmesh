@@ -74,7 +74,7 @@
     SQLMesh is a Python library. After ensuring you have [an appropriate Python runtime](../prerequisites.md), install it [with `pip`](../installation.md).
 
 ??? question "How do I use SQLMesh?"
-    SQLMesh has three interfaces: [command line](../reference/cli.md), [Jupyter or Databricks notebook](../reference/notebook.md), and [graphical user interface](../guides/ui.md).
+    SQLMesh has three interfaces: [command line](../reference/cli.md), [Jupyter or Databricks notebook](../reference/notebook.md), and the [VSCode extension](../guides/vscode.md).
 
     The [quickstart guide](../quick_start.md) demonstrates an example project in each of the interfaces.
 
@@ -246,7 +246,7 @@
     SQLMesh adds information to the state tables via transactions, and some databases like BigQuery are not optimized to execute transactions. Changing the state connection to another database like PostgreSQL can alleviate performance issues you may encounter due to state transactions.
 
 ??? question "How do I get column-level lineage for my dbt project?"
-    SQLMesh can run dbt projects with its [dbt adapter](../integrations/dbt.md). After configuring the dbt project to work with SQLMesh, you can view the column-level lineage in the [SQLMesh browser UI](../guides/ui.md):
+    SQLMesh can run dbt projects with its [dbt adapter](../integrations/dbt.md). After configuring the dbt project to work with SQLMesh, you can view the column-level lineage in the [SQLMesh VSCode extension](../guides/vscode.md):
 
     ![SQLMesh UI displaying column-level lineage for Sushi dbt example](./faq/ui-colum-lineage_sushi-dbt.png)
 

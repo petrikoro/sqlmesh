@@ -28,12 +28,6 @@ If your project uses any SQL execution engine other than DuckDB, you must instal
 > pip install "sqlmesh[dbt,postgres]"
 ```
 
-If you would like to use the [SQLMesh Browser UI](../guides/ui.md) to view column-level lineage, include the `web` extra:
-
-```bash
-> pip install "sqlmesh[dbt,web]"
-```
-
 Learn more about [SQLMesh installation and extras here](../installation.md#install-extras).
 
 ### Reading a dbt project
@@ -330,7 +324,7 @@ seeds:
 SQLMesh does not have its own package manager; however, SQLMesh's dbt adapter is compatible with dbt's package manager. Continue to use [dbt deps](https://docs.getdbt.com/reference/commands/deps) and [dbt clean](https://docs.getdbt.com/reference/commands/clean) to update, add, or remove packages.
 
 ## Documentation
-Model documentation is available in the [SQLMesh UI](../quickstart/ui.md#2-open-the-sqlmesh-web-ui).
+Model documentation and lineage are available in the [SQLMesh VSCode extension](../guides/vscode.md).
 
 ## Supported dbt jinja methods
 

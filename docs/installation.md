@@ -41,7 +41,6 @@ Some extras add features, like the SQLMesh VSCode extension or Github CI/CD bot:
     | dlt projects        | `pip install "sqlmesh[dlt]"`    |
     | Slack notifications | `pip install "sqlmesh[slack]"`  |
     | Development setup   | `pip install "sqlmesh[dev]"`    |
-    | Browser UI          | `pip install "sqlmesh[web]"`    |
     | LLM SQL prompt      | `pip install "sqlmesh[llm]"`    |
 
 Other extras are required to use specific SQL engines, like Bigquery or Postgres:
@@ -69,10 +68,9 @@ Multiple extras can be installed at once, as in `pip install "sqlmesh[github,sla
 
 Now that you've installed SQLMesh, it's time to get started with the SQLMesh example project.
 
-SQLMesh has three user interfaces - choose one for the example project and jump right in:
+SQLMesh has two user interfaces - choose one for the example project and jump right in:
 
 - [Command line interface (CLI)](./quickstart/cli.md)
 - [Notebook interface](./quickstart/notebook.md)
-- [Browser UI graphical interface](./quickstart/ui.md)
 
 Have an existing dbt project you want to run? Install the dbt extra and [check out SQLMesh's dbt adapter](./integrations/dbt.md).
