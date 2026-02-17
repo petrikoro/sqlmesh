@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ catalog_name }}</title>
+{% if not static %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+{% endif %}
 <style>
 /* ================================================================== */
 /* Design Tokens                                                       */
@@ -389,7 +391,6 @@ body.resizing * { cursor: col-resize !important; user-select: none !important; }
 .sb-tree::-webkit-scrollbar-thumb:hover { background: var(--gray-300); }
 
 /* Tree nodes */
-.tree-group {}
 .tree-header {
   display: flex;
   align-items: center;
@@ -686,7 +687,6 @@ body.on-overview .content { max-width: 100%; padding: 0; }
   border: 1px solid var(--gray-150, var(--gray-200));
 }
 .tag svg { width: 10px; height: 10px; opacity: .5; flex-shrink: 0; }
-.tag-sm { padding: 1px 6px; font-size: 10px; }
 
 /* ---- Description ---- */
 .desc-text { font-size: 14px; line-height: 1.7; color: var(--gray-700); }
@@ -757,27 +757,6 @@ table.col-tbl tr:hover td { background: var(--gray-50); }
 /* ================================================================== */
 /* Column Lineage                                                      */
 /* ================================================================== */
-.lineage-controls {
-  display: flex;
-  gap: 5px;
-  margin-bottom: 16px;
-  align-items: center;
-}
-.lineage-controls .lc-label { font-size: 11px; color: var(--gray-400); font-weight: 500; text-transform: uppercase; letter-spacing: .3px; }
-.lc-btn {
-  padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 500;
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius);
-  background: #fff;
-  color: var(--gray-600);
-  cursor: pointer;
-  transition: all var(--transition);
-}
-.lc-btn:hover { background: var(--gray-50); border-color: var(--gray-300); }
-.lc-btn.active { background: var(--accent-50); border-color: var(--accent-200); color: var(--accent-700); font-weight: 600; }
-
 .lineage-canvas {
   position: relative;
   overflow: hidden;
@@ -802,7 +781,8 @@ table.col-tbl tr:hover td { background: var(--gray-50); }
   width: 100%;
   height: 100%;
   pointer-events: none;
-  z-index: 3;
+  /* Keep edges below cards to avoid visual overlap artifacts. */
+  z-index: 1;
 }
 .lineage-canvas svg.lineage-svg path {
   fill: none;
@@ -1004,7 +984,6 @@ table.col-tbl tr:hover td { background: var(--gray-50); }
 .code-box .kw { color: #6366f1; font-weight: 500; }
 .code-box .fn { color: #7c3aed; }
 .code-box .str { color: #059669; }
-.code-box .num { color: #d97706; }
 .code-box .cmt { color: var(--gray-400); font-style: italic; }
 
 /* ---- Buttons ---- */
@@ -1024,8 +1003,6 @@ table.col-tbl tr:hover td { background: var(--gray-50); }
 }
 .btn:hover { background: var(--gray-50); border-color: var(--gray-300); }
 .btn svg { width: 13px; height: 13px; }
-.btn-primary { background: var(--accent-700); color: #fff; border-color: var(--accent-700); }
-.btn-primary:hover { background: var(--accent-800); border-color: var(--accent-800); }
 
 /* ---- Overview hero ---- */
 /* Google-style centred landing */
@@ -1181,8 +1158,64 @@ body.on-overview .search-trigger { display: none; }
 <!-- ================================================================ -->
 <!-- Scripts                                                          -->
 <!-- ================================================================ -->
+{% if inline_json %}
+<script id="sqlmesh-manifest-data" type="application/json">{{ manifest_json }}</script>
+<script id="sqlmesh-catalog-data" type="application/json">{{ catalog_json }}</script>
 <script>
-window.__SQLMESH_MANIFEST__ = {{ manifest_json }};
+(function() {
+  try {
+    var manifestNode = document.getElementById("sqlmesh-manifest-data");
+    var catalogNode = document.getElementById("sqlmesh-catalog-data");
+    window.__SQLMESH_MANIFEST__ = JSON.parse(manifestNode ? manifestNode.textContent : "{}");
+    window.__SQLMESH_CATALOG__ = JSON.parse(catalogNode ? catalogNode.textContent : "{}");
+  } catch (error) {
+    console.error(error);
+    window.__SQLMESH_MANIFEST__ = {
+      project: {},
+      models: [],
+      dag: {},
+      column_lineage: {},
+      external_links: []
+    };
+    window.__SQLMESH_CATALOG__ = { models: {} };
+  }
+})();
+</script>
+{% else %}
+<script>
+(function() {
+  function loadJson(path) {
+    var request = new XMLHttpRequest();
+    request.open("GET", path, false);
+    request.send(null);
+    if (request.status >= 200 && request.status < 300) {
+      return JSON.parse(request.responseText);
+    }
+    throw new Error("Failed to load " + path + " (" + request.status + ")");
+  }
+
+  try {
+    window.__SQLMESH_MANIFEST__ = loadJson("manifest.json");
+    window.__SQLMESH_CATALOG__ = loadJson("catalog.json");
+  } catch (error) {
+    console.error(error);
+    alert(
+      "SQLMesh docs was unable to load manifest.json and catalog.json. " +
+      "Run 'sqlmesh docs generate' again."
+    );
+    window.__SQLMESH_MANIFEST__ = {
+      project: {},
+      models: [],
+      dag: {},
+      column_lineage: {},
+      external_links: []
+    };
+    window.__SQLMESH_CATALOG__ = { models: {} };
+  }
+})();
+</script>
+{% endif %}
+<script>
 (function(){
 "use strict";
 
@@ -1195,40 +1228,52 @@ var ICONS = {
   folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>',
   table: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/></svg>',
   model: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 3v18"/></svg>',
-  seed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c-4.97 0-9-2.24-9-5v-4"/><path d="M3 13c0 2.76 4.03 5 9 5s9-2.24 9-5"/><ellipse cx="12" cy="8" rx="9" ry="4"/><path d="M3 8v5"/><path d="M21 8v5"/></svg>',
   columns: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3h7a2 2 0 012 2v14a2 2 0 01-2 2h-7m0-18H5a2 2 0 00-2 2v14a2 2 0 002 2h7m0-18v18"/></svg>',
   lineage: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98"/><path d="M15.41 6.51l-6.82 3.98"/></svg>',
   code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
-  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>',
   grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>',
-  users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>',
   tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>',
-  arrowRight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>',
   expand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
-  collapse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
   zoomIn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
   zoomOut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
-  fitView: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3"/><path d="M21 8V5a2 2 0 00-2-2h-3"/><path d="M3 16v3a2 2 0 002 2h3"/><path d="M16 21h3a2 2 0 002-2v-3"/></svg>',
-  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>',
+  fitView: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3"/><path d="M21 8V5a2 2 0 00-2-2h-3"/><path d="M3 16v3a2 2 0 002 2h3"/><path d="M16 21h3a2 2 0 002-2v-3"/></svg>'
 };
 
 /* ================================================================== */
 /* Data                                                                */
 /* ================================================================== */
-var D = window.__SQLMESH_MANIFEST__;
-var models = D.models, project = D.project;
+var manifestData = window.__SQLMESH_MANIFEST__ || {};
+var catalogData = window.__SQLMESH_CATALOG__ || {};
+var catalogModels = catalogData.models || {};
+
+manifestData.models = (manifestData.models || []).map(function(model) {
+  var fqn = model.fqn || "";
+  var catalogModel = catalogModels[fqn];
+  if (catalogModel && Array.isArray(catalogModel.columns)) {
+    model.columns = catalogModel.columns;
+  } else if (!Array.isArray(model.columns)) {
+    model.columns = [];
+  }
+  return model;
+});
+
+var models = manifestData.models || [], project = manifestData.project || {};
 
 /* Normalize all FQNs: strip double-quotes so selectors/lookups work */
-models.forEach(function(m) { m.fqn = nq(m.fqn); });
+models.forEach(function(m) { m.fqn = normalizeFqn(m.fqn); });
 var dag = {};
-Object.keys(D.dag || {}).forEach(function(k) { dag[nq(k)] = (D.dag[k] || []).map(nq); });
+Object.keys(manifestData.dag || {}).forEach(function(k) {
+  dag[normalizeFqn(k)] = (manifestData.dag[k] || []).map(normalizeFqn);
+});
 var colLineage = {};
-Object.keys(D.column_lineage || {}).forEach(function(k) {
-  var cols = D.column_lineage[k];
-  colLineage[nq(k)] = {};
+Object.keys(manifestData.column_lineage || {}).forEach(function(k) {
+  var cols = manifestData.column_lineage[k];
+  colLineage[normalizeFqn(k)] = {};
   Object.keys(cols).forEach(function(cn) {
-    colLineage[nq(k)][cn] = cols[cn].map(function(s) { return { model: nq(s.model), column: s.column }; });
+    colLineage[normalizeFqn(k)][cn] = cols[cn].map(function(s) {
+      return { model: normalizeFqn(s.model), column: s.column };
+    });
   });
 });
 /* Reverse lineage index: reverseLineage[fqn][col] = [{model, column}] (consumers) */
@@ -1243,14 +1288,14 @@ Object.keys(colLineage).forEach(function(mfqn) {
   });
 });
 
-var externalLinks = D.external_links || [];
+var externalLinks = manifestData.external_links || [];
 var byFqn = {}, byName = {};
 models.forEach(function(m) { byFqn[m.fqn] = m; byName[m.name] = m; });
 
 var curModel = null, sidebarQuery = "", _pinnedCol = null;
 
-function e(s) { if (s == null) return ""; return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
-function nq(s) { return s ? String(s).replace(/"/g, "") : ""; }
+function escapeHtml(s) { if (s == null) return ""; return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+function normalizeFqn(s) { return s ? String(s).replace(/"/g, "") : ""; }
 
 function badgeClass(type) {
   type = (type || "").toLowerCase();
@@ -1268,22 +1313,16 @@ var isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 var kbdText = isMac ? "\u2318K" : "Ctrl+K";
 document.getElementById("kbdHint").textContent = kbdText;
 
-/* ================================================================== */
-/* Routing                                                             */
-/* ================================================================== */
-function nav(p) { window.location.hash = p ? "#/" + p : "#/"; }
-window.nav = nav;
-
 function route() {
   _pinnedCol = null;
   var raw = window.location.hash.slice(2) || "";
   /* Strip query string before splitting path */
   var qIdx = raw.indexOf("?");
-  var h = qIdx >= 0 ? raw.slice(0, qIdx) : raw;
-  var p = h.split("/");
+  var hashPath = qIdx >= 0 ? raw.slice(0, qIdx) : raw;
+  var pathParts = hashPath.split("/");
 
-  if (p[0] === "model" && p[1]) {
-    curModel = nq(decodeURIComponent(p.slice(1).join("/")));
+  if (pathParts[0] === "model" && pathParts[1]) {
+    curModel = normalizeFqn(decodeURIComponent(pathParts.slice(1).join("/")));
     document.body.classList.remove("on-overview");
     renderModelPage(curModel);
     renderTree();
@@ -1308,10 +1347,10 @@ var searchIdx = -1;
 /* ---- Sidebar toggle ---- */
 window.toggleSidebar = function() {
   document.body.classList.toggle("sb-hidden");
-  try { localStorage.setItem("sb-hidden", document.body.classList.contains("sb-hidden") ? "1" : ""); } catch(e) {}
+  try { localStorage.setItem("sb-hidden", document.body.classList.contains("sb-hidden") ? "1" : ""); } catch (error) {}
 };
 /* Restore sidebar state from previous visit */
-try { if (localStorage.getItem("sb-hidden") === "1") document.body.classList.add("sb-hidden"); } catch(e) {}
+try { if (localStorage.getItem("sb-hidden") === "1") document.body.classList.add("sb-hidden"); } catch (error) {}
 
 function openSearch() {
   searchOverlay.classList.add("open");
@@ -1326,6 +1365,7 @@ function closeSearch() {
   searchOverlay.classList.remove("open");
   searchInput.value = "";
 }
+window.closeSearch = closeSearch;
 
 searchOverlay.addEventListener("click", function(ev) {
   if (ev.target === searchOverlay) closeSearch();
@@ -1416,8 +1456,8 @@ function allTokensMatch(text, tokens) {
 
 /** Highlight all token matches in text */
 function highlightTokens(text, tokens) {
-  if (!tokens.length || !text) return e(text);
-  var escaped = e(text);
+  if (!tokens.length || !text) return escapeHtml(text);
+  var escaped = escapeHtml(text);
   tokens.forEach(function(tok) {
     var q = tok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     escaped = escaped.replace(new RegExp("(" + q + ")", "gi"), "<mark>$1</mark>");
@@ -1486,16 +1526,17 @@ function doSearch() {
 
   var h = "";
   results.slice(0, 30).forEach(function(r) {
-    var m = r.model;
-    h += '<a class="sr-item" href="#/model/' + encodeURIComponent(m.fqn) + '" onclick="closeSearchNav()">';
+    var model = r.model;
+    h += '<a class="sr-item" href="#/model/' + encodeURIComponent(model.fqn) + '" onclick="closeSearch()">';
     h += '<div class="sr-icon">' + ICONS.model + '</div>';
     h += '<div class="sr-body">';
-    h += '<div class="sr-name">' + highlightTokens(m.name.split(".").pop(), tokens) + '</div>';
-    h += '<div class="sr-fqn">' + e(m.fqn) + '</div>';
-    if (m.description && r.descMatch && (searchFilter === "all" || searchFilter === "description")) {
-      h += '<div class="sr-desc">' + highlightTokens(m.description, tokens) + '</div>';
-    } else if (m.description && searchFilter !== "tag" && searchFilter !== "column") {
-      h += '<div class="sr-desc">' + e(m.description.substring(0, 80)) + '</div>';
+    var nameText = model.name.split(".").pop();
+    h += '<div class="sr-name">' + (searchFilter === "all" || searchFilter === "name" ? highlightTokens(nameText, tokens) : escapeHtml(nameText)) + '</div>';
+    h += '<div class="sr-fqn">' + escapeHtml(model.fqn) + '</div>';
+    if (model.description && r.descMatch && (searchFilter === "all" || searchFilter === "description")) {
+      h += '<div class="sr-desc">' + highlightTokens(model.description, tokens) + '</div>';
+    } else if (model.description && searchFilter !== "tag" && searchFilter !== "column") {
+      h += '<div class="sr-desc">' + escapeHtml(model.description.substring(0, 80)) + '</div>';
     }
     if (r.tagMatch && r.matchedTags.length && (searchFilter === "all" || searchFilter === "tag")) {
       h += '<div class="sr-match-hint">' + ICONS.tag + ' ' + r.matchedTags.map(function(t) { return highlightTokens(t, tokens); }).join(", ") + '</div>';
@@ -1506,7 +1547,7 @@ function doSearch() {
       h += '</div>';
     }
     h += '</div>';
-    h += '<span class="sr-badge ' + badgeClass(m.type) + '">' + e(m.type) + '</span>';
+    h += '<span class="sr-badge ' + badgeClass(model.type) + '">' + escapeHtml(model.type) + '</span>';
     h += '</a>';
   });
 
@@ -1515,12 +1556,10 @@ function doSearch() {
   }
 
   if (!results.length) {
-    h = '<div style="padding:40px 20px;text-align:center;color:var(--gray-400)">No results for &ldquo;' + e(searchInput.value) + '&rdquo;</div>';
+    h = '<div style="padding:40px 20px;text-align:center;color:var(--gray-400)">No results for &ldquo;' + escapeHtml(searchInput.value) + '&rdquo;</div>';
   }
   searchResults.innerHTML = h;
 }
-
-window.closeSearchNav = function() { closeSearch(); };
 
 /* ================================================================== */
 /* Sidebar (database tree only)                                        */
@@ -1557,7 +1596,6 @@ function renderTree() {
   var h = "";
   var tree = buildDatabaseTree();
   var projectKeys = Object.keys(tree).sort();
-  var multiProject = projectKeys.length > 1 || (projectKeys.length === 1 && projectKeys[0] !== "");
   /* For single project (or no project names), skip the project level */
   var showProjectLevel = projectKeys.length > 1;
 
@@ -1577,7 +1615,7 @@ function renderTree() {
       h += '<div class="tree-header indent-0" onclick="toggleTree(this)">';
       h += '<span class="tree-arrow open">' + ICONS.chevron + '</span>';
       h += '<span class="tree-icon" style="color:var(--purple-500)">' + ICONS.grid + '</span>';
-      h += '<span class="tree-hdr-name">' + e(proj || "default") + '</span>';
+      h += '<span class="tree-hdr-name">' + escapeHtml(proj || "default") + '</span>';
       h += '<span class="tree-badge">' + projCount + '</span></div>';
       h += '<div class="tree-children open">';
     }
@@ -1590,7 +1628,7 @@ function renderTree() {
       h += '<div class="tree-header indent-' + indent0 + '" onclick="toggleTree(this)">';
       h += '<span class="tree-arrow open">' + ICONS.chevron + '</span>';
       h += '<span class="tree-icon" style="color:var(--accent-500)">' + ICONS.database + '</span>';
-      h += '<span class="tree-hdr-name">' + e(cat) + '</span>';
+      h += '<span class="tree-hdr-name">' + escapeHtml(cat) + '</span>';
       h += '<span class="tree-badge">' + schemaCount + '</span></div>';
       h += '<div class="tree-children open">';
       var schemas = Object.keys(catTree[cat]).sort();
@@ -1599,14 +1637,14 @@ function renderTree() {
         h += '<div class="tree-header indent-' + indent1 + '" onclick="toggleTree(this)">';
         h += '<span class="tree-arrow open">' + ICONS.chevron + '</span>';
         h += '<span class="tree-icon" style="color:var(--orange-500)">' + ICONS.folder + '</span>';
-        h += '<span class="tree-hdr-name">' + e(sch) + '</span>';
+        h += '<span class="tree-hdr-name">' + escapeHtml(sch) + '</span>';
         h += '<span class="tree-badge">' + catTree[cat][sch].length + '</span></div>';
         h += '<div class="tree-children open">';
         catTree[cat][sch].sort(function(a, b) { return a.name.localeCompare(b.name); }).forEach(function(item) {
           var act = curModel === item.fqn ? " active" : "";
           h += '<a class="tree-leaf indent-' + indent2 + act + '" href="#/model/' + encodeURIComponent(item.fqn) + '">';
           h += '<span class="leaf-icon">' + ICONS.model + '</span>';
-          h += '<span class="leaf-name" title="' + e(item.name) + '">' + e(item.name) + '</span></a>';
+          h += '<span class="leaf-name" title="' + escapeHtml(item.name) + '">' + escapeHtml(item.name) + '</span></a>';
         });
         h += '</div></div>';
       });
@@ -1642,7 +1680,7 @@ function renderOverview() {
 
   /* ---- Hero: title + metrics annotation + search ---- */
   h += '<div class="ov-hero">';
-  h += '<div class="ov-hero-title">' + e(project.name || "{{ catalog_name }}") + '</div>';
+  h += '<div class="ov-hero-title">' + escapeHtml(project.name || "{{ catalog_name }}") + '</div>';
 
   /* Small inline metrics */
   var parts = [];
@@ -1655,7 +1693,7 @@ function renderOverview() {
   h += '<div class="ov-search-bar" onclick="openSearch()">';
   h += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>';
   h += '<span class="ov-search-text">Search models, columns, descriptions...</span>';
-  h += '<span class="ov-search-kbd">' + e(kbdText) + '</span>';
+  h += '<span class="ov-search-kbd">' + escapeHtml(kbdText) + '</span>';
   h += '</div></div>';
 
   document.getElementById("C").innerHTML = h;
@@ -1665,13 +1703,13 @@ function renderOverview() {
 /* Model Detail Page                                                   */
 /* ================================================================== */
 function renderModelPage(id) {
-  var m = byFqn[nq(id)] || byName[id];
-  if (!m) {
+  var model = byFqn[normalizeFqn(id)] || byName[id];
+  if (!model) {
     document.getElementById("C").innerHTML = '<div class="empty-state">' + ICONS.info + '<p>Model not found</p></div>';
     return;
   }
 
-  var parts = m.fqn.replace(/"/g, "").split(".");
+  var parts = model.fqn.replace(/"/g, "").split(".");
   var modelName = parts[parts.length - 1];
 
   var h = "";
@@ -1679,52 +1717,52 @@ function renderModelPage(id) {
   /* Header */
   h += '<div class="pg-hd">';
   h += '<div class="pg-title-row">';
-  h += '<h1 class="pg-title">' + e(modelName) + '</h1>';
-  h += '<span class="badge ' + badgeClass(m.type) + '">' + e(m.type) + '</span>';
-  if (m.details && m.details.kind) h += '<span class="badge badge-gray">' + e(m.details.kind) + '</span>';
-  if (m.details && m.details.tags) {
-    m.details.tags.split(", ").forEach(function(t) {
-      if (t.trim()) h += '<span class="tag">' + ICONS.tag + e(t.trim()) + '</span>';
+  h += '<h1 class="pg-title">' + escapeHtml(modelName) + '</h1>';
+  h += '<span class="badge ' + badgeClass(model.type) + '">' + escapeHtml(model.type) + '</span>';
+  if (model.details && model.details.kind) h += '<span class="badge badge-gray">' + escapeHtml(model.details.kind) + '</span>';
+  if (model.details && model.details.tags) {
+    model.details.tags.split(", ").forEach(function(t) {
+      if (t.trim()) h += '<span class="tag">' + ICONS.tag + escapeHtml(t.trim()) + '</span>';
     });
   }
   /* External links (Airflow, Databricks, etc.) -- right-aligned in title row */
   if (externalLinks.length > 0) {
-    var fqnParts = m.fqn.replace(/"/g, "").split(".");
+    var fqnParts = model.fqn.replace(/"/g, "").split(".");
     var tplVars = {
-      fqn: m.fqn.replace(/"/g, ""),
+      fqn: model.fqn.replace(/"/g, ""),
       name: fqnParts[fqnParts.length - 1],
       schema: fqnParts.length >= 2 ? fqnParts[fqnParts.length - 2] : "",
       catalog: fqnParts.length >= 3 ? fqnParts[fqnParts.length - 3] : "",
-      project: m.project || "",
-      kind: (m.details || {}).kind || "",
-      owner: (m.details || {}).owner || "",
-      dialect: m.dialect || ""
+      project: model.project || "",
+      kind: (model.details || {}).kind || "",
+      owner: (model.details || {}).owner || "",
+      dialect: model.dialect || ""
     };
     h += '<div class="ext-links">';
     externalLinks.forEach(function(link) {
       var href = link.url.replace(/\{(\w+)\}/g, function(_, k) { return encodeURIComponent(tplVars[k] || ""); });
-      h += '<a class="ref-link" href="' + e(href) + '" target="_blank" rel="noopener">';
+      h += '<a class="ref-link" href="' + escapeHtml(href) + '" target="_blank" rel="noopener">';
       h += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
-      h += e(link.label) + '</a>';
+      h += escapeHtml(link.label) + '</a>';
     });
     h += '</div>';
   }
 
   h += '</div>';
-  h += '<div class="pg-sub">' + e(m.fqn) + '</div>';
-  if (m.description) h += '<div class="pg-desc">' + e(m.description) + '</div>';
+  h += '<div class="pg-sub">' + escapeHtml(model.fqn) + '</div>';
+  if (model.description) h += '<div class="pg-desc">' + escapeHtml(model.description) + '</div>';
   h += '</div>';
 
   /* Section data */
-  var cl = colLineage[m.fqn] || {};
+  var cl = colLineage[model.fqn] || {};
   var hasLineage = Object.keys(cl).length > 0;
-  var rl = reverseLineage[m.fqn] || {};
+  var rl = reverseLineage[model.fqn] || {};
   var hasDown = Object.keys(rl).length > 0;
-  var hasCode = !!m.definition;
+  var hasCode = !!model.definition;
 
   /* Sticky nav anchors */
   h += '<div class="model-nav" id="modelNav">';
-  h += '<a href="javascript:void(0)" onclick="scrollToSec(\'sec-columns\')" data-sec="sec-columns">' + ICONS.columns + ' Columns <span class="tab-count">' + m.columns.length + '</span></a>';
+  h += '<a href="javascript:void(0)" onclick="scrollToSec(\'sec-columns\')" data-sec="sec-columns">' + ICONS.columns + ' Columns <span class="tab-count">' + model.columns.length + '</span></a>';
   if (hasLineage || hasDown) {
     h += '<a href="javascript:void(0)" onclick="scrollToSec(\'sec-lineage\')" data-sec="sec-lineage">' + ICONS.lineage + ' Lineage</a>';
   }
@@ -1736,22 +1774,22 @@ function renderModelPage(id) {
 
   /* All sections on one page: Columns → Lineage → Properties → Code */
   h += '<div id="sec-columns" class="model-section">';
-  h += renderColumnsSection(m, cl);
+  h += renderColumnsSection(model, cl);
   h += '</div>';
 
   if (hasLineage || hasDown) {
     h += '<div id="sec-lineage" class="model-section">';
-    h += renderLineageTab(m);
+    h += renderLineageTab(model);
     h += '</div>';
   }
 
   h += '<div id="sec-properties" class="model-section">';
-  h += renderPropertiesSection(m);
+  h += renderPropertiesSection(model);
   h += '</div>';
 
   if (hasCode) {
     h += '<div id="sec-code" class="model-section">';
-    h += renderCodeTab(m);
+    h += renderCodeTab(model);
     h += '</div>';
   }
 
@@ -1762,7 +1800,7 @@ function renderModelPage(id) {
     requestAnimationFrame(function() {
       setTimeout(function() {
         setupCanvasPanZoom("lcanvas", "lsvg");
-        setupLineageInteractions();
+        setupLineageInteractionsIn("lcanvas");
         setupBlockDrag("lcanvas", "lsvg");
       }, 50);
     });
@@ -1842,12 +1880,12 @@ function setupScrollSpy() {
   updateSpy();
 }
 
-/* BFS: collect all upstream models by hop-level from curFqn */
-function collectUpstreamLevels(curFqn) {
-  var cl = colLineage[curFqn] || {};
+/* BFS: collect models by hop-level from curFqn using the given lineage map */
+function collectLevels(curFqn, lineageMap) {
+  var seed = lineageMap[curFqn] || {};
   var modelLevel = {}, modelCols = {}, visited = {}, queue = [];
-  Object.keys(cl).forEach(function(col) {
-    (cl[col] || []).forEach(function(src) {
+  Object.keys(seed).forEach(function(col) {
+    (seed[col] || []).forEach(function(src) {
       var key = src.model + "|" + src.column;
       if (!visited[key]) { visited[key] = true; queue.push({fqn: src.model, col: src.column, level: 1}); }
     });
@@ -1857,8 +1895,8 @@ function collectUpstreamLevels(curFqn) {
     if (modelLevel[it.fqn] === undefined || it.level < modelLevel[it.fqn]) modelLevel[it.fqn] = it.level;
     if (!modelCols[it.fqn]) modelCols[it.fqn] = new Set();
     modelCols[it.fqn].add(it.col);
-    var srcCl = colLineage[it.fqn] || {};
-    (srcCl[it.col] || []).forEach(function(src) {
+    var next = lineageMap[it.fqn] || {};
+    (next[it.col] || []).forEach(function(src) {
       var key = src.model + "|" + src.column;
       if (!visited[key]) { visited[key] = true; queue.push({fqn: src.model, col: src.column, level: it.level + 1}); }
     });
@@ -1870,36 +1908,6 @@ function collectUpstreamLevels(curFqn) {
   });
   return levels;
 }
-
-/* BFS: collect all downstream models by hop-level from curFqn */
-function collectDownstreamLevels(curFqn) {
-  var rl = reverseLineage[curFqn] || {};
-  var modelLevel = {}, modelCols = {}, visited = {}, queue = [];
-  Object.keys(rl).forEach(function(col) {
-    (rl[col] || []).forEach(function(consumer) {
-      var key = consumer.model + "|" + consumer.column;
-      if (!visited[key]) { visited[key] = true; queue.push({fqn: consumer.model, col: consumer.column, level: 1}); }
-    });
-  });
-  while (queue.length) {
-    var it = queue.shift();
-    if (modelLevel[it.fqn] === undefined || it.level < modelLevel[it.fqn]) modelLevel[it.fqn] = it.level;
-    if (!modelCols[it.fqn]) modelCols[it.fqn] = new Set();
-    modelCols[it.fqn].add(it.col);
-    var nextRl = reverseLineage[it.fqn] || {};
-    (nextRl[it.col] || []).forEach(function(consumer) {
-      var key = consumer.model + "|" + consumer.column;
-      if (!visited[key]) { visited[key] = true; queue.push({fqn: consumer.model, col: consumer.column, level: it.level + 1}); }
-    });
-  }
-  var levels = {};
-  Object.keys(modelLevel).forEach(function(fqn) {
-    var lv = modelLevel[fqn]; if (!levels[lv]) levels[lv] = [];
-    levels[lv].push({fqn: fqn, cols: Array.from(modelCols[fqn]).sort()});
-  });
-  return levels;
-}
-
 /* ---- Properties Section ---- */
 function renderPropertiesSection(m) {
   var h = '';
@@ -1914,7 +1922,7 @@ function renderPropertiesSection(m) {
   ];
   topItems.forEach(function(kv) {
     if (kv[1] != null && kv[1] !== "") {
-      h += '<div class="detail-item"><div class="dk">' + e(kv[0]) + '</div><div class="dv">' + e(String(kv[1])) + '</div></div>';
+      h += '<div class="detail-item"><div class="dk">' + escapeHtml(kv[0]) + '</div><div class="dv">' + escapeHtml(String(kv[1])) + '</div></div>';
     }
   });
 
@@ -1924,7 +1932,7 @@ function renderPropertiesSection(m) {
     var v = d[k];
     if (v == null || v === "") return;
     var label = k.replace(/_/g, " ").replace(/\b\w/g, function(c) { return c.toUpperCase(); });
-    h += '<div class="detail-item"><div class="dk">' + e(label) + '</div><div class="dv">' + e(String(v)) + '</div></div>';
+    h += '<div class="detail-item"><div class="dk">' + escapeHtml(label) + '</div><div class="dv">' + escapeHtml(String(v)) + '</div></div>';
   });
 
   h += '</div></div>';
@@ -1942,9 +1950,9 @@ function renderColumnsSection(m, cl) {
       var hasSrc = cl[c.name] && cl[c.name].length > 0;
       h += '<tr>';
       h += '<td><span class="lineage-dot' + (hasSrc ? "" : " none") + '" title="' + (hasSrc ? "Has upstream lineage" : "No lineage info") + '"></span></td>';
-      h += '<td class="cn">' + e(c.name) + '</td>';
-      h += '<td class="ct">' + e(c.type) + '</td>';
-      h += '<td class="cd">' + e(c.description || "") + '</td>';
+      h += '<td class="cn">' + escapeHtml(c.name) + '</td>';
+      h += '<td class="ct">' + escapeHtml(c.type) + '</td>';
+      h += '<td class="cd">' + escapeHtml(c.description || "") + '</td>';
       h += '</tr>';
     });
     h += '</tbody></table></div>';
@@ -1953,6 +1961,12 @@ function renderColumnsSection(m, cl) {
   }
   h += '</div>';
   return h;
+}
+
+function maxLevel(levels) {
+  var mx = 0;
+  Object.keys(levels).forEach(function(l) { if (+l > mx) mx = +l; });
+  return mx;
 }
 
 /* ---- Lineage Tab (multi-level column lineage) ---- */
@@ -1965,14 +1979,11 @@ function renderLineageTab(m) {
   if (!hasUp && !hasDown)
     return '<div class="empty-state"><p>No column lineage information available</p></div>';
 
-  var upLevels = collectUpstreamLevels(m.fqn);
-  var downLevels = collectDownstreamLevels(m.fqn);
-  var maxUp = 0, maxDown = 0;
-  Object.keys(upLevels).forEach(function(l) { if (+l > maxUp) maxUp = +l; });
-  Object.keys(downLevels).forEach(function(l) { if (+l > maxDown) maxDown = +l; });
+  var upLevels = collectLevels(m.fqn, colLineage);
+  var downLevels = collectLevels(m.fqn, reverseLineage);
 
   var h = '<div class="section" id="lineageSection"><div class="section-hd">Column Lineage</div>';
-  h += renderLineageCanvas(m, upLevels, maxUp, downLevels, maxDown, 'lcanvas', 'lsvg', true);
+  h += renderLineageCanvas(m, upLevels, maxLevel(upLevels), downLevels, maxLevel(downLevels), 'lcanvas', 'lsvg', true);
   h += '</div>';
   return h;
 }
@@ -1994,7 +2005,7 @@ function renderLineageCanvas(m, upLevels, maxUp, downLevels, maxDown, canvasId, 
     if (!upLevels[lv]) continue;
     h += '<div class="lineage-col">';
     upLevels[lv].sort(function(a,b) { return a.fqn < b.fqn ? -1 : 1; }).forEach(function(info) {
-      h += renderLBlock(info.fqn, info.cols);
+      h += renderLineageBlock(info.fqn, info.cols);
     });
     h += '</div>';
   }
@@ -2002,7 +2013,7 @@ function renderLineageCanvas(m, upLevels, maxUp, downLevels, maxDown, canvasId, 
   /* Current model */
   h += '<div class="lineage-col">';
   h += '<div class="lineage-col-label">Current Model</div>';
-  h += renderCurrentLBlock(m);
+  h += renderLineageBlock(m.fqn, m.columns, true);
   h += '</div>';
 
   /* Downstream columns */
@@ -2010,7 +2021,7 @@ function renderLineageCanvas(m, upLevels, maxUp, downLevels, maxDown, canvasId, 
     if (!downLevels[lv]) continue;
     h += '<div class="lineage-col">';
     downLevels[lv].sort(function(a,b) { return a.fqn < b.fqn ? -1 : 1; }).forEach(function(info) {
-      h += renderLBlock(info.fqn, info.cols);
+      h += renderLineageBlock(info.fqn, info.cols);
     });
     h += '</div>';
   }
@@ -2033,41 +2044,24 @@ function renderLineageCanvas(m, upLevels, maxUp, downLevels, maxDown, canvasId, 
   return h;
 }
 
-function renderLBlock(fqn, cols) {
+function renderLineageBlock(fqn, cols, isCurrent) {
   var mdl = byFqn[fqn];
   var name = mdl ? mdl.name.split(".").pop() : fqn.replace(/"/g, "").split(".").pop();
-  var bid = "lb_" + fqn.replace(/[^a-zA-Z0-9]/g, "_");
-  var h = '<div class="lblock" id="' + bid + '">';
+  var bid = isCurrent ? "lb_current" : "lb_" + fqn.replace(/[^a-zA-Z0-9]/g, "_");
+  var h = '<div class="lblock' + (isCurrent ? ' current' : '') + '" id="' + bid + '">';
   h += '<div class="lblock-hd">';
   h += '<span class="lblock-arrow open">' + ICONS.chevron + '</span>';
   h += '<span class="lblock-icon">' + ICONS.table + '</span>';
-  h += '<span class="lblock-name">' + (mdl ? '<a href="#/model/' + encodeURIComponent(fqn) + '" onclick="event.stopPropagation()">' + e(name) + '</a>' : e(name)) + '</span>';
+  h += '<span class="lblock-name">' + (mdl && !isCurrent ? '<a href="#/model/' + encodeURIComponent(fqn) + '" onclick="event.stopPropagation()">' + escapeHtml(name) + '</a>' : escapeHtml(name)) + '</span>';
   h += '<span class="lblock-cnt">' + cols.length + '</span>';
   h += '</div><div class="lblock-body open">';
   cols.forEach(function(col) {
-    var ct = colType(fqn, col);
-    h += '<div class="lcol-row" data-lnode="' + e(nq(fqn)) + '|' + e(col) + '">';
-    h += '<span class="lcol-dot"></span><span class="lcol-name">' + e(col) + '</span>';
-    if (ct) h += '<span class="lcol-type">' + e(ct) + '</span>';
+    var colName = typeof col === "string" ? col : col.name;
+    var ct = typeof col === "string" ? colType(fqn, col) : (col.type || "");
+    h += '<div class="lcol-row" data-lnode="' + escapeHtml(normalizeFqn(fqn)) + '|' + escapeHtml(colName) + '">';
+    h += '<span class="lcol-dot"></span><span class="lcol-name">' + escapeHtml(colName) + '</span>';
+    if (ct) h += '<span class="lcol-type">' + escapeHtml(ct) + '</span>';
     h += '</div>';
-  });
-  h += '</div></div>';
-  return h;
-}
-
-function renderCurrentLBlock(m) {
-  var bid = "lb_current";
-  var h = '<div class="lblock current" id="' + bid + '">';
-  h += '<div class="lblock-hd">';
-  h += '<span class="lblock-arrow open">' + ICONS.chevron + '</span>';
-  h += '<span class="lblock-icon">' + ICONS.table + '</span>';
-  h += '<span class="lblock-name">' + e(m.name.split(".").pop()) + '</span>';
-  h += '<span class="lblock-cnt">' + m.columns.length + '</span>';
-  h += '</div><div class="lblock-body open">';
-  m.columns.forEach(function(c) {
-    h += '<div class="lcol-row" data-lnode="' + e(nq(m.fqn)) + '|' + e(c.name) + '">';
-    h += '<span class="lcol-dot"></span><span class="lcol-name">' + e(c.name) + '</span>';
-    h += '<span class="lcol-type">' + e(c.type) + '</span></div>';
   });
   h += '</div></div>';
   return h;
@@ -2087,12 +2081,12 @@ function detectLang(code) {
 function singlePassHL(raw, re, classify) {
   var out = "", last = 0, m;
   while ((m = re.exec(raw)) !== null) {
-    if (m.index > last) out += e(raw.substring(last, m.index));
+    if (m.index > last) out += escapeHtml(raw.substring(last, m.index));
     var cls = classify(m[0]);
-    out += cls ? '<span class="' + cls + '">' + e(m[0]) + '</span>' : e(m[0]);
+    out += cls ? '<span class="' + cls + '">' + escapeHtml(m[0]) + '</span>' : escapeHtml(m[0]);
     last = re.lastIndex;
   }
-  if (last < raw.length) out += e(raw.substring(last));
+  if (last < raw.length) out += escapeHtml(raw.substring(last));
   return out;
 }
 
@@ -2160,15 +2154,15 @@ window.togBlock = function(bid) {
 };
 
 /* ---- Canvas pan / zoom (React Flow style) ---- */
-var _lcState = {};
+var _lineageCanvasState = {};
 
-function getLcState(canvasId) {
-  if (!_lcState[canvasId]) _lcState[canvasId] = { panX: 0, panY: 0, zoom: 1 };
-  return _lcState[canvasId];
+function getLineageCanvasState(canvasId) {
+  if (!_lineageCanvasState[canvasId]) _lineageCanvasState[canvasId] = { panX: 0, panY: 0, zoom: 1 };
+  return _lineageCanvasState[canvasId];
 }
 
-function applyLcTransform(canvasId, svgId) {
-  var st = getLcState(canvasId);
+function applyLineageCanvasTransform(canvasId, svgId) {
+  var st = getLineageCanvasState(canvasId);
   var vp = document.getElementById(canvasId + '_vp');
   var canvas = document.getElementById(canvasId);
   if (!vp || !canvas) return;
@@ -2182,7 +2176,7 @@ function applyLcTransform(canvasId, svgId) {
 }
 
 window.lcZoom = function(canvasId, svgId, dir) {
-  var st = getLcState(canvasId);
+  var st = getLineageCanvasState(canvasId);
   var canvas = document.getElementById(canvasId);
   if (!canvas) return;
   var cr = canvas.getBoundingClientRect();
@@ -2192,11 +2186,11 @@ window.lcZoom = function(canvasId, svgId, dir) {
   st.panX = cx - (cx - st.panX) * (newZoom / st.zoom);
   st.panY = cy - (cy - st.panY) * (newZoom / st.zoom);
   st.zoom = newZoom;
-  applyLcTransform(canvasId, svgId);
+  applyLineageCanvasTransform(canvasId, svgId);
 };
 
 window.lcFit = function(canvasId, svgId) {
-  var st = getLcState(canvasId);
+  var st = getLineageCanvasState(canvasId);
   var canvas = document.getElementById(canvasId);
   var vp = document.getElementById(canvasId + '_vp');
   if (!canvas || !vp) return;
@@ -2216,15 +2210,15 @@ window.lcFit = function(canvasId, svgId) {
   st.zoom = newZoom;
   st.panX = (cr.width - contentW * newZoom) / 2 + (pad / 2) * newZoom;
   st.panY = (cr.height - contentH * newZoom) / 2 + (pad / 2) * newZoom;
-  applyLcTransform(canvasId, svgId);
+  applyLineageCanvasTransform(canvasId, svgId);
 };
 
 function setupCanvasPanZoom(canvasId, svgId) {
   var canvas = document.getElementById(canvasId);
   if (!canvas) return;
   /* Reset state for this canvas */
-  _lcState[canvasId] = { panX: 0, panY: 0, zoom: 1 };
-  var st = getLcState(canvasId);
+  _lineageCanvasState[canvasId] = { panX: 0, panY: 0, zoom: 1 };
+  var st = getLineageCanvasState(canvasId);
 
   /* Wheel zoom (toward cursor) */
   canvas.addEventListener('wheel', function(ev) {
@@ -2236,7 +2230,7 @@ function setupCanvasPanZoom(canvasId, svgId) {
     st.panX = mx - (mx - st.panX) * (newZoom / st.zoom);
     st.panY = my - (my - st.panY) * (newZoom / st.zoom);
     st.zoom = newZoom;
-    applyLcTransform(canvasId, svgId);
+    applyLineageCanvasTransform(canvasId, svgId);
   }, { passive: false });
 
   /* Pan: drag on empty canvas space */
@@ -2248,10 +2242,10 @@ function setupCanvasPanZoom(canvasId, svgId) {
     var ox = st.panX, oy = st.panY;
     canvas.classList.add('panning');
 
-    function onMove(e) {
-      st.panX = ox + (e.clientX - startX);
-      st.panY = oy + (e.clientY - startY);
-      applyLcTransform(canvasId, svgId);
+    function onMove(ev) {
+      st.panX = ox + (ev.clientX - startX);
+      st.panY = oy + (ev.clientY - startY);
+      applyLineageCanvasTransform(canvasId, svgId);
     }
     function onUp() {
       document.removeEventListener('mousemove', onMove);
@@ -2280,15 +2274,15 @@ function setupBlockDrag(canvasId, svgId) {
       var block = hd.closest(".lblock");
       if (!block) return;
 
-      var cst = getLcState(canvasId);
+      var canvasState = getLineageCanvasState(canvasId);
       var startX = ev.clientX, startY = ev.clientY;
       var ox = parseFloat(block.dataset.dx || 0);
       var oy = parseFloat(block.dataset.dy || 0);
       var dragging = false, raf = 0;
 
-      function onMove(e) {
-        var rawDx = e.clientX - startX;
-        var rawDy = e.clientY - startY;
+      function onMove(ev) {
+        var rawDx = ev.clientX - startX;
+        var rawDy = ev.clientY - startY;
         /* Threshold in screen pixels */
         if (!dragging && Math.abs(rawDx) + Math.abs(rawDy) < 5) return;
         if (!dragging) {
@@ -2298,15 +2292,15 @@ function setupBlockDrag(canvasId, svgId) {
           document.body.style.userSelect = "none";
         }
         /* Divide by zoom to convert screen delta → canvas-space delta */
-        var dx = rawDx / cst.zoom;
-        var dy = rawDy / cst.zoom;
+        var dx = rawDx / canvasState.zoom;
+        var dy = rawDy / canvasState.zoom;
         block.dataset.dx = ox + dx;
         block.dataset.dy = oy + dy;
         block.style.transform = "translate(" + (ox + dx) + "px," + (oy + dy) + "px)";
         if (!raf) raf = requestAnimationFrame(function() { raf = 0; drawLineageLinesIn(svgId, canvasId); });
       }
 
-      function onUp(e) {
+      function onUp() {
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
         document.body.style.cursor = "";
@@ -2330,21 +2324,18 @@ function setupBlockDrag(canvasId, svgId) {
 /* Lineage overlay: open, close, draw */
 window.openLineageOverlay = function() {
   if (!curModel) return;
-  var m = byFqn[nq(curModel)] || byName[curModel];
+  var m = byFqn[normalizeFqn(curModel)] || byName[curModel];
   if (!m) return;
   var cl = colLineage[m.fqn] || {};
   var rl = reverseLineage[m.fqn] || {};
   if (!Object.keys(cl).length && !Object.keys(rl).length) return;
 
-  var upLevels = collectUpstreamLevels(m.fqn);
-  var downLevels = collectDownstreamLevels(m.fqn);
-  var maxUp = 0, maxDown = 0;
-  Object.keys(upLevels).forEach(function(l) { if (+l > maxUp) maxUp = +l; });
-  Object.keys(downLevels).forEach(function(l) { if (+l > maxDown) maxDown = +l; });
+  var upLevels = collectLevels(m.fqn, colLineage);
+  var downLevels = collectLevels(m.fqn, reverseLineage);
 
   document.getElementById("loTitle").textContent = "Column Lineage — " + m.name.split(".").pop();
   var body = document.getElementById("loBody");
-  body.innerHTML = renderLineageCanvas(m, upLevels, maxUp, downLevels, maxDown, 'loCanvas', 'loSvg', false);
+  body.innerHTML = renderLineageCanvas(m, upLevels, maxLevel(upLevels), downLevels, maxLevel(downLevels), 'loCanvas', 'loSvg', false);
   document.getElementById("lineageOverlay").classList.add("open");
 
   requestAnimationFrame(function() {
@@ -2370,8 +2361,6 @@ document.getElementById("lineageOverlay").addEventListener("click", function(ev)
   if (ev.target === this) closeLineageOverlay();
 });
 
-function drawLineageLines() { drawLineageLinesIn("lsvg", "lcanvas"); }
-
 function drawLineageLinesIn(svgId, canvasId) {
   var svg = document.getElementById(svgId);
   var canvas = document.getElementById(canvasId);
@@ -2395,7 +2384,7 @@ function drawLineageLinesIn(svgId, canvasId) {
     var fqn = parts[0], col = parts[1];
     var srcs = (colLineage[fqn] || {})[col] || [];
     srcs.forEach(function(src) {
-      var srcId = nq(src.model) + "|" + src.column;
+      var srcId = normalizeFqn(src.model) + "|" + src.column;
       if (nodeMap[srcId]) {
         paths += makePath(nodeMap[srcId], nodeMap[nodeId], cr, 0, 0, srcId, nodeId);
       }
@@ -2403,6 +2392,15 @@ function drawLineageLinesIn(svgId, canvasId) {
   });
 
   svg.innerHTML = paths;
+}
+
+function redrawVisibleLineageCanvases() {
+  document.querySelectorAll(".lineage-canvas").forEach(function(canvas) {
+    var svg = canvas.querySelector(".lineage-svg");
+    if (svg && canvas.id && svg.id) {
+      drawLineageLinesIn(svg.id, canvas.id);
+    }
+  });
 }
 
 function isVisible(el) {
@@ -2418,7 +2416,7 @@ function makePath(fromEl, toEl, canvasRect, scrollLeft, scrollTop, srcId, tgtId)
   var x2 = tr.left - canvasRect.left + scrollLeft;
   var y2 = tr.top + tr.height / 2 - canvasRect.top + scrollTop;
   var dx = Math.abs(x2 - x1) * 0.45;
-  return '<path d="M' + x1 + ' ' + y1 + ' C' + (x1 + dx) + ' ' + y1 + ' ' + (x2 - dx) + ' ' + y2 + ' ' + x2 + ' ' + y2 + '" data-from="' + e(srcId) + '" data-to="' + e(tgtId) + '"/>';
+  return '<path d="M' + x1 + ' ' + y1 + ' C' + (x1 + dx) + ' ' + y1 + ' ' + (x2 - dx) + ' ' + y2 + ' ' + x2 + ' ' + y2 + '" data-from="' + escapeHtml(srcId) + '" data-to="' + escapeHtml(tgtId) + '"/>';
 }
 
 /* Trace the full transitive path (upstream + downstream) from a single column */
@@ -2428,21 +2426,19 @@ function traceFullPath(startFqn, startCol) {
     var k = fqn + "|" + col;
     if (result.has(k)) return;
     result.add(k);
-    ((colLineage[fqn] || {})[col] || []).forEach(function(src) { walkUp(nq(src.model), src.column); });
+    ((colLineage[fqn] || {})[col] || []).forEach(function(src) { walkUp(normalizeFqn(src.model), src.column); });
   }
   function walkDown(fqn, col) {
     var k = fqn + "|" + col;
     if (result.has(k)) return;
     result.add(k);
-    ((reverseLineage[fqn] || {})[col] || []).forEach(function(c) { walkDown(nq(c.model), c.column); });
+    ((reverseLineage[fqn] || {})[col] || []).forEach(function(c) { walkDown(normalizeFqn(c.model), c.column); });
   }
   walkUp(startFqn, startCol);
   result.delete(startFqn + "|" + startCol); /* reset so walkDown can add it too */
   walkDown(startFqn, startCol);
   return result;
 }
-
-function setupLineageInteractions() { setupLineageInteractionsIn("lcanvas"); }
 
 function setupLineageInteractionsIn(canvasId) {
   var canvas = document.getElementById(canvasId);
@@ -2493,7 +2489,7 @@ function applyHighlight(nodeId, canvas) {
       if (block) block.classList.add("hl-block");
     }
   });
-  canvas.querySelectorAll("svg path").forEach(function(p) {
+  canvas.querySelectorAll(".lineage-svg path").forEach(function(p) {
     if (pathSet.has(p.dataset.from) && pathSet.has(p.dataset.to)) p.classList.add("hl");
   });
 }
@@ -2528,6 +2524,7 @@ function clearHighlight(canvas) {
     if (w < 180) w = 180;
     if (w > 480) w = 480;
     sidebar.style.width = w + "px";
+    redrawVisibleLineageCanvases();
   }
   function onUp() {
     handle.classList.remove("dragging");
@@ -2536,6 +2533,12 @@ function clearHighlight(canvas) {
     document.removeEventListener("mouseup", onUp);
   }
 })();
+
+window.addEventListener("resize", function() {
+  requestAnimationFrame(function() {
+    redrawVisibleLineageCanvases();
+  });
+});
 
 /* ================================================================== */
 /* Boot                                                                */
