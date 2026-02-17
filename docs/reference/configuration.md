@@ -143,6 +143,8 @@ SQLMesh UI settings.
 
 Configuration for generated SQLMesh documentation artifacts.
 
+For dbt-compatible YAML model documentation, refer to the models guide section [Define model docs in dbt-compatible YAML](../guides/models.md#define-model-docs-in-dbt-compatible-yaml).
+
 | Option           | Description                                                                                                                                                                                                                     | Type                         | Required |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------: | :------: |
 | `external_links` | List of external links shown in each model's properties panel in generated docs. Each item defines a `label` and a URL template. URL templates support placeholders: `{fqn}`, `{name}`, `{schema}`, `{catalog}`, `{project}`. | list[`ExternalLinkConfig`] |    N     |

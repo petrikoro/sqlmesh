@@ -40,6 +40,7 @@ else:
 if t.TYPE_CHECKING:
     from sqlmesh.core.audit import Audit, ModelAudit
     from sqlmesh.core.context import GenericContext
+    from sqlmesh.core.loader import ModelDocsPatch
 
 logger = logging.getLogger(__name__)
 
@@ -426,6 +427,11 @@ class DbtLoader(Loader):
                 self._cache_entry_name(path),
                 self._cache_entry_id(path),
             )
+
+        def get_or_load_model_docs_patches(
+            self, target_path: Path, loader: t.Callable[[], t.List[ModelDocsPatch]]
+        ) -> t.List[ModelDocsPatch]:
+            return loader()
 
         def _cache_entry_name(self, target_path: Path) -> str:
             try:
