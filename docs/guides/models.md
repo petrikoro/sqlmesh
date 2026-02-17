@@ -269,23 +269,15 @@ You can keep model documentation in dedicated YAML files under your `models/` di
 Supported fields:
 
 - `models[].description`
-- `models[].columns[].description`
 - `models[].tags`
-- `models[].config.tags`
+- `models[].columns[].description`
 
 If descriptions or tags exist both in model SQL/Python and YAML, YAML takes precedence.
-
-Model matching behavior for `models[].name`:
-
-- You can use a short name (for example, `orders`) or a fully-qualified name (for example, `sushi.orders` or `catalog.sushi.orders`).
-- If a short name is ambiguous and matches multiple models, you must use a fully-qualified name.
-
-When both `models[].tags` and `models[].config.tags` are present, SQLMesh combines them and removes duplicates.
 
 ```yaml
 version: 2
 models:
-  - name: orders
+  - name: sushi.orders
     description: Curated orders model.
     tags:
       - finance

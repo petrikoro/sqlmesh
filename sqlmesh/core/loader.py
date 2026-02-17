@@ -38,6 +38,7 @@ from sqlmesh.core.model.common import make_python_env
 from sqlmesh.core.signal import signal
 from sqlmesh.core.test import ModelTestMetadata
 from sqlmesh.utils import UniqueKeyDict, sys_path
+from sqlmesh.utils.cache import FileCache
 from sqlmesh.utils.errors import ConfigError
 from sqlmesh.utils.jinja import JinjaMacroRegistry, MacroExtractor
 from sqlmesh.utils.metaprogramming import import_python_file
@@ -77,6 +78,10 @@ class ModelDocsPatch:
     tags: t.Optional[t.List[str]] = None
 
 
+class _ModelDocsPatchLoadError(Exception):
+    """Raised when model docs patches can't be loaded for a file."""
+
+
 class CacheBase(abc.ABC):
     @abc.abstractmethod
     def get_or_load_models(
@@ -109,6 +114,13 @@ class CacheBase(abc.ABC):
         Returns:
             List of cached models associated with the path, an empty list if no cache entry exists
         """
+        pass
+
+    @abc.abstractmethod
+    def get_or_load_model_docs_patches(
+        self, target_path: Path, loader: t.Callable[[], t.List[ModelDocsPatch]]
+    ) -> t.List[ModelDocsPatch]:
+        """Get or load model docs patches from cache."""
         pass
 
 
@@ -560,10 +572,10 @@ class SqlMeshLoader(Loader):
             raise ConfigError(f"Duplicate model name(s) found: {', '.join(duplicates)}.")
 
         models = UniqueKeyDict("models", **sql_models, **external_models, **python_models)
-        self._apply_model_docs(models, self._load_model_docs_patches())
+        self._apply_model_docs(models, self._load_model_docs_patches(cache))
         return models
 
-    def _load_model_docs_patches(self) -> t.List[ModelDocsPatch]:
+    def _load_model_docs_patches(self, cache: CacheBase) -> t.List[ModelDocsPatch]:
         models_path = self.config_path / c.MODELS
         if not models_path.exists() or not models_path.is_dir():
             return []
@@ -584,54 +596,107 @@ class SqlMeshLoader(Loader):
         for path in docs_paths:
             self._track_file(path)
             try:
-                yaml = yaml_load(
-                    path,
-                    raise_if_empty=False,
-                    render_jinja=False,
-                    allow_duplicate_keys=True,
-                    keep_last_duplicate_key=True,
-                )
-            except Exception as ex:
-                self._console.log_warning(
-                    f"{self._failed_to_load_model_error(path, ex)} "
-                    "Model docs in this file will be ignored."
-                )
-                continue
-
-            if not isinstance(yaml, dict):
-                continue
-
-            models = yaml.get("models")
-            if not isinstance(models, list):
-                continue
-
-            for model in models:
-                if not isinstance(model, dict):
-                    continue
-
-                model_name = model.get("name")
-                if not isinstance(model_name, str) or not model_name.strip():
-                    continue
-
-                description = model.get("description")
-                description = str(description) if description is not None else None
-                column_descriptions = self._extract_column_descriptions(model.get("columns"))
-                tags = self._extract_model_tags(model)
-
-                if description is None and not column_descriptions and tags is None:
-                    continue
-
-                model_docs_patches.append(
-                    ModelDocsPatch(
-                        model_name=model_name.strip(),
-                        path=path,
-                        description=description,
-                        column_descriptions=column_descriptions,
-                        tags=tags,
+                model_docs_patches.extend(
+                    cache.get_or_load_model_docs_patches(
+                        path,
+                        lambda path=path: self._load_model_docs_patches_for_file(path),
                     )
                 )
+            except _ModelDocsPatchLoadError:
+                # Don't cache parse failures to ensure warnings are emitted on subsequent loads.
+                continue
+
+        model_docs_patch_counts: t.Dict[str, int] = defaultdict(int)
+        for patch in model_docs_patches:
+            normalized_name = normalize_model_name(
+                patch.model_name,
+                default_catalog=self.context.default_catalog,
+                dialect=self.config.model_defaults.dialect,
+            )
+            model_docs_patch_counts[normalized_name] += 1
+
+        duplicate_model_doc_entries = sorted(
+            model_name for model_name, count in model_docs_patch_counts.items() if count > 1
+        )
+        if duplicate_model_doc_entries:
+            duplicate_entries = ", ".join(duplicate_model_doc_entries)
+            raise ConfigError(
+                "Duplicate model docs entry name(s) found in YAML docs: "
+                f"{duplicate_entries}. Each model must be defined only once."
+            )
 
         return model_docs_patches
+
+    def _load_model_docs_patches_for_file(self, path: Path) -> t.List[ModelDocsPatch]:
+        try:
+            yaml = yaml_load(
+                path,
+                raise_if_empty=False,
+                render_jinja=False,
+                allow_duplicate_keys=True,
+                keep_last_duplicate_key=True,
+            )
+        except Exception as ex:
+            self._console.log_warning(
+                f"{self._failed_to_load_model_error(path, ex)} "
+                "Model docs in this file will be ignored."
+            )
+            raise _ModelDocsPatchLoadError from ex
+
+        if not isinstance(yaml, dict):
+            return []
+
+        yaml_models = yaml.get("models")
+        if not isinstance(yaml_models, list):
+            return []
+
+        model_docs_patches: t.List[ModelDocsPatch] = []
+        for model in yaml_models:
+            if not isinstance(model, dict):
+                continue
+
+            model_name = model.get("name")
+            if not isinstance(model_name, str) or not model_name.strip():
+                continue
+            model_name = model_name.strip()
+
+            if not self._is_fully_qualified_model_name(model_name):
+                raise ConfigError(
+                    self._failed_to_load_model_error(
+                        path,
+                        (
+                            f"Model docs entry '{model_name}' must use a fully qualified model name "
+                            "(for example, 'sushi.orders')."
+                        ),
+                    ),
+                    path,
+                )
+
+            description = model.get("description")
+            description = str(description) if description is not None else None
+            column_descriptions = self._extract_column_descriptions(model.get("columns"))
+            tags = self._extract_model_tags(model)
+
+            if description is None and not column_descriptions and tags is None:
+                continue
+
+            model_docs_patches.append(
+                ModelDocsPatch(
+                    model_name=model_name,
+                    path=path,
+                    description=description,
+                    column_descriptions=column_descriptions,
+                    tags=tags,
+                )
+            )
+
+        return model_docs_patches
+
+    def _is_fully_qualified_model_name(self, model_name: str) -> bool:
+        try:
+            return bool(exp.to_table(model_name).db)
+        except Exception:
+            return False
 
     def _extract_column_descriptions(self, columns: t.Any) -> t.Dict[str, str]:
         column_descriptions: t.Dict[str, str] = {}
@@ -657,24 +722,11 @@ class SqlMeshLoader(Loader):
         return column_descriptions
 
     def _extract_model_tags(self, model: t.Dict[str, t.Any]) -> t.Optional[t.List[str]]:
-        has_tags = False
-        tags: t.List[str] = []
-
         top_level_tags = model.get("tags")
-        if top_level_tags is not None:
-            has_tags = True
-            tags.extend(str(tag).strip() for tag in ensure_list(top_level_tags))
-
-        config = model.get("config")
-        if isinstance(config, dict):
-            config_tags = config.get("tags")
-            if config_tags is not None:
-                has_tags = True
-                tags.extend(str(tag).strip() for tag in ensure_list(config_tags))
-
-        if not has_tags:
+        if top_level_tags is None:
             return None
 
+        tags = [str(tag).strip() for tag in ensure_list(top_level_tags)]
         deduped_tags: t.List[str] = []
         for tag in tags:
             if tag and tag not in deduped_tags:
@@ -687,13 +739,14 @@ class SqlMeshLoader(Loader):
         if not model_docs_patches:
             return
 
-        short_name_to_model_fqns: t.Dict[str, t.List[str]] = defaultdict(list)
-        for model in models.values():
-            short_name = exp.to_table(model.fqn).name.lower()
-            short_name_to_model_fqns[short_name].append(model.fqn)
-
+        model_name_resolution_cache: t.Dict[str, t.Optional[str]] = {}
+        patches_by_model_fqn: t.Dict[str, t.List[ModelDocsPatch]] = defaultdict(list)
         for patch in model_docs_patches:
-            model_fqn = self._model_for_docs_patch(models, short_name_to_model_fqns, patch)
+            model_fqn = model_name_resolution_cache.get(patch.model_name)
+            if patch.model_name not in model_name_resolution_cache:
+                model_fqn = self._model_for_docs_patch(models, patch)
+                model_name_resolution_cache[patch.model_name] = model_fqn
+
             if model_fqn is None:
                 self._console.log_warning(
                     f"Model docs entry '{patch.model_name}' in '{patch.path}' "
@@ -701,24 +754,43 @@ class SqlMeshLoader(Loader):
                 )
                 continue
 
+            patches_by_model_fqn[model_fqn].append(patch)
+
+        normalized_column_cache: t.Dict[t.Tuple[str, str], str] = {}
+        _unset = object()
+        for model_fqn, patches in patches_by_model_fqn.items():
             model = models[model_fqn]
             model_updates: t.Dict[str, t.Any] = {}
+            description: t.Any = _unset
+            tags: t.Any = _unset
+            has_column_updates = False
+            merged_column_descriptions = dict(model.column_descriptions)
 
-            if patch.description is not None:
-                model_updates["description"] = patch.description
+            for patch in patches:
+                if patch.description is not None:
+                    description = patch.description
 
-            if patch.column_descriptions:
-                normalized_column_descriptions = {
-                    normalize_identifiers(column_name, dialect=model.dialect).name: description
-                    for column_name, description in patch.column_descriptions.items()
-                }
-                model_updates["column_descriptions_"] = {
-                    **dict(model.column_descriptions),
-                    **normalized_column_descriptions,
-                }
+                if patch.column_descriptions:
+                    has_column_updates = True
+                    for column_name, column_description in patch.column_descriptions.items():
+                        cache_key = (column_name, model.dialect)
+                        normalized_column_name = normalized_column_cache.get(cache_key)
+                        if normalized_column_name is None:
+                            normalized_column_name = normalize_identifiers(
+                                column_name, dialect=model.dialect
+                            ).name
+                            normalized_column_cache[cache_key] = normalized_column_name
+                        merged_column_descriptions[normalized_column_name] = column_description
 
-            if patch.tags is not None:
-                model_updates["tags"] = patch.tags
+                if patch.tags is not None:
+                    tags = patch.tags
+
+            if description is not _unset:
+                model_updates["description"] = description
+            if has_column_updates:
+                model_updates["column_descriptions_"] = merged_column_descriptions
+            if tags is not _unset:
+                model_updates["tags"] = tags
 
             if not model_updates:
                 continue
@@ -731,7 +803,6 @@ class SqlMeshLoader(Loader):
     def _model_for_docs_patch(
         self,
         models: UniqueKeyDict[str, Model],
-        short_name_to_model_fqns: t.Dict[str, t.List[str]],
         patch: ModelDocsPatch,
     ) -> t.Optional[str]:
         try:
@@ -745,23 +816,6 @@ class SqlMeshLoader(Loader):
 
         if normalized_name in models:
             return normalized_name
-
-        short_name = exp.to_table(patch.model_name).name.lower()
-        model_matches = short_name_to_model_fqns.get(short_name, [])
-        if len(model_matches) > 1:
-            matching_names = ", ".join(sorted(model_matches))
-            raise ConfigError(
-                self._failed_to_load_model_error(
-                    patch.path,
-                    (
-                        f"Model docs entry '{patch.model_name}' is ambiguous and matches multiple models: "
-                        f"{matching_names}. Use a fully qualified model name."
-                    ),
-                ),
-                patch.path,
-            )
-        if model_matches:
-            return model_matches[0]
 
         return None
 
@@ -1113,6 +1167,10 @@ class SqlMeshLoader(Loader):
             self._loader = loader
             self.config_path = config_path
             self._model_cache = ModelCache(self._loader.context.cache_dir)
+            self._model_docs_patch_cache: FileCache[t.List[ModelDocsPatch]] = FileCache(
+                self._loader.context.cache_dir,
+                prefix="model_docs_patch",
+            )
 
         def get_or_load_models(
             self, target_path: Path, loader: t.Callable[[], t.List[Model]]
@@ -1146,6 +1204,15 @@ class SqlMeshLoader(Loader):
 
             return models
 
+        def get_or_load_model_docs_patches(
+            self, target_path: Path, loader: t.Callable[[], t.List[ModelDocsPatch]]
+        ) -> t.List[ModelDocsPatch]:
+            return self._model_docs_patch_cache.get_or_load(
+                self._cache_entry_name(target_path),
+                self._model_docs_patch_cache_entry_id(target_path),
+                loader=loader,
+            )
+
         def _cache_entry_name(self, target_path: Path) -> str:
             return "__".join(target_path.relative_to(self.config_path).parts).replace(
                 target_path.suffix, ""
@@ -1172,5 +1239,13 @@ class SqlMeshLoader(Loader):
                     # model's python environment if the @gateway macro variable is
                     # used in the model
                     self._loader.context.gateway or self._loader.config.default_gateway_name,
+                ]
+            )
+
+        def _model_docs_patch_cache_entry_id(self, docs_path: Path) -> str:
+            return "__".join(
+                [
+                    str(self._loader._path_mtimes[docs_path]),
+                    self._loader.config.fingerprint,
                 ]
             )

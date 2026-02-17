@@ -1,8 +1,10 @@
+import os
 import pytest
 from pathlib import Path
 from sqlmesh.cli.project_init import init_example_project
 from sqlmesh.core.config import Config, ModelDefaultsConfig
 from sqlmesh.core.context import Context
+from sqlmesh.core.loader import SqlMeshLoader
 from sqlmesh.utils.errors import ConfigError
 
 
@@ -227,7 +229,7 @@ SELECT 1 AS id;
         """
 version: 2
 models:
-  - name: orders
+  - name: test_schema.orders
     description: Orders from schema.yml
     columns:
       - name: id
@@ -312,7 +314,7 @@ SELECT 1 AS id, 10 AS amount;
         """
 version: 2
 models:
-  - name: orders
+  - name: test_schema.orders
     description: Description from YAML
     columns:
       - name: id
@@ -330,7 +332,7 @@ models:
     assert model.column_descriptions["amount"] == "Amount from SQL"
 
 
-def test_model_docs_yaml_applies_tags_from_tags_and_config_tags(tmp_path: Path) -> None:
+def test_model_docs_yaml_applies_only_top_level_tags(tmp_path: Path) -> None:
     models_dir = tmp_path / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
     (models_dir / "orders.sql").write_text(
@@ -348,7 +350,7 @@ SELECT 1 AS id;
         """
 version: 2
 models:
-  - name: orders
+  - name: test_schema.orders
     tags: finance
     config:
       tags:
@@ -362,7 +364,7 @@ models:
     model = context.get_model("test_schema.orders")
 
     assert model
-    assert model.tags == ["finance", "curated", "pii"]
+    assert model.tags == ["finance"]
 
 
 @pytest.mark.registry_isolation
@@ -393,7 +395,7 @@ def execute(
         """
 version: 2
 models:
-  - name: py_orders
+  - name: test_schema.py_orders
     description: Description from YAML
     columns:
       - name: id
@@ -410,24 +412,13 @@ models:
     assert model.column_descriptions["id"] == "ID from YAML"
 
 
-def test_model_docs_short_name_match_raises_when_ambiguous(tmp_path: Path) -> None:
+def test_model_docs_name_must_be_fully_qualified(tmp_path: Path) -> None:
     models_dir = tmp_path / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
-    (models_dir / "first_orders.sql").write_text(
+    (models_dir / "orders.sql").write_text(
         """
 MODEL (
-    name first.orders,
-    kind FULL,
-);
-
-SELECT 1 AS id;
-""",
-        encoding="utf-8",
-    )
-    (models_dir / "second_orders.sql").write_text(
-        """
-MODEL (
-    name second.orders,
+    name test_schema.orders,
     kind FULL,
 );
 
@@ -440,12 +431,12 @@ SELECT 1 AS id;
 version: 2
 models:
   - name: orders
-    description: ambiguous short name
+    description: short name is not allowed
 """,
         encoding="utf-8",
     )
 
-    with pytest.raises(ConfigError, match="ambiguous"):
+    with pytest.raises(ConfigError, match="fully qualified"):
         _duckdb_context(tmp_path)
 
 
@@ -480,6 +471,236 @@ sources:
 
     assert model
     assert model.description is None
+
+
+def test_model_docs_multiple_entries_for_same_model_raise_error(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "orders.sql").write_text(
+        """
+MODEL (
+    name test_schema.orders,
+    kind FULL,
+    column_descriptions (
+        amount = 'Amount from SQL'
+    ),
+);
+
+SELECT 1 AS id, 10 AS amount, 2 AS tax;
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "schema.yaml").write_text(
+        """
+version: 2
+models:
+  - name: test_schema.orders
+    description: First description
+    columns:
+      - name: id
+        description: ID from first patch
+      - name: amount
+        description: Amount from first patch
+    tags:
+      - first
+  - name: test_schema.orders
+    description: Second description
+    columns:
+      - name: id
+        description: ID from second patch
+      - name: tax
+        description: Tax from second patch
+    tags:
+      - second
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="Duplicate model docs entry name"):
+        _duckdb_context(tmp_path)
+
+
+def test_model_docs_multiple_yaml_files_for_same_model_raise_error(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "orders.sql").write_text(
+        """
+MODEL (
+    name test_schema.orders,
+    kind FULL,
+);
+
+SELECT 1 AS id;
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "a_docs.yaml").write_text(
+        """
+version: 2
+models:
+  - name: test_schema.orders
+    description: Description from a_docs
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "b_docs.yaml").write_text(
+        """
+version: 2
+models:
+  - name: test_schema.orders
+    description: Description from b_docs
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="Duplicate model docs entry name"):
+        _duckdb_context(tmp_path)
+
+
+def test_model_docs_yaml_patch_cache_hit_and_miss_on_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "orders.sql").write_text(
+        """
+MODEL (
+    name test_schema.orders,
+    kind FULL,
+);
+
+SELECT 1 AS id;
+""",
+        encoding="utf-8",
+    )
+    docs_path = models_dir / "schema.yaml"
+    docs_path.write_text(
+        """
+version: 2
+models:
+  - name: test_schema.orders
+    description: Initial description
+""",
+        encoding="utf-8",
+    )
+
+    parse_calls = 0
+    original_loader = SqlMeshLoader._load_model_docs_patches_for_file
+
+    def _counted_loader(self: SqlMeshLoader, path: Path) -> list:
+        nonlocal parse_calls
+        parse_calls += 1
+        return original_loader(self, path)
+
+    monkeypatch.setattr(SqlMeshLoader, "_load_model_docs_patches_for_file", _counted_loader)
+
+    context = _duckdb_context(tmp_path)
+    assert parse_calls == 1
+
+    context.load()
+    assert parse_calls == 1
+
+    docs_path.write_text(
+        """
+version: 2
+models:
+  - name: test_schema.orders
+    description: Updated description
+""",
+        encoding="utf-8",
+    )
+    current_mtime = docs_path.stat().st_mtime
+    os.utime(docs_path, (current_mtime + 1, current_mtime + 1))
+
+    context.load()
+    assert parse_calls == 2
+    model = context.get_model("test_schema.orders")
+    assert model
+    assert model.description == "Updated description"
+
+
+def test_model_docs_malformed_yaml_is_not_cached(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "orders.sql").write_text(
+        """
+MODEL (
+    name test_schema.orders,
+    kind FULL,
+);
+
+SELECT 1 AS id;
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "malformed_docs.yaml").write_text(
+        """
+version: 2
+models:
+  - name: orders
+    description: malformed yaml
+    columns: [
+""",
+        encoding="utf-8",
+    )
+
+    parse_calls = 0
+    original_loader = SqlMeshLoader._load_model_docs_patches_for_file
+
+    def _counted_loader(self: SqlMeshLoader, path: Path) -> list:
+        nonlocal parse_calls
+        parse_calls += 1
+        return original_loader(self, path)
+
+    monkeypatch.setattr(SqlMeshLoader, "_load_model_docs_patches_for_file", _counted_loader)
+
+    context = _duckdb_context(tmp_path)
+    assert parse_calls == 1
+
+    context.load()
+    assert parse_calls == 2
+
+
+def test_model_docs_patch_cache_key_uses_file_and_config_only(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    docs_path = models_dir / "schema.yaml"
+    (models_dir / "orders.sql").write_text(
+        """
+MODEL (
+    name test_schema.orders,
+    kind FULL,
+);
+
+SELECT 1 AS id;
+""",
+        encoding="utf-8",
+    )
+    docs_path.write_text(
+        """
+version: 2
+models:
+  - name: test_schema.orders
+    description: Description from YAML
+""",
+        encoding="utf-8",
+    )
+
+    context = _duckdb_context(tmp_path)
+    loader = context._loaders[0]
+    assert isinstance(loader, SqlMeshLoader)
+    loader._track_file(docs_path)
+
+    cache = SqlMeshLoader._Cache(loader, loader.config_path)
+    expected_cache_key = "__".join(
+        [
+            str(loader._path_mtimes[docs_path]),
+            loader.config.fingerprint,
+        ]
+    )
+    assert cache._model_docs_patch_cache_entry_id(docs_path) == expected_cache_key
 
 
 def test_model_docs_malformed_yaml_is_ignored(tmp_path: Path) -> None:
