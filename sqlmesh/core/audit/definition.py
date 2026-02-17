@@ -45,6 +45,7 @@ class AuditCommonMetaMixin:
         dialect: The dialect of the audit query.
         skip: Setting this to `true` will cause this audit to be skipped. Defaults to `false`.
         blocking: Setting this to `true` will cause the pipeline execution to stop if this audit fails.
+        run_only: Setting this to `true` will cause this audit to be skipped during `plan` and only executed during `run`.
         standalone: Setting this to `true` will cause this audit to be executed as a standalone audit.
     """
 
@@ -52,6 +53,7 @@ class AuditCommonMetaMixin:
     dialect: str
     skip: bool
     blocking: bool
+    run_only: bool
     standalone: bool
 
 
@@ -131,6 +133,7 @@ class ModelAudit(PydanticModel, AuditMixin, DbtInfoMixin, frozen=True):
     dialect: str = ""
     skip: bool = False
     blocking: bool = True
+    run_only: bool = False
     standalone: t.Literal[False] = False
     query_: ParsableSql = Field(alias="query")
     defaults: t.Dict[str, exp.Expression] = {}
@@ -167,6 +170,7 @@ class StandaloneAudit(_Node, AuditMixin):
     dialect: str = ""
     skip: bool = False
     blocking: bool = False
+    run_only: bool = False
     standalone: t.Literal[True] = True
     query_: ParsableSql = Field(alias="query")
     defaults: t.Dict[str, exp.Expression] = {}
@@ -553,6 +557,7 @@ META_FIELD_CONVERTER: t.Dict[str, t.Callable] = {
     "cron": lambda value: exp.Literal.string(value),
     "skip": exp.convert,
     "blocking": exp.convert,
+    "run_only": exp.convert,
     "standalone": exp.convert,
     "depends_on_": lambda value: exp.Tuple(expressions=sorted(value)),
     "tags": single_value_or_tuple,
