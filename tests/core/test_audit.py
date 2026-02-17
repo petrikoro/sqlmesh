@@ -1127,3 +1127,60 @@ def test_audit_formatting_flag_serde():
 
     deserialized_audit = ModelAudit.parse_raw(audit_json)
     assert deserialized_audit.dict() == audit.dict()
+
+
+def test_load_run_only():
+    expressions = parse(
+        """
+        Audit (
+            name my_freshness_audit,
+            blocking true,
+            run_only true,
+        );
+
+        SELECT 1
+        FROM @this_model
+        HAVING MAX(updated_at) < CURRENT_TIMESTAMP - INTERVAL '1' HOUR
+    """
+    )
+
+    audit = load_audit(expressions, path=Path("/path/to/audit"))
+    assert isinstance(audit, ModelAudit)
+    assert audit.blocking is True
+    assert audit.run_only is True
+    assert audit.skip is False
+
+
+def test_load_run_only_default():
+    expressions = parse(
+        """
+        Audit (
+            name my_audit,
+        );
+
+        SELECT * FROM db.table WHERE col IS NULL
+    """
+    )
+
+    audit = load_audit(expressions, path=Path("/path/to/audit"))
+    assert isinstance(audit, ModelAudit)
+    assert audit.run_only is False
+
+
+def test_load_standalone_run_only():
+    expressions = parse(
+        """
+        Audit (
+            name my_standalone_freshness,
+            standalone true,
+            run_only true,
+        );
+
+        SELECT 1 FROM db.table HAVING MAX(ts) < CURRENT_TIMESTAMP - INTERVAL '1' HOUR
+    """
+    )
+
+    audit = load_audit(expressions, path=Path("/path/to/audit"))
+    assert isinstance(audit, StandaloneAudit)
+    assert audit.run_only is True
+    assert audit.blocking is False
