@@ -201,7 +201,13 @@ def build_docs_data(
         if m.fqn:
             catalog_models[m.fqn] = {
                 "columns": [
-                    {"name": c.name, "type": c.type, "description": c.description}
+                    {
+                        "name": c.name,
+                        "type": c.type,
+                        "description": c.description,
+                        "tags": c.tags or [],
+                        "meta": c.meta or {},
+                    }
                     for c in m.columns
                 ]
             }
@@ -397,6 +403,8 @@ def _build_details(model: Model) -> t.Optional[t.Dict[str, t.Any]]:
                 details[attr] = val
         if d.tags:
             details["tags"] = d.tags
+        if d.meta:
+            details["meta"] = d.meta
 
     # Parse database/schema from FQN
     parts = [p.strip('"') for p in model.fqn.split(".") if p.strip('"')]

@@ -72,7 +72,15 @@ def serialize_model(context: Context, model: SQLMeshModel, render_query: bool = 
             # The column name is already normalized in `columns_to_types`, so we need to quote it.
             description = column_description(context, model.name, name, quote_column=True)
 
-        columns.append(Column(name=name, type=str(data_type), description=description))
+        columns.append(
+            Column(
+                name=name,
+                type=str(data_type),
+                description=description,
+                tags=model.column_tags.get(name) or None,
+                meta=model.column_meta.get(name) or None,
+            )
+        )
 
     details = ModelDetails(
         owner=model.owner,
@@ -86,6 +94,7 @@ def serialize_model(context: Context, model: SQLMeshModel, render_query: bool = 
         storage_format=model.storage_format,
         time_column=time_column,
         tags=tags,
+        meta=model.meta or None,
         references=[
             Reference(name=ref.name, expression=ref.expression.sql(), unique=ref.unique)
             for ref in model.all_references

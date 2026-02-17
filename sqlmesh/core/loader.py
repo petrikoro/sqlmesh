@@ -75,6 +75,9 @@ class ModelDocsPatch:
     path: Path
     description: t.Optional[str] = None
     column_descriptions: t.Dict[str, str] = field(default_factory=dict)
+    column_tags: t.Dict[str, t.List[str]] = field(default_factory=dict)
+    column_meta: t.Dict[str, t.Dict[str, t.Any]] = field(default_factory=dict)
+    meta: t.Optional[t.Dict[str, t.Any]] = None
     tags: t.Optional[t.List[str]] = None
 
 
@@ -674,10 +677,20 @@ class SqlMeshLoader(Loader):
 
             description = model.get("description")
             description = str(description) if description is not None else None
-            column_descriptions = self._extract_column_descriptions(model.get("columns"))
+            column_descriptions, column_tags, column_meta = self._extract_column_doc_fields(
+                model.get("columns")
+            )
+            meta = self._extract_model_meta(model)
             tags = self._extract_model_tags(model)
 
-            if description is None and not column_descriptions and tags is None:
+            if (
+                description is None
+                and not column_descriptions
+                and not column_tags
+                and not column_meta
+                and meta is None
+                and tags is None
+            ):
                 continue
 
             model_docs_patches.append(
@@ -686,6 +699,9 @@ class SqlMeshLoader(Loader):
                     path=path,
                     description=description,
                     column_descriptions=column_descriptions,
+                    column_tags=column_tags,
+                    column_meta=column_meta,
+                    meta=meta,
                     tags=tags,
                 )
             )
@@ -698,9 +714,30 @@ class SqlMeshLoader(Loader):
         except Exception:
             return False
 
-    def _extract_column_descriptions(self, columns: t.Any) -> t.Dict[str, str]:
+    def _extract_column_doc_fields(
+        self, columns: t.Any
+    ) -> t.Tuple[t.Dict[str, str], t.Dict[str, t.List[str]], t.Dict[str, t.Dict[str, t.Any]]]:
         column_descriptions: t.Dict[str, str] = {}
+        column_tags: t.Dict[str, t.List[str]] = {}
+        column_meta: t.Dict[str, t.Dict[str, t.Any]] = {}
+        for column_name, column in self._iter_model_docs_columns(columns):
+            description = column.get("description")
+            if description is not None:
+                column_descriptions[column_name] = str(description)
 
+            if "tags" in column:
+                column_tags[column_name] = self._extract_tags(column.get("tags"))
+
+            if "meta" in column:
+                raw_meta = column.get("meta")
+                if raw_meta is None:
+                    column_meta[column_name] = {}
+                elif isinstance(raw_meta, dict):
+                    column_meta[column_name] = self._normalize_meta(raw_meta)
+
+        return column_descriptions, column_tags, column_meta
+
+    def _iter_model_docs_columns(self, columns: t.Any) -> t.Iterator[t.Tuple[str, t.Dict[str, t.Any]]]:
         if isinstance(columns, list):
             for column in columns:
                 if not isinstance(column, dict):
@@ -708,25 +745,42 @@ class SqlMeshLoader(Loader):
                 column_name = column.get("name")
                 if not isinstance(column_name, str) or not column_name.strip():
                     continue
-                if column.get("description") is None:
-                    continue
-                column_descriptions[column_name.strip()] = str(column["description"])
+                yield column_name.strip(), column
         elif isinstance(columns, dict):
             for column_name, column in columns.items():
-                if not isinstance(column_name, str):
+                if not isinstance(column_name, str) or not isinstance(column, dict):
                     continue
-                if not isinstance(column, dict) or column.get("description") is None:
-                    continue
-                column_descriptions[column_name.strip()] = str(column["description"])
+                yield column_name.strip(), column
 
-        return column_descriptions
+    def _extract_model_meta(self, model: t.Dict[str, t.Any]) -> t.Optional[t.Dict[str, t.Any]]:
+        if "meta" not in model:
+            return None
+
+        model_meta = model.get("meta")
+        if model_meta is None:
+            return {}
+        if not isinstance(model_meta, dict):
+            return None
+        return self._normalize_meta(model_meta)
+
+    def _normalize_meta(self, value: t.Any) -> t.Any:
+        if isinstance(value, dict):
+            return {str(key): self._normalize_meta(meta_value) for key, meta_value in value.items()}
+        if isinstance(value, list):
+            return [self._normalize_meta(meta_value) for meta_value in value]
+        return value
 
     def _extract_model_tags(self, model: t.Dict[str, t.Any]) -> t.Optional[t.List[str]]:
         top_level_tags = model.get("tags")
         if top_level_tags is None:
             return None
 
-        tags = [str(tag).strip() for tag in ensure_list(top_level_tags)]
+        return self._extract_tags(top_level_tags)
+
+    def _extract_tags(self, raw_tags: t.Any) -> t.List[str]:
+        if raw_tags is None:
+            return []
+        tags = [str(tag).strip() for tag in ensure_list(raw_tags)]
         deduped_tags: t.List[str] = []
         for tag in tags:
             if tag and tag not in deduped_tags:
@@ -762,16 +816,23 @@ class SqlMeshLoader(Loader):
             model = models[model_fqn]
             model_updates: t.Dict[str, t.Any] = {}
             description: t.Any = _unset
+            meta: t.Any = _unset
             tags: t.Any = _unset
-            has_column_updates = False
+            has_column_description_updates = False
+            has_column_tags_updates = False
+            has_column_meta_updates = False
             merged_column_descriptions = dict(model.column_descriptions)
+            merged_column_tags = {column_name: list(tags) for column_name, tags in model.column_tags.items()}
+            merged_column_meta = {
+                column_name: dict(metadata) for column_name, metadata in model.column_meta.items()
+            }
 
             for patch in patches:
                 if patch.description is not None:
                     description = patch.description
 
                 if patch.column_descriptions:
-                    has_column_updates = True
+                    has_column_description_updates = True
                     for column_name, column_description in patch.column_descriptions.items():
                         cache_key = (column_name, model.dialect)
                         normalized_column_name = normalized_column_cache.get(cache_key)
@@ -782,13 +843,46 @@ class SqlMeshLoader(Loader):
                             normalized_column_cache[cache_key] = normalized_column_name
                         merged_column_descriptions[normalized_column_name] = column_description
 
+                if patch.column_tags:
+                    has_column_tags_updates = True
+                    for column_name, column_tags in patch.column_tags.items():
+                        cache_key = (column_name, model.dialect)
+                        normalized_column_name = normalized_column_cache.get(cache_key)
+                        if normalized_column_name is None:
+                            normalized_column_name = normalize_identifiers(
+                                column_name, dialect=model.dialect
+                            ).name
+                            normalized_column_cache[cache_key] = normalized_column_name
+                        merged_column_tags[normalized_column_name] = column_tags
+
+                if patch.column_meta:
+                    has_column_meta_updates = True
+                    for column_name, column_meta in patch.column_meta.items():
+                        cache_key = (column_name, model.dialect)
+                        normalized_column_name = normalized_column_cache.get(cache_key)
+                        if normalized_column_name is None:
+                            normalized_column_name = normalize_identifiers(
+                                column_name, dialect=model.dialect
+                            ).name
+                            normalized_column_cache[cache_key] = normalized_column_name
+                        merged_column_meta[normalized_column_name] = column_meta
+
+                if patch.meta is not None:
+                    meta = patch.meta
+
                 if patch.tags is not None:
                     tags = patch.tags
 
             if description is not _unset:
                 model_updates["description"] = description
-            if has_column_updates:
+            if has_column_description_updates:
                 model_updates["column_descriptions_"] = merged_column_descriptions
+            if has_column_tags_updates:
+                model_updates["column_tags_"] = merged_column_tags
+            if has_column_meta_updates:
+                model_updates["column_meta_"] = merged_column_meta
+            if meta is not _unset:
+                model_updates["meta_"] = meta
             if tags is not _unset:
                 model_updates["tags"] = tags
 

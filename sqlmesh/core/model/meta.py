@@ -100,6 +100,11 @@ class ModelMeta(_Node):
     column_descriptions_: t.Optional[t.Dict[str, str]] = Field(
         default=None, alias="column_descriptions"
     )
+    meta_: t.Optional[t.Dict[str, t.Any]] = Field(default=None, alias="meta")
+    column_tags_: t.Optional[t.Dict[str, t.List[str]]] = Field(default=None, alias="column_tags")
+    column_meta_: t.Optional[t.Dict[str, t.Dict[str, t.Any]]] = Field(
+        default=None, alias="column_meta"
+    )
     audits: t.List[FunctionCall] = []
     grains: t.List[exp.Expression] = []
     references: t.List[exp.Expression] = []
@@ -266,6 +271,9 @@ class ModelMeta(_Node):
         if isinstance(vs, exp.Paren):
             vs = vs.flatten()
 
+        if isinstance(vs, exp.Schema):
+            vs = vs.expressions
+
         if isinstance(vs, (exp.Tuple, exp.Array)):
             vs = vs.expressions
 
@@ -293,6 +301,196 @@ class ModelMeta(_Node):
                     del col_descriptions[column_name]
 
         return col_descriptions
+
+    @field_validator("meta_", mode="before")
+    def _meta_validator(cls, v: t.Any, info: ValidationInfo) -> t.Optional[t.Dict[str, t.Any]]:
+        if v is None:
+            return None
+
+        if isinstance(v, exp.Paren):
+            v = v.unnest()
+
+        if isinstance(v, exp.Array):
+            v = exp.Tuple(expressions=v.expressions)
+
+        if isinstance(v, exp.Tuple):
+            meta: t.Dict[str, t.Any] = {}
+            for expression in v.expressions:
+                if not isinstance(expression, (exp.EQ, exp.PropertyEQ)):
+                    continue
+                meta[cls._config_key(expression.this, info)] = cls._interpret_meta_value(
+                    expression.expression
+                )
+            return meta
+
+        if isinstance(v, dict):
+            return {str(k): cls._interpret_meta_value(value) for k, value in v.items()}
+
+        return v
+
+    @field_validator("column_tags_", mode="before")
+    def _column_tags_validator(
+        cls, v: t.Any, info: ValidationInfo
+    ) -> t.Optional[t.Dict[str, t.List[str]]]:
+        dialect = info.data.get("dialect")
+
+        if v is None:
+            return None
+
+        if isinstance(v, exp.Paren):
+            v = v.flatten()
+
+        if isinstance(v, exp.Schema):
+            v = v.expressions
+
+        if isinstance(v, (exp.Tuple, exp.Array)):
+            v = v.expressions
+
+        raw_column_tags: t.Dict[str, t.Any]
+        if isinstance(v, dict):
+            raw_column_tags = v
+        else:
+            raw_column_tags = {}
+            for expression in ensure_collection(v):
+                if not isinstance(expression, (exp.EQ, exp.PropertyEQ)):
+                    continue
+                raw_column_tags[cls._column_key(expression.this)] = expression.expression
+
+        column_tags = {
+            normalize_identifiers(column_name, dialect=dialect).name: cls._normalize_tags(
+                tags, info.data
+            )
+            for column_name, tags in raw_column_tags.items()
+        }
+
+        columns_to_types = info.data.get("columns_to_types_")
+        if columns_to_types:
+            from sqlmesh.core.console import get_console
+
+            console = get_console()
+            for column_name in list(column_tags):
+                if column_name not in columns_to_types:
+                    console.log_warning(
+                        f"In model '{info.data['name']}', tags are provided for column '{column_name}' but it is not a column in the model."
+                    )
+                    del column_tags[column_name]
+
+        return column_tags
+
+    @field_validator("column_meta_", mode="before")
+    def _column_meta_validator(
+        cls, v: t.Any, info: ValidationInfo
+    ) -> t.Optional[t.Dict[str, t.Dict[str, t.Any]]]:
+        dialect = info.data.get("dialect")
+
+        if v is None:
+            return None
+
+        if isinstance(v, exp.Paren):
+            v = v.flatten()
+
+        if isinstance(v, exp.Schema):
+            v = v.expressions
+
+        if isinstance(v, (exp.Tuple, exp.Array)):
+            v = v.expressions
+
+        raw_column_meta: t.Dict[str, t.Any]
+        if isinstance(v, dict):
+            raw_column_meta = v
+        else:
+            raw_column_meta = {}
+            for expression in ensure_collection(v):
+                if not isinstance(expression, (exp.EQ, exp.PropertyEQ)):
+                    continue
+                raw_column_meta[cls._column_key(expression.this)] = expression.expression
+
+        column_meta: t.Dict[str, t.Dict[str, t.Any]] = {}
+        for column_name, meta in raw_column_meta.items():
+            if not isinstance(meta, dict):
+                interpreted_meta = cls._interpret_meta_value(meta)
+                if not isinstance(interpreted_meta, dict):
+                    continue
+                meta = interpreted_meta
+            column_meta[normalize_identifiers(column_name, dialect=dialect).name] = {
+                str(k): cls._interpret_meta_value(value) for k, value in meta.items()
+            }
+
+        columns_to_types = info.data.get("columns_to_types_")
+        if columns_to_types:
+            from sqlmesh.core.console import get_console
+
+            console = get_console()
+            for column_name in list(column_meta):
+                if column_name not in columns_to_types:
+                    console.log_warning(
+                        f"In model '{info.data['name']}', metadata is provided for column '{column_name}' but it is not a column in the model."
+                    )
+                    del column_meta[column_name]
+
+        return column_meta
+
+    @classmethod
+    def _column_key(cls, expression: t.Any) -> str:
+        if isinstance(expression, exp.Column):
+            return ".".join(part.this for part in expression.parts)
+        if isinstance(expression, (exp.Identifier, exp.Literal)):
+            return str(expression.this)
+        return str(expression)
+
+    @classmethod
+    def _config_key(cls, expression: t.Any, info: ValidationInfo) -> str:
+        if isinstance(expression, exp.Column):
+            return ".".join(part.this for part in expression.parts)
+        if isinstance(expression, exp.Identifier):
+            return expression.this
+        if isinstance(expression, exp.Literal):
+            return str(expression.this)
+        if isinstance(expression, exp.Expression):
+            return expression.sql(dialect=get_dialect(info))
+        return str(expression)
+
+    @classmethod
+    def _normalize_tags(cls, tags: t.Any, data: t.Dict[str, t.Any]) -> t.List[str]:
+        raw_tags = cls._validate_value_or_tuple(tags, data)
+        if raw_tags is None:
+            return []
+        values = ensure_collection(raw_tags)
+        deduped_tags: t.List[str] = []
+        for tag in values:
+            tag_text = str(tag).strip()
+            if tag_text and tag_text not in deduped_tags:
+                deduped_tags.append(tag_text)
+        return deduped_tags
+
+    @classmethod
+    def _interpret_meta_value(cls, value: t.Any) -> t.Any:
+        if isinstance(value, exp.Paren):
+            value = value.unnest()
+
+        if isinstance(value, exp.Array):
+            return [cls._interpret_meta_value(v) for v in value.expressions]
+
+        if isinstance(value, exp.Tuple):
+            interpreted: t.Dict[str, t.Any] = {}
+            for expression in value.expressions:
+                if not isinstance(expression, (exp.EQ, exp.PropertyEQ)):
+                    continue
+                interpreted[cls._column_key(expression.this)] = cls._interpret_meta_value(
+                    expression.expression
+                )
+            return interpreted
+
+        if isinstance(value, dict):
+            return {str(k): cls._interpret_meta_value(v) for k, v in value.items()}
+
+        if isinstance(value, list):
+            return [cls._interpret_meta_value(v) for v in value]
+
+        if isinstance(value, exp.Expression):
+            return d.interpret_expression(value)
+
+        return value
 
     @field_validator("grains", "references", mode="before")
     def _refs_validator(cls, vs: t.Any, info: ValidationInfo) -> t.List[exp.Expression]:
@@ -460,6 +658,18 @@ class ModelMeta(_Node):
     def column_descriptions(self) -> t.Dict[str, str]:
         """A dictionary of column names to annotation comments."""
         return self.column_descriptions_ or {}
+
+    @property
+    def meta(self) -> t.Dict[str, t.Any]:
+        return self.meta_ or {}
+
+    @property
+    def column_tags(self) -> t.Dict[str, t.List[str]]:
+        return self.column_tags_ or {}
+
+    @property
+    def column_meta(self) -> t.Dict[str, t.Dict[str, t.Any]]:
+        return self.column_meta_ or {}
 
     @property
     def lookback(self) -> int:

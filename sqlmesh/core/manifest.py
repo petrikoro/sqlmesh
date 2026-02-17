@@ -270,14 +270,15 @@ def _build_nodes_and_sources(
                 "type": col.type,
                 "data_type": col.type,
                 "description": col.description or "",
-                "meta": {},
-                "tags": [],
+                "meta": col.meta or {},
+                "tags": col.tags or [],
             }
             for col in m.columns
         }
 
         # sqlmesh meta (shared between node and source entries)
         sqlmesh_meta = _build_node_sqlmesh_meta(m)
+        model_meta = m.details.meta if m.details and m.details.meta else {}
         model_lineage = column_lineage.get(unique_id)
         if model_lineage:
             sqlmesh_meta["column_lineage"] = model_lineage
@@ -299,7 +300,7 @@ def _build_nodes_and_sources(
             "description": m.description or "",
             "columns": columns,
             "tags": tags,
-            "meta": {"_sqlmesh": sqlmesh_meta},
+            "meta": {**model_meta, "_sqlmesh": sqlmesh_meta},
         }
 
         if resource_type == "source":
@@ -328,7 +329,7 @@ def _build_nodes_and_sources(
                     "schema": schema,
                     "database": catalog,
                     "tags": tags,
-                    "meta": {},
+                    "meta": dict(model_meta),
                     "enabled": True,
                 },
                 "docs": {"show": True, "node_color": None},
