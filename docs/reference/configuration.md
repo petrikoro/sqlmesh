@@ -139,6 +139,25 @@ SQLMesh UI settings.
 | ---------------- | --------------------------------------------------------------------------------------------- | :-----: | :------: |
 | `format_on_save` | Whether to automatically format model definitions upon saving them to a file (Default: False) | boolean |    N     |
 
+## Docs
+
+Configuration for generated SQLMesh documentation artifacts.
+
+| Option           | Description                                                                                                                                                                                                                     | Type                         | Required |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------: | :------: |
+| `external_links` | List of external links shown in each model's properties panel in generated docs. Each item defines a `label` and a URL template. URL templates support placeholders: `{fqn}`, `{name}`, `{schema}`, `{catalog}`, `{project}`. | list[`ExternalLinkConfig`] |    N     |
+
+### ExternalLinkConfig
+
+Configuration for one external link entry used by `docs.external_links`.
+
+| Option  | Description                                                                                                                     | Type   | Required |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------- | :----: | :------: |
+| `label` | Display name in docs UI (for example, `Airflow`, `Looker`, `BI`).                                                              | string |    Y     |
+| `url`   | URL template for the link. Allowed placeholders are `{fqn}`, `{name}`, `{schema}`, `{catalog}`, `{project}`.                 | string |    Y     |
+
+Using unsupported placeholders in `url` causes SQLMesh configuration validation to fail.
+
 ## Gateways
 
 The `gateways` dictionary defines how SQLMesh should connect to the data warehouse, state backend, test backend, and scheduler.
