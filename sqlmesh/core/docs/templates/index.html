@@ -1733,10 +1733,7 @@ function renderModelPage(id) {
       name: fqnParts[fqnParts.length - 1],
       schema: fqnParts.length >= 2 ? fqnParts[fqnParts.length - 2] : "",
       catalog: fqnParts.length >= 3 ? fqnParts[fqnParts.length - 3] : "",
-      project: model.project || "",
-      kind: (model.details || {}).kind || "",
-      owner: (model.details || {}).owner || "",
-      dialect: model.dialect || ""
+      project: model.project || ""
     };
     h += '<div class="ext-links">';
     externalLinks.forEach(function(link) {
