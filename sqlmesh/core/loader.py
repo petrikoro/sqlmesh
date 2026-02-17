@@ -592,7 +592,11 @@ class SqlMeshLoader(Loader):
                     keep_last_duplicate_key=True,
                 )
             except Exception as ex:
-                raise ConfigError(self._failed_to_load_model_error(path, ex), path)
+                self._console.log_warning(
+                    f"{self._failed_to_load_model_error(path, ex)} "
+                    "Model docs in this file will be ignored."
+                )
+                continue
 
             if not isinstance(yaml, dict):
                 continue

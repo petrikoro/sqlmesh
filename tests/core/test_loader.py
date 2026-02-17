@@ -480,3 +480,35 @@ sources:
 
     assert model
     assert model.description is None
+
+
+def test_model_docs_malformed_yaml_is_ignored(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "orders.sql").write_text(
+        """
+MODEL (
+    name test_schema.orders,
+    kind FULL,
+);
+
+SELECT 1 AS id;
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "malformed_docs.yaml").write_text(
+        """
+version: 2
+models:
+  - name: orders
+    description: malformed yaml
+    columns: [
+""",
+        encoding="utf-8",
+    )
+
+    context = _duckdb_context(tmp_path)
+    model = context.get_model("test_schema.orders")
+
+    assert model
+    assert model.description is None
