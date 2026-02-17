@@ -319,6 +319,60 @@ By default, the SQLMesh cache is stored in a `.cache` directory within your proj
 
 The cache directory is automatically created if it doesn't exist. You can clear the cache using the `sqlmesh clean` command.
 
+### Docs external links
+
+SQLMesh can include custom external links in generated docs (for example, links to Airflow DAGs, BI dashboards, or internal metadata tools).
+Configure links with the root-level `docs.external_links` setting.
+
+Each link requires:
+
+- `label`: link text shown in docs UI
+- `url`: URL template with placeholders
+
+Supported placeholders in `url` templates are:
+
+- `{fqn}`
+- `{name}`
+- `{schema}`
+- `{catalog}`
+- `{project}`
+
+=== "YAML"
+
+    ```yaml linenums="1"
+    docs:
+      external_links:
+        - label: Airflow
+          url: https://airflow.example.com/dags/{name}
+        - label: BI Dashboard
+          url: https://bi.example.com/projects/{project}/models/{fqn}
+    ```
+
+=== "Python"
+
+    ```python linenums="1"
+    from sqlmesh.core.config import Config, DocsConfig, ExternalLinkConfig, ModelDefaultsConfig
+
+    config = Config(
+        model_defaults=ModelDefaultsConfig(dialect="duckdb"),
+        docs=DocsConfig(
+            external_links=[
+                ExternalLinkConfig(
+                    label="Airflow",
+                    url="https://airflow.example.com/dags/{name}",
+                ),
+                ExternalLinkConfig(
+                    label="BI Dashboard",
+                    url="https://bi.example.com/projects/{project}/models/{fqn}",
+                ),
+            ]
+        ),
+    )
+    ```
+
+Use `sqlmesh docs generate` to render these links into the generated docs artifacts.
+If a URL template contains unsupported placeholders, SQLMesh raises a configuration validation error.
+
 ### Table/view storage locations
 
 SQLMesh creates schemas, physical tables, and views in the data warehouse/engine. Learn more about why and how SQLMesh creates schema in the ["Why does SQLMesh create schemas?" FAQ](../faq/faq.md#schema-question).

@@ -2,7 +2,7 @@ from sqlmesh.core import dialect as d
 from sqlmesh.core.config import Config
 from sqlmesh.core.config.model import ModelDefaultsConfig
 from sqlmesh.core.context import Context
-from sqlmesh.core.lineage import column_dependencies, column_description, lineage
+from sqlmesh.core.lineage import CACHE, column_dependencies, column_description, lineage
 from sqlmesh.core.model import load_sql_based_model
 
 
@@ -38,3 +38,24 @@ def test_lineage():
     context.upsert_model(model)
     node = lineage('"A"', model)
     assert node.name == "A"
+
+
+def test_lineage_cache_uses_fqn_key():
+    CACHE.clear()
+    try:
+        model = load_sql_based_model(
+            d.parse(
+                """
+            MODEL (name cat_a.schema.shared_name_model);
+            SELECT 1 AS a
+            """
+            ),
+        )
+
+        lineage("a", model)
+
+        assert model.fqn in CACHE
+        assert model.name not in CACHE
+        assert len(CACHE) == 1
+    finally:
+        CACHE.clear()

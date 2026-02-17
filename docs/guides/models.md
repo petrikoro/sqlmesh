@@ -257,3 +257,66 @@ To view the DAG, enter the following command:
 `sqlmesh dag FILE`
 
 An html file containing your project's DAG will be placed at the root of your project folder. The DAG can then be viewed by opening this file in your browser.
+
+## Generating model documentation artifacts
+
+SQLMesh can generate dbt-compatible metadata and a browsable documentation site from your project models.
+
+### Generate a dbt-compatible `manifest.json`
+
+Use the `parse` command to build a dbt-compatible manifest from your SQLMesh project:
+
+```bash
+sqlmesh parse
+```
+
+By default, SQLMesh writes `manifest.json` to `.cache/dbt_artifacts/manifest.json`.
+
+Use `--output` to write to a specific directory:
+
+```bash
+sqlmesh parse --output ./artifacts
+```
+
+### Generate model docs (`index.html`, `manifest.json`, `catalog.json`)
+
+Use the `docs generate` command to create documentation artifacts:
+
+```bash
+sqlmesh docs generate
+```
+
+By default, SQLMesh writes documentation to `.cache/dbt_artifacts/` and generates:
+
+- `index.html`
+- `manifest.json`
+- `catalog.json`
+
+You can write artifacts to a custom directory:
+
+```bash
+sqlmesh docs generate --output ./artifacts/docs
+```
+
+You can also limit generation to specific models (repeatable option):
+
+```bash
+sqlmesh docs generate --select-model sushi.orders --select-model sushi.waiter_revenue_by_day
+```
+
+Use `--static` to additionally generate a self-contained `static_index.html` with embedded manifest/catalog JSON to serve as a static website:
+
+```bash
+sqlmesh docs generate --static
+```
+
+### Serve generated docs locally
+
+After generating docs, start a local server:
+
+```bash
+sqlmesh docs serve
+```
+
+By default, docs are served from `.cache/dbt_artifacts` at `http://localhost:8080`.
+Use `--docs-path`, `--host`, and `--port` to customize location and address.

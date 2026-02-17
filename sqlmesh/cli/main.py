@@ -1206,3 +1206,104 @@ def state_import(obj: Context, input_file: Path, replace: bool, no_confirm: bool
     """Import a state export file back into the state database"""
     confirm = not no_confirm
     obj.import_state(input_file=input_file, clear=replace, confirm=confirm)
+
+
+@cli.command("parse")
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Output directory for the generated manifest.json.",
+)
+@click.pass_obj
+@error_handler
+@cli_analytics
+def parse(obj: Context, output: t.Optional[Path]) -> None:
+    """Parse project files and generate a dbt-compatible manifest.json."""
+    obj.generate_manifest(output_path=output)
+
+
+@cli.group(no_args_is_help=True)
+def docs() -> None:
+    """Commands for interacting with documentation."""
+    pass
+
+
+@docs.command("generate")
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Output directory for the generated documentation.",
+)
+@click.option(
+    "--select-model",
+    type=str,
+    multiple=True,
+    help="Select specific models to include in the documentation.",
+)
+@click.option(
+    "--static",
+    is_flag=True,
+    default=False,
+    help="Generate an additional static_index.html with manifest and catalog built-in.",
+)
+@click.pass_obj
+@error_handler
+@cli_analytics
+def docs_generate(
+    obj: Context, output: t.Optional[Path], select_model: t.Tuple[str, ...], static: bool
+) -> None:
+    """Generate documentation for the project."""
+    obj.generate_docs(
+        output_path=output,
+        select_models=select_model or None,
+        static=static,
+    )
+
+
+@docs.command("serve")
+@click.option(
+    "--docs-path",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Directory containing the generated documentation.",
+)
+@click.option(
+    "--port",
+    type=int,
+    default=8080,
+    show_default=True,
+    help="Port number for the local HTTP server.",
+)
+@click.option(
+    "--host",
+    type=str,
+    default="localhost",
+    show_default=True,
+    help="Host to bind the HTTP server to.",
+)
+@click.pass_obj
+def docs_serve(obj: Context, docs_path: t.Optional[Path], port: int, host: str) -> None:
+    """Serve generated documentation via a local HTTP server."""
+    import functools
+    import http.server
+
+    from sqlmesh.core.docs.generator import DOCS_DIRNAME, INDEX_FILENAME
+
+    output_dir = docs_path or (obj.cache_dir / DOCS_DIRNAME)
+    index_path = output_dir / INDEX_FILENAME
+    if not index_path.exists():
+        raise click.ClickException(
+            f"No documentation found at {output_dir}. Run 'sqlmesh docs generate' first."
+        )
+
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(output_dir))
+    click.echo(f"Serving docs at http://{host}:{port}")
+    with http.server.HTTPServer((host, port), handler) as server:
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass

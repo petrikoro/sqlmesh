@@ -15,10 +15,13 @@ Options:
   --debug              Enable debug mode.
   --log-to-stdout      Display logs in stdout.
   --log-file-dir TEXT  The directory to write log files to.
+  --dotenv PATH        Path to a custom .env file to load environment
+                       variables.
   --help               Show this message and exit.
 
 Commands:
   audit                   Run audits for the target model(s).
+  check_intervals         Show missing intervals in an environment,...
   clean                   Clears the SQLMesh cache and any build artifacts.
   create_external_models  Create a schema file containing external model...
   create_test             Generate a unit test fixture for a given model.
@@ -26,6 +29,7 @@ Commands:
   destroy                 The destroy command removes all project resources.
   diff                    Show the diff between the local state and the...
   dlt_refresh             Attaches to a DLT pipeline with the option to...
+  docs                    Commands for interacting with documentation.
   environments            Prints the list of SQLMesh environments with...
   evaluate                Evaluate a model and return a dataframe with a...
   fetchdf                 Run a SQL query and display the results.
@@ -34,9 +38,10 @@ Commands:
   init                    Create a new SQLMesh repository.
   invalidate              Invalidate the target environment, forcing its...
   janitor                 Run the janitor process on-demand.
+  lint                    Run the linter for the target model(s).
   migrate                 Migrate SQLMesh to the current running version.
+  parse                   Parse project files and generate a dbt-compatible...
   plan                    Apply local changes to the target environment.
-  prompt                  Uses LLM to generate a SQL query from a prompt.
   render                  Render a model's query, optionally expanding...
   rewrite                 Rewrite a SQL expression with semantic...
   rollback                Rollback SQLMesh to the previous migration.
@@ -45,8 +50,6 @@ Commands:
   table_diff              Show the diff between two tables.
   table_name              Prints the name of the physical table for the...
   test                    Run model unit tests.
-  ui                      Start a browser-based SQLMesh UI.
-  lint                    Run the linter for the target model(s).
 ```
 
 ## audit
@@ -166,6 +169,53 @@ Options:
   -t, --table TEXT  The DLT tables to generate SQLMesh models from. When none specified, all new missing tables will be generated.
   -f, --force       If set it will overwrite existing models with the new generated models from the DLT tables.
   --help            Show this message and exit.
+```
+
+## docs
+
+```
+Usage: sqlmesh docs [OPTIONS] COMMAND [ARGS]...
+
+  Commands for interacting with documentation.
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  generate  Generate documentation for the project.
+  serve     Serve generated documentation via a local HTTP server.
+```
+
+### generate
+
+```
+Usage: sqlmesh docs generate [OPTIONS]
+
+  Generate documentation for the project.
+
+Options:
+  -o, --output DIRECTORY  Output directory for the generated documentation.
+  --select-model TEXT     Select specific models to include in the
+                          documentation.
+  --static                Generate an additional static_index.html with
+                          manifest and catalog built-in.
+  --help                  Show this message and exit.
+```
+
+### serve
+
+```
+Usage: sqlmesh docs serve [OPTIONS]
+
+  Serve generated documentation via a local HTTP server.
+
+Options:
+  --docs-path DIRECTORY  Directory containing the generated documentation.
+  --port INTEGER         Port number for the local HTTP server.  [default:
+                         8080]
+  --host TEXT            Host to bind the HTTP server to.  [default:
+                         localhost]
+  --help                 Show this message and exit.
 ```
 
 ## diff
@@ -327,6 +377,18 @@ Options:
 
     The `migrate` command affects all SQLMesh users. Contact your SQLMesh administrator before running.
 
+## parse
+
+```
+Usage: sqlmesh parse [OPTIONS]
+
+  Parse project files and generate a dbt-compatible manifest.json.
+
+Options:
+  -o, --output DIRECTORY  Output directory for the generated manifest.json.
+  --help                  Show this message and exit.
+```
+
 ## plan
 
 ```
@@ -404,23 +466,6 @@ Options:
   -v, --verbose                   Verbose output. Use -vv for very verbose
                                   output.
   --help                          Show this message and exit.
-```
-
-## prompt
-
-```
-Usage: sqlmesh prompt [OPTIONS] PROMPT
-
-  Uses LLM to generate a SQL query from a prompt.
-
-Options:
-  -e, --evaluate           Evaluate the generated SQL query and display the
-                           results.
-  -t, --temperature FLOAT  Sampling temperature. 0.0 - precise and
-                           predictable, 0.5 - balanced, 1.0 - creative.
-                           Default: 0.7
-  -v, --verbose            Verbose output.
-  --help                   Show this message and exit.
 ```
 
 ## render
