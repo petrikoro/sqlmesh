@@ -159,6 +159,24 @@ def test_columns_have_dbt_shape(sushi_context: Context) -> None:
     assert has_columns
 
 
+def test_manifest_includes_yaml_model_meta_and_column_metadata(sushi_context: Context) -> None:
+    manifest = ManifestGenerator(sushi_context).build_manifest()
+    node = next(
+        (node for node in manifest["nodes"].values() if node["name"] == "yaml_documented_orders"),
+        None,
+    )
+
+    assert node
+    assert node["meta"]["owner_team"] == "finance"
+    assert node["meta"]["contains_pii"] is True
+    assert "_sqlmesh" in node["meta"]
+    assert node["config"]["meta"] == {"owner_team": "finance", "contains_pii": True}
+    assert node["columns"]["order_id"]["tags"] == ["primary_key", "pii"]
+    assert node["columns"]["order_id"]["meta"] == {"classification": "sensitive"}
+    assert node["columns"]["event_date"]["tags"] == ["event_time"]
+    assert node["columns"]["event_date"]["meta"] == {"grain": "day"}
+
+
 def test_parent_child_maps(sushi_context: Context) -> None:
     generator = ManifestGenerator(sushi_context)
     manifest = generator.build_manifest()

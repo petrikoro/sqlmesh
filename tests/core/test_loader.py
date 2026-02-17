@@ -367,6 +367,136 @@ models:
     assert model.tags == ["finance"]
 
 
+def test_model_docs_from_schema_yaml_populates_meta_and_column_metadata(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "orders.sql").write_text(
+        """
+MODEL (
+    name test_schema.orders,
+    kind FULL,
+);
+
+SELECT 1 AS id, 10 AS amount;
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "schema.yml").write_text(
+        """
+version: 2
+models:
+  - name: test_schema.orders
+    meta:
+      owner_team: finance
+      pii: false
+    columns:
+      - name: id
+        tags:
+          - primary_key
+          - pii
+        meta:
+          classification: sensitive
+      - name: amount
+        tags: metric
+        meta:
+          unit: usd
+""",
+        encoding="utf-8",
+    )
+
+    context = _duckdb_context(tmp_path)
+    model = context.get_model("test_schema.orders")
+
+    assert model
+    assert model.meta == {"owner_team": "finance", "pii": False}
+    assert model.column_tags == {"id": ["primary_key", "pii"], "amount": ["metric"]}
+    assert model.column_meta == {
+        "id": {"classification": "sensitive"},
+        "amount": {"unit": "usd"},
+    }
+
+
+def test_model_docs_yaml_supports_dict_columns_with_tags_and_meta(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "orders.sql").write_text(
+        """
+MODEL (
+    name test_schema.orders,
+    kind FULL,
+);
+
+SELECT 1 AS id;
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "schema.yml").write_text(
+        """
+version: 2
+models:
+  - name: test_schema.orders
+    columns:
+      id:
+        description: Identifier
+        tags:
+          - id_col
+        meta:
+          quality: gold
+""",
+        encoding="utf-8",
+    )
+
+    context = _duckdb_context(tmp_path)
+    model = context.get_model("test_schema.orders")
+
+    assert model
+    assert model.column_descriptions["id"] == "Identifier"
+    assert model.column_tags == {"id": ["id_col"]}
+    assert model.column_meta == {"id": {"quality": "gold"}}
+
+
+def test_model_docs_meta_keys_are_stringified_for_stable_metadata_hash(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "orders.sql").write_text(
+        """
+MODEL (
+    name test_schema.orders,
+    kind FULL,
+);
+
+SELECT 1 AS id;
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "schema.yml").write_text(
+        """
+version: 2
+models:
+  - name: test_schema.orders
+    meta:
+      1: one
+      nested:
+        2: two
+    columns:
+      - name: id
+        meta:
+          3: three
+          nested:
+            4: four
+""",
+        encoding="utf-8",
+    )
+
+    context = _duckdb_context(tmp_path)
+    model = context.get_model("test_schema.orders")
+
+    assert model
+    assert model.meta == {"1": "one", "nested": {"2": "two"}}
+    assert model.column_meta == {"id": {"3": "three", "nested": {"4": "four"}}}
+    assert isinstance(model.metadata_hash, str)
+
+
 @pytest.mark.registry_isolation
 def test_model_docs_yaml_overrides_python_description_and_columns(tmp_path: Path) -> None:
     models_dir = tmp_path / "models"
@@ -410,6 +540,58 @@ models:
     assert model
     assert model.description == "Description from YAML"
     assert model.column_descriptions["id"] == "ID from YAML"
+
+
+@pytest.mark.registry_isolation
+def test_model_docs_yaml_overrides_python_meta_and_column_metadata(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "py_orders.py").write_text(
+        """import typing as t
+import pandas as pd  # noqa: TID253
+from sqlmesh import ExecutionContext, model
+
+@model(
+    "test_schema.py_orders",
+    kind="FULL",
+    columns={"id": "int"},
+    meta={"owner_team": "legacy", "pii": True},
+    column_tags={"id": ["legacy_tag"]},
+    column_meta={"id": {"classification": "restricted"}},
+)
+def execute(
+    context: ExecutionContext,
+    **kwargs: t.Any,
+) -> pd.DataFrame:
+    return pd.DataFrame([{"id": 1}])
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "schema.yml").write_text(
+        """
+version: 2
+models:
+  - name: test_schema.py_orders
+    meta:
+      owner_team: finance
+      pii: false
+    columns:
+      - name: id
+        tags:
+          - curated
+        meta:
+          classification: internal
+""",
+        encoding="utf-8",
+    )
+
+    context = _duckdb_context(tmp_path)
+    model = context.get_model("test_schema.py_orders")
+
+    assert model
+    assert model.meta == {"owner_team": "finance", "pii": False}
+    assert model.column_tags == {"id": ["curated"]}
+    assert model.column_meta == {"id": {"classification": "internal"}}
 
 
 def test_model_docs_name_must_be_fully_qualified(tmp_path: Path) -> None:

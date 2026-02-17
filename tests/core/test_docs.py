@@ -119,6 +119,25 @@ def test_docs_data_has_models(sushi_context: Context) -> None:
     assert "columns" in catalog_data["models"][model["fqn"]]
 
 
+def test_docs_data_includes_model_meta_and_column_metadata(sushi_context: Context) -> None:
+    manifest_data, catalog_data = _build_docs_data(sushi_context)
+    model = next(
+        (m for m in manifest_data["models"] if m["name"] == "sushi.yaml_documented_orders"), None
+    )
+
+    assert model
+    assert model["details"]["meta"]["owner_team"] == "finance"
+    assert model["details"]["meta"]["contains_pii"] is True
+
+    catalog_columns = {
+        column["name"]: column for column in catalog_data["models"][model["fqn"]]["columns"]
+    }
+    assert catalog_columns["order_id"]["tags"] == ["primary_key", "pii"]
+    assert catalog_columns["order_id"]["meta"] == {"classification": "sensitive"}
+    assert catalog_columns["event_date"]["tags"] == ["event_time"]
+    assert catalog_columns["event_date"]["meta"] == {"grain": "day"}
+
+
 def test_docs_data_has_dag(sushi_context: Context) -> None:
     manifest_data, _ = _build_docs_data(sushi_context)
 
