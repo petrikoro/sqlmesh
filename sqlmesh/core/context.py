@@ -2175,6 +2175,49 @@ class GenericContext(BaseContext, t.Generic[C]):
             file.write(str(self.get_dag(select_models)))
 
     @python_api_analytics
+    def generate_manifest(
+        self,
+        output_path: t.Optional[t.Union[str, Path]] = None,
+        select_models: t.Optional[t.Collection[str]] = None,
+    ) -> Path:
+        """Generate a dbt-compatible ``manifest.json`` for the project.
+
+        Args:
+            output_path: Directory where the manifest will be written.
+            select_models: Optional collection of model name patterns to include.
+        """
+        from sqlmesh.core.manifest import ManifestGenerator
+
+        generator = ManifestGenerator(self)  # ty:ignore[invalid-argument-type]
+        return generator.generate(
+            output_path=output_path,
+            select_models=select_models,
+        )
+
+    @python_api_analytics
+    def generate_docs(
+        self,
+        output_path: t.Optional[t.Union[str, Path]] = None,
+        select_models: t.Optional[t.Collection[str]] = None,
+        static: bool = False,
+    ) -> Path:
+        """Generate documentation site for the project.
+
+        Args:
+            output_path: Directory where the documentation will be written.
+            select_models: Optional collection of model name patterns to include.
+            static: If ``True``, also emits ``static_index.html`` with embedded JSON payloads.
+        """
+        from sqlmesh.core.docs import DocsGenerator
+
+        generator = DocsGenerator(self)  # ty:ignore[invalid-argument-type]
+        return generator.generate(
+            output_path=output_path,
+            select_models=select_models,
+            static=static,
+        )
+
+    @python_api_analytics
     def create_test(
         self,
         model: str,
