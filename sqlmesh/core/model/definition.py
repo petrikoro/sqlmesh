@@ -1170,6 +1170,7 @@ class _Model(ModelMeta, frozen=True):
                         audit.dialect,
                         str(audit.skip),
                         str(audit.blocking),
+                        str(audit.run_only),
                     ]
                 )
 

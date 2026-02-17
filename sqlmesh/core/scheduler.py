@@ -288,6 +288,7 @@ class Scheduler:
             deployability_index=deployability_index,
             auto_restatement_enabled=auto_restatement_enabled,
             run_environment_statements=run_environment_statements,
+            is_run=True,
         )
 
     def audit(
@@ -436,6 +437,7 @@ class Scheduler:
         audit_only: bool = False,
         auto_restatement_triggers: t.Dict[SnapshotId, t.List[SnapshotId]] = {},
         is_restatement: bool = False,
+        is_run: bool = False,
     ) -> t.Tuple[t.List[NodeExecutionFailedError[SchedulingUnit]], t.List[SchedulingUnit]]:
         """Runs precomputed batches of missing intervals.
 
@@ -545,6 +547,7 @@ class Scheduler:
                             start=start,
                             end=end,
                             execution_time=execution_time,
+                            is_run=is_run,
                         )
                     else:
                         # If batch_index > 0, then the target table must exist since the first batch would have created it
@@ -563,12 +566,14 @@ class Scheduler:
                             allow_additive_snapshots=allow_additive_snapshots,
                             target_table_exists=target_table_exists,
                             selected_models=selected_models,
+                            is_run=is_run,
                         )
 
                     evaluation_duration_ms = now_timestamp() - execution_start_ts
                 finally:
                     num_audits = len(audit_results)
                     num_audits_failed = sum(1 for result in audit_results if result.count)
+                    num_audits_skipped = sum(1 for result in audit_results if result.skipped)
 
                     execution_stats = self.snapshot_evaluator.execution_tracker.get_execution_stats(
                         SnapshotIdBatch(snapshot_id=snapshot.snapshot_id, batch_id=node.batch_index)
@@ -579,8 +584,9 @@ class Scheduler:
                         batched_intervals[snapshot][node.batch_index],
                         node.batch_index,
                         evaluation_duration_ms,
-                        num_audits - num_audits_failed,
+                        num_audits - num_audits_failed - num_audits_skipped,
                         num_audits_failed,
+                        num_audits_skipped,
                         execution_stats=execution_stats,
                         auto_restatement_triggers=auto_restatement_triggers.get(
                             snapshot.snapshot_id
@@ -785,6 +791,7 @@ class Scheduler:
         auto_restatement_enabled: bool = False,
         run_environment_statements: bool = False,
         audit_only: bool = False,
+        is_run: bool = False,
     ) -> CompletionStatus:
         """Concurrently runs or audits all snapshots in topological order.
 
@@ -880,6 +887,7 @@ class Scheduler:
             selected_models={
                 s.node.dbt_unique_id for s in merged_intervals if s.node.dbt_unique_id
             },
+            is_run=is_run,
         )
 
         return CompletionStatus.FAILURE if errors else CompletionStatus.SUCCESS
