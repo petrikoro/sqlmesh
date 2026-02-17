@@ -270,9 +270,12 @@ Supported fields:
 
 - `models[].description`
 - `models[].tags`
+- `models[].meta`
 - `models[].columns[].description`
+- `models[].columns[].tags`
+- `models[].columns[].meta`
 
-If descriptions or tags exist both in model SQL/Python and YAML, YAML takes precedence.
+If descriptions, tags, or metadata exist both in model SQL/Python and YAML, YAML takes precedence.
 
 ```yaml
 version: 2
@@ -282,12 +285,25 @@ models:
     tags:
       - finance
       - curated
+    meta:
+      owner_team: finance
+      contains_pii: true
     columns:
       - name: id
         description: Primary key.
+        tags:
+          - primary_key
+        meta:
+          classification: sensitive
       - name: amount
         description: Order amount in USD.
+        tags:
+          - metric
+        meta:
+          unit: usd
 ```
+
+When SQLMesh generates a dbt-compatible `manifest.json`, model-level tags and metadata are available both at the node level (`tags`, `meta`) and under `config` (`config.tags`, `config.meta`).
 
 ### Generate a dbt-compatible `manifest.json`
 
