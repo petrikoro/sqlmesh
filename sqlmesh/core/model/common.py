@@ -631,6 +631,7 @@ expression_validator: t.Callable = field_validator(
 bool_validator: t.Callable = field_validator(
     "skip",
     "blocking",
+    "run_only",
     "forward_only",
     "disable_restatement",
     "insert_overwrite",

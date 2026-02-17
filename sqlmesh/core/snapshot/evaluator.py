@@ -573,6 +573,7 @@ class SnapshotEvaluator:
         execution_time: t.Optional[TimeLike] = None,
         deployability_index: t.Optional[DeployabilityIndex] = None,
         wap_id: t.Optional[str] = None,
+        is_run: bool = False,
         **kwargs: t.Any,
     ) -> t.List[AuditResult]:
         """Execute a snapshot's node's audit queries.
@@ -585,6 +586,7 @@ class SnapshotEvaluator:
             execution_time: The date/time time reference to use for execution time.
             deployability_index: Determines snapshots that are deployable in the context of this evaluation.
             wap_id: The WAP ID if applicable, None otherwise.
+            is_run: Whether this audit is being executed as part of `sqlmesh run` (as opposed to `plan/apply`).
             kwargs: Additional kwargs to pass to the renderer.
         """
         deployability_index = deployability_index or DeployabilityIndex.all_deployable()
@@ -644,6 +646,7 @@ class SnapshotEvaluator:
                     end=end,
                     execution_time=execution_time,
                     deployability_index=deployability_index,
+                    is_run=is_run,
                     **kwargs,
                 )
             )
@@ -1389,9 +1392,22 @@ class SnapshotEvaluator:
         end: t.Optional[TimeLike],
         execution_time: t.Optional[TimeLike],
         deployability_index: t.Optional[DeployabilityIndex],
+        is_run: bool = False,
         **kwargs: t.Any,
     ) -> AuditResult:
         if audit.skip:
+            return AuditResult(
+                audit=audit,
+                audit_args=audit_args,
+                model=snapshot.model_or_none,
+                skipped=True,
+            )
+
+        # Model's "run_only" argument takes precedence over the audit's default setting
+        run_only = audit_args.pop("run_only", None)
+        run_only = run_only == exp.true() if run_only is not None else audit.run_only
+
+        if run_only and not is_run:
             return AuditResult(
                 audit=audit,
                 audit_args=audit_args,
