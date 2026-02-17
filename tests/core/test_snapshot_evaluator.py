@@ -3308,6 +3308,213 @@ def test_audit_set_blocking_at_use_site(adapter_mock, make_snapshot):
     assert results[0].blocking
 
 
+def test_audit_run_only_skipped_during_plan(adapter_mock, make_snapshot):
+    """Audits with run_only=True should be skipped when is_run=False (plan path)."""
+    evaluator = SnapshotEvaluator(adapter_mock)
+
+    run_only_audit = ModelAudit(
+        name="freshness_check",
+        query="SELECT 1 FROM test_schema.test_table HAVING MAX(ts) < CURRENT_TIMESTAMP - INTERVAL '1' HOUR",
+        blocking=True,
+        run_only=True,
+    )
+
+    model = SqlModel(
+        name="test_schema.test_table",
+        kind=FullKind(),
+        query=parse_one("SELECT a::int FROM tbl"),
+        audits=[("freshness_check", {})],
+        audit_definitions={run_only_audit.name: run_only_audit},
+    )
+    snapshot = make_snapshot(model)
+    snapshot.categorize_as(SnapshotChangeCategory.BREAKING)
+
+    # is_run defaults to False (plan path) — audit should be skipped
+    results = evaluator.audit(snapshot, snapshots={})
+    assert len(results) == 1
+    assert results[0].skipped is True
+    assert results[0].count is None
+    adapter_mock.fetchone.assert_not_called()
+
+
+def test_audit_run_only_executed_during_run(adapter_mock, make_snapshot):
+    """Audits with run_only=True should execute normally when is_run=True (run path)."""
+    evaluator = SnapshotEvaluator(adapter_mock)
+
+    run_only_audit = ModelAudit(
+        name="freshness_check",
+        query="SELECT 1 FROM test_schema.test_table HAVING MAX(ts) < CURRENT_TIMESTAMP - INTERVAL '1' HOUR",
+        blocking=True,
+        run_only=True,
+    )
+
+    model = SqlModel(
+        name="test_schema.test_table",
+        kind=FullKind(),
+        query=parse_one("SELECT a::int FROM tbl"),
+        audits=[("freshness_check", {})],
+        audit_definitions={run_only_audit.name: run_only_audit},
+    )
+    snapshot = make_snapshot(model)
+    snapshot.categorize_as(SnapshotChangeCategory.BREAKING)
+
+    # Return zero count to indicate audit passes
+    adapter_mock.fetchone.return_value = (0,)
+
+    results = evaluator.audit(snapshot, snapshots={}, is_run=True)
+    assert len(results) == 1
+    assert results[0].skipped is False
+    assert results[0].count == 0
+    assert results[0].blocking is True
+
+
+def test_audit_run_only_override_at_model_level(adapter_mock, make_snapshot):
+    """Model-level run_only := true should override audit-level run_only = false."""
+    evaluator = SnapshotEvaluator(adapter_mock)
+
+    normal_audit = ModelAudit(
+        name="freshness_check",
+        query="SELECT 1 FROM test_schema.test_table HAVING MAX(ts) < CURRENT_TIMESTAMP - INTERVAL '1' HOUR",
+        blocking=True,
+        run_only=False,
+    )
+
+    model = SqlModel(
+        name="test_schema.test_table",
+        kind=FullKind(),
+        query=parse_one("SELECT a::int FROM tbl"),
+        audits=[("freshness_check", {"run_only": exp.true()})],
+        audit_definitions={normal_audit.name: normal_audit},
+    )
+    snapshot = make_snapshot(model)
+    snapshot.categorize_as(SnapshotChangeCategory.BREAKING)
+
+    # is_run=False (plan path) — model override sets run_only=True, so should be skipped
+    results = evaluator.audit(snapshot, snapshots={})
+    assert len(results) == 1
+    assert results[0].skipped is True
+
+
+def test_audit_run_only_false_not_skipped(adapter_mock, make_snapshot):
+    """Audits with run_only=False should always execute regardless of is_run."""
+    evaluator = SnapshotEvaluator(adapter_mock)
+
+    normal_audit = ModelAudit(
+        name="data_check",
+        query="SELECT * FROM test_schema.test_table WHERE col IS NULL",
+        blocking=True,
+        run_only=False,
+    )
+
+    model = SqlModel(
+        name="test_schema.test_table",
+        kind=FullKind(),
+        query=parse_one("SELECT a::int FROM tbl"),
+        audits=[("data_check", {})],
+        audit_definitions={normal_audit.name: normal_audit},
+    )
+    snapshot = make_snapshot(model)
+    snapshot.categorize_as(SnapshotChangeCategory.BREAKING)
+
+    adapter_mock.fetchone.return_value = (0,)
+
+    # is_run=False — audit should still run because run_only=False
+    results = evaluator.audit(snapshot, snapshots={})
+    assert len(results) == 1
+    assert results[0].skipped is False
+    assert results[0].count == 0
+
+
+def test_audit_skip_takes_precedence_over_run_only(adapter_mock, make_snapshot):
+    """When skip=True and run_only=True, the audit should be skipped regardless of is_run."""
+    evaluator = SnapshotEvaluator(adapter_mock)
+
+    audit = ModelAudit(
+        name="freshness_check",
+        query="SELECT 1 FROM test_schema.test_table HAVING MAX(ts) < CURRENT_TIMESTAMP - INTERVAL '1' HOUR",
+        blocking=True,
+        run_only=True,
+        skip=True,
+    )
+
+    model = SqlModel(
+        name="test_schema.test_table",
+        kind=FullKind(),
+        query=parse_one("SELECT a::int FROM tbl"),
+        audits=[("freshness_check", {})],
+        audit_definitions={audit.name: audit},
+    )
+    snapshot = make_snapshot(model)
+    snapshot.categorize_as(SnapshotChangeCategory.BREAKING)
+
+    # Even with is_run=True, skip=True should take precedence
+    results = evaluator.audit(snapshot, snapshots={}, is_run=True)
+    assert len(results) == 1
+    assert results[0].skipped is True
+    adapter_mock.fetchone.assert_not_called()
+
+
+def test_audit_run_only_with_force_non_blocking(adapter_mock, make_snapshot):
+    """run_only audits should still be skipped during plan even when force_non_blocking would apply."""
+    evaluator = SnapshotEvaluator(adapter_mock)
+
+    audit = ModelAudit(
+        name="freshness_check",
+        query="SELECT 1 FROM test_schema.test_table HAVING MAX(ts) < CURRENT_TIMESTAMP - INTERVAL '1' HOUR",
+        blocking=True,
+        run_only=True,
+    )
+
+    model = SqlModel(
+        name="test_schema.test_table",
+        kind=FullKind(),
+        query=parse_one("SELECT a::int FROM tbl"),
+        audits=[("freshness_check", {})],
+        audit_definitions={audit.name: audit},
+    )
+    snapshot = make_snapshot(model)
+    snapshot.categorize_as(SnapshotChangeCategory.BREAKING)
+
+    # Simulate non-deployable snapshot with non-cloning adapter (triggers force_non_blocking)
+    non_deployable_index = DeployabilityIndex.none_deployable()
+
+    # is_run=False (plan path) — run_only should cause skip even with force_non_blocking
+    results = evaluator.audit(snapshot, snapshots={}, deployability_index=non_deployable_index)
+    assert len(results) == 1
+    assert results[0].skipped is True
+    adapter_mock.fetchone.assert_not_called()
+
+
+def test_audit_run_only_model_override_false(adapter_mock, make_snapshot):
+    """Model-level run_only := false should override audit-level run_only = true."""
+    evaluator = SnapshotEvaluator(adapter_mock)
+
+    run_only_audit = ModelAudit(
+        name="freshness_check",
+        query="SELECT 1 FROM test_schema.test_table HAVING MAX(ts) < CURRENT_TIMESTAMP - INTERVAL '1' HOUR",
+        blocking=True,
+        run_only=True,
+    )
+
+    model = SqlModel(
+        name="test_schema.test_table",
+        kind=FullKind(),
+        query=parse_one("SELECT a::int FROM tbl"),
+        audits=[("freshness_check", {"run_only": exp.false()})],
+        audit_definitions={run_only_audit.name: run_only_audit},
+    )
+    snapshot = make_snapshot(model)
+    snapshot.categorize_as(SnapshotChangeCategory.BREAKING)
+
+    adapter_mock.fetchone.return_value = (0,)
+
+    # is_run=False (plan path) — model override sets run_only=False, so audit should execute
+    results = evaluator.audit(snapshot, snapshots={})
+    assert len(results) == 1
+    assert results[0].skipped is False
+    assert results[0].count == 0
+
+
 def test_create_post_statements_use_non_deployable_table(
     mocker: MockerFixture, adapter_mock, make_snapshot
 ):
