@@ -142,6 +142,7 @@ class ApiConsole(TerminalConsole):
         duration_ms: t.Optional[int],
         num_audits_passed: int,
         num_audits_failed: int,
+        num_audits_skipped: int,
         audit_only: bool = False,
         execution_stats: t.Optional[QueryExecutionStats] = None,
         auto_restatement_triggers: t.Optional[t.List[SnapshotId]] = None,
