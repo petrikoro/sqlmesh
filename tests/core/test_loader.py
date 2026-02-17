@@ -6,6 +6,12 @@ from sqlmesh.core.context import Context
 from sqlmesh.utils.errors import ConfigError
 
 
+def _duckdb_context(tmp_path: Path) -> Context:
+    return Context(
+        paths=tmp_path, config=Config(model_defaults=ModelDefaultsConfig(dialect="duckdb"))
+    )
+
+
 @pytest.fixture
 def sample_models(request):
     models = {
@@ -201,3 +207,276 @@ def my_model(context, **kwargs):
     assert model.description == "model_payload_a"
     path_b.write_text(model_payload_b)
     context.load()  # raise no error to duplicate key if the functions are identical (by registry class_method)
+
+
+def test_model_docs_from_schema_yaml_populates_description_and_columns(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "orders.sql").write_text(
+        """
+MODEL (
+    name test_schema.orders,
+    kind FULL,
+);
+
+SELECT 1 AS id;
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "schema.yml").write_text(
+        """
+version: 2
+models:
+  - name: orders
+    description: Orders from schema.yml
+    columns:
+      - name: id
+        description: Order id from schema.yml
+""",
+        encoding="utf-8",
+    )
+
+    context = _duckdb_context(tmp_path)
+    model = context.get_model("test_schema.orders")
+
+    assert model
+    assert model.description == "Orders from schema.yml"
+    assert model.column_descriptions["id"] == "Order id from schema.yml"
+
+
+def test_model_docs_from_arbitrary_yaml_filename_match_fully_qualified_name(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "finance_orders.sql").write_text(
+        """
+MODEL (
+    name finance.orders,
+    kind FULL,
+);
+
+SELECT 1 AS id;
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "sales_orders.sql").write_text(
+        """
+MODEL (
+    name sales.orders,
+    kind FULL,
+);
+
+SELECT 1 AS id;
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "custom_docs_file.yml").write_text(
+        """
+version: 2
+models:
+  - name: finance.orders
+    description: Finance orders docs
+""",
+        encoding="utf-8",
+    )
+
+    context = _duckdb_context(tmp_path)
+    finance_model = context.get_model("finance.orders")
+    sales_model = context.get_model("sales.orders")
+
+    assert finance_model
+    assert sales_model
+    assert finance_model.description == "Finance orders docs"
+    assert sales_model.description is None
+
+
+def test_model_docs_yaml_overrides_sql_description_and_merges_columns(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "orders.sql").write_text(
+        """
+-- SQL description
+MODEL (
+    name test_schema.orders,
+    kind FULL,
+    column_descriptions (
+        id = 'ID from SQL',
+        amount = 'Amount from SQL'
+    ),
+);
+
+SELECT 1 AS id, 10 AS amount;
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "schema.yaml").write_text(
+        """
+version: 2
+models:
+  - name: orders
+    description: Description from YAML
+    columns:
+      - name: id
+        description: ID from YAML
+""",
+        encoding="utf-8",
+    )
+
+    context = _duckdb_context(tmp_path)
+    model = context.get_model("test_schema.orders")
+
+    assert model
+    assert model.description == "Description from YAML"
+    assert model.column_descriptions["id"] == "ID from YAML"
+    assert model.column_descriptions["amount"] == "Amount from SQL"
+
+
+def test_model_docs_yaml_applies_tags_from_tags_and_config_tags(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "orders.sql").write_text(
+        """
+MODEL (
+    name test_schema.orders,
+    kind FULL,
+);
+
+SELECT 1 AS id;
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "model_meta.yaml").write_text(
+        """
+version: 2
+models:
+  - name: orders
+    tags: finance
+    config:
+      tags:
+        - curated
+        - pii
+""",
+        encoding="utf-8",
+    )
+
+    context = _duckdb_context(tmp_path)
+    model = context.get_model("test_schema.orders")
+
+    assert model
+    assert model.tags == ["finance", "curated", "pii"]
+
+
+@pytest.mark.registry_isolation
+def test_model_docs_yaml_overrides_python_description_and_columns(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "py_orders.py").write_text(
+        """import typing as t
+import pandas as pd  # noqa: TID253
+from sqlmesh import ExecutionContext, model
+
+@model(
+    "test_schema.py_orders",
+    kind="FULL",
+    columns={"id": "int"},
+    description="Description from Python",
+    column_descriptions={"id": "ID from Python"},
+)
+def execute(
+    context: ExecutionContext,
+    **kwargs: t.Any,
+) -> pd.DataFrame:
+    return pd.DataFrame([{"id": 1}])
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "schema.yml").write_text(
+        """
+version: 2
+models:
+  - name: py_orders
+    description: Description from YAML
+    columns:
+      - name: id
+        description: ID from YAML
+""",
+        encoding="utf-8",
+    )
+
+    context = _duckdb_context(tmp_path)
+    model = context.get_model("test_schema.py_orders")
+
+    assert model
+    assert model.description == "Description from YAML"
+    assert model.column_descriptions["id"] == "ID from YAML"
+
+
+def test_model_docs_short_name_match_raises_when_ambiguous(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "first_orders.sql").write_text(
+        """
+MODEL (
+    name first.orders,
+    kind FULL,
+);
+
+SELECT 1 AS id;
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "second_orders.sql").write_text(
+        """
+MODEL (
+    name second.orders,
+    kind FULL,
+);
+
+SELECT 1 AS id;
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "schema.yml").write_text(
+        """
+version: 2
+models:
+  - name: orders
+    description: ambiguous short name
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="ambiguous"):
+        _duckdb_context(tmp_path)
+
+
+def test_model_docs_ignore_unsupported_yaml_sections(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    (models_dir / "orders.sql").write_text(
+        """
+MODEL (
+    name test_schema.orders,
+    kind FULL,
+);
+
+SELECT 1 AS id;
+""",
+        encoding="utf-8",
+    )
+    (models_dir / "schema.yml").write_text(
+        """
+version: 2
+sources:
+  - name: raw
+    tables:
+      - name: orders
+        description: ignored source description
+""",
+        encoding="utf-8",
+    )
+
+    context = _duckdb_context(tmp_path)
+    model = context.get_model("test_schema.orders")
+
+    assert model
+    assert model.description is None

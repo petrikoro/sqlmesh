@@ -8,19 +8,20 @@ import os
 import re
 import typing as t
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from pydantic import ValidationError
 import concurrent.futures
 
 from sqlglot.errors import SqlglotError
 from sqlglot import exp
-from sqlglot.helper import subclasses
+from sqlglot.helper import ensure_list, subclasses
+from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
 
 from sqlmesh.core import constants as c
 from sqlmesh.core.audit import Audit, ModelAudit, StandaloneAudit, load_multiple_audits
 from sqlmesh.core.console import Console
-from sqlmesh.core.dialect import parse
+from sqlmesh.core.dialect import normalize_model_name, parse
 from sqlmesh.core.environment import EnvironmentStatements
 from sqlmesh.core.linter.rule import Rule
 from sqlmesh.core.linter.definition import RuleSet
@@ -65,6 +66,15 @@ class LoadedProject:
     environment_statements: t.List[EnvironmentStatements]
     user_rules: RuleSet
     model_test_metadata: t.List[ModelTestMetadata]
+
+
+@dataclass
+class ModelDocsPatch:
+    model_name: str
+    path: Path
+    description: t.Optional[str] = None
+    column_descriptions: t.Dict[str, str] = field(default_factory=dict)
+    tags: t.Optional[t.List[str]] = None
 
 
 class CacheBase(abc.ABC):
@@ -549,7 +559,207 @@ class SqlMeshLoader(Loader):
         if duplicates:
             raise ConfigError(f"Duplicate model name(s) found: {', '.join(duplicates)}.")
 
-        return UniqueKeyDict("models", **sql_models, **external_models, **python_models)
+        models = UniqueKeyDict("models", **sql_models, **external_models, **python_models)
+        self._apply_model_docs(models, self._load_model_docs_patches())
+        return models
+
+    def _load_model_docs_patches(self) -> t.List[ModelDocsPatch]:
+        models_path = self.config_path / c.MODELS
+        if not models_path.exists() or not models_path.is_dir():
+            return []
+
+        model_docs_patches: t.List[ModelDocsPatch] = []
+        docs_paths = sorted(
+            {
+                path
+                for extension in (".yml", ".yaml")
+                for path in self._glob_paths(
+                    models_path,
+                    ignore_patterns=self.config.ignore_patterns,
+                    extension=extension,
+                )
+            }
+        )
+
+        for path in docs_paths:
+            self._track_file(path)
+            try:
+                yaml = yaml_load(
+                    path,
+                    raise_if_empty=False,
+                    render_jinja=False,
+                    allow_duplicate_keys=True,
+                    keep_last_duplicate_key=True,
+                )
+            except Exception as ex:
+                raise ConfigError(self._failed_to_load_model_error(path, ex), path)
+
+            if not isinstance(yaml, dict):
+                continue
+
+            models = yaml.get("models")
+            if not isinstance(models, list):
+                continue
+
+            for model in models:
+                if not isinstance(model, dict):
+                    continue
+
+                model_name = model.get("name")
+                if not isinstance(model_name, str) or not model_name.strip():
+                    continue
+
+                description = model.get("description")
+                description = str(description) if description is not None else None
+                column_descriptions = self._extract_column_descriptions(model.get("columns"))
+                tags = self._extract_model_tags(model)
+
+                if description is None and not column_descriptions and tags is None:
+                    continue
+
+                model_docs_patches.append(
+                    ModelDocsPatch(
+                        model_name=model_name.strip(),
+                        path=path,
+                        description=description,
+                        column_descriptions=column_descriptions,
+                        tags=tags,
+                    )
+                )
+
+        return model_docs_patches
+
+    def _extract_column_descriptions(self, columns: t.Any) -> t.Dict[str, str]:
+        column_descriptions: t.Dict[str, str] = {}
+
+        if isinstance(columns, list):
+            for column in columns:
+                if not isinstance(column, dict):
+                    continue
+                column_name = column.get("name")
+                if not isinstance(column_name, str) or not column_name.strip():
+                    continue
+                if column.get("description") is None:
+                    continue
+                column_descriptions[column_name.strip()] = str(column["description"])
+        elif isinstance(columns, dict):
+            for column_name, column in columns.items():
+                if not isinstance(column_name, str):
+                    continue
+                if not isinstance(column, dict) or column.get("description") is None:
+                    continue
+                column_descriptions[column_name.strip()] = str(column["description"])
+
+        return column_descriptions
+
+    def _extract_model_tags(self, model: t.Dict[str, t.Any]) -> t.Optional[t.List[str]]:
+        has_tags = False
+        tags: t.List[str] = []
+
+        top_level_tags = model.get("tags")
+        if top_level_tags is not None:
+            has_tags = True
+            tags.extend(str(tag).strip() for tag in ensure_list(top_level_tags))
+
+        config = model.get("config")
+        if isinstance(config, dict):
+            config_tags = config.get("tags")
+            if config_tags is not None:
+                has_tags = True
+                tags.extend(str(tag).strip() for tag in ensure_list(config_tags))
+
+        if not has_tags:
+            return None
+
+        deduped_tags: t.List[str] = []
+        for tag in tags:
+            if tag and tag not in deduped_tags:
+                deduped_tags.append(tag)
+        return deduped_tags
+
+    def _apply_model_docs(
+        self, models: UniqueKeyDict[str, Model], model_docs_patches: t.List[ModelDocsPatch]
+    ) -> None:
+        if not model_docs_patches:
+            return
+
+        short_name_to_model_fqns: t.Dict[str, t.List[str]] = defaultdict(list)
+        for model in models.values():
+            short_name = exp.to_table(model.fqn).name.lower()
+            short_name_to_model_fqns[short_name].append(model.fqn)
+
+        for patch in model_docs_patches:
+            model_fqn = self._model_for_docs_patch(models, short_name_to_model_fqns, patch)
+            if model_fqn is None:
+                self._console.log_warning(
+                    f"Model docs entry '{patch.model_name}' in '{patch.path}' "
+                    "did not match any loaded model and was ignored."
+                )
+                continue
+
+            model = models[model_fqn]
+            model_updates: t.Dict[str, t.Any] = {}
+
+            if patch.description is not None:
+                model_updates["description"] = patch.description
+
+            if patch.column_descriptions:
+                normalized_column_descriptions = {
+                    normalize_identifiers(column_name, dialect=model.dialect).name: description
+                    for column_name, description in patch.column_descriptions.items()
+                }
+                model_updates["column_descriptions_"] = {
+                    **dict(model.column_descriptions),
+                    **normalized_column_descriptions,
+                }
+
+            if patch.tags is not None:
+                model_updates["tags"] = patch.tags
+
+            if not model_updates:
+                continue
+
+            updated_model = model.copy(update=model_updates)
+            # SqlModel has a cached_property for column_descriptions.
+            updated_model.__dict__.pop("column_descriptions", None)
+            models.update({model_fqn: updated_model})
+
+    def _model_for_docs_patch(
+        self,
+        models: UniqueKeyDict[str, Model],
+        short_name_to_model_fqns: t.Dict[str, t.List[str]],
+        patch: ModelDocsPatch,
+    ) -> t.Optional[str]:
+        try:
+            normalized_name = normalize_model_name(
+                patch.model_name,
+                default_catalog=self.context.default_catalog,
+                dialect=self.config.model_defaults.dialect,
+            )
+        except Exception:
+            normalized_name = None
+
+        if normalized_name in models:
+            return normalized_name
+
+        short_name = exp.to_table(patch.model_name).name.lower()
+        model_matches = short_name_to_model_fqns.get(short_name, [])
+        if len(model_matches) > 1:
+            matching_names = ", ".join(sorted(model_matches))
+            raise ConfigError(
+                self._failed_to_load_model_error(
+                    patch.path,
+                    (
+                        f"Model docs entry '{patch.model_name}' is ambiguous and matches multiple models: "
+                        f"{matching_names}. Use a fully qualified model name."
+                    ),
+                ),
+                patch.path,
+            )
+        if model_matches:
+            return model_matches[0]
+
+        return None
 
     def _load_sql_models(
         self,
