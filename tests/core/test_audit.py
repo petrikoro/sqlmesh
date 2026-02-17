@@ -1167,3 +1167,104 @@ def test_load_standalone_run_only():
     assert isinstance(audit, StandaloneAudit)
     assert audit.run_only is True
     assert audit.blocking is False
+
+
+def test_audit_description_from_comment():
+    """Test that a SQL comment above AUDIT is extracted as the description field."""
+    expressions = parse(
+        """
+        /* Validates that all prices are positive */
+        AUDIT (
+            name assert_positive_price
+        );
+
+        SELECT * FROM @this_model WHERE price <= 0
+    """
+    )
+
+    audit = load_audit(expressions, path=Path("/path/to/audit"))
+    assert isinstance(audit, ModelAudit)
+    assert audit.description == "Validates that all prices are positive"
+
+
+def test_standalone_audit_description_from_comment():
+    """Test that a SQL comment above standalone AUDIT is extracted as the description field."""
+    expressions = parse(
+        """
+        /* Checks data freshness */
+        AUDIT (
+            name my_freshness_check,
+            standalone true,
+        );
+
+        SELECT 1 FROM db.table HAVING MAX(ts) < CURRENT_TIMESTAMP - INTERVAL '1' HOUR
+    """
+    )
+
+    audit = load_audit(expressions, path=Path("/path/to/audit"))
+    assert isinstance(audit, StandaloneAudit)
+    assert audit.description == "Checks data freshness"
+
+
+def test_audit_explicit_description_takes_precedence():
+    """Test that an explicit description property takes precedence over the comment."""
+    expressions = parse(
+        """
+        /* This is the comment */
+        AUDIT (
+            name my_audit,
+            standalone true,
+            description 'This is the explicit description',
+        );
+
+        SELECT * FROM db.table WHERE col IS NULL
+    """
+    )
+
+    audit = load_audit(expressions, path=Path("/path/to/audit"))
+    assert isinstance(audit, StandaloneAudit)
+    assert audit.description == "This is the explicit description"
+
+
+def test_audit_comment_preserved_after_format():
+    """Test that comments above AUDIT are preserved during formatting."""
+    from sqlmesh.core.dialect import format_model_expressions
+
+    expressions = parse(
+        """
+        /* Validates that all prices are positive */
+        AUDIT (
+            name assert_positive_price
+        );
+
+        SELECT * FROM @this_model WHERE price <= 0
+    """
+    )
+
+    formatted = format_model_expressions(expressions)
+    assert "/* Validates that all prices are positive */" in formatted
+    assert "AUDIT (" in formatted
+
+
+def test_standalone_audit_description_roundtrip():
+    """Test that description survives load -> render_definition -> format roundtrip."""
+    from sqlmesh.core.dialect import format_model_expressions
+
+    expressions = parse(
+        """
+        /* Checks data freshness */
+        AUDIT (
+            name my_freshness_check,
+            standalone true,
+        );
+
+        SELECT 1 FROM db.table HAVING MAX(ts) < CURRENT_TIMESTAMP - INTERVAL '1' HOUR
+    """
+    )
+
+    audit = load_audit(expressions, path=Path("/path/to/audit"))
+    assert audit.description == "Checks data freshness"
+
+    rendered = audit.render_definition()
+    formatted = format_model_expressions(rendered)
+    assert "Checks data freshness" in formatted

@@ -102,6 +102,13 @@ def audit_string_validator(cls: t.Type, v: t.Any) -> t.Optional[str]:
     return str(v).lower() if v is not None else None
 
 
+@field_validator("description", mode="before", check_fields=False)
+def audit_description_validator(cls: t.Type, v: t.Any) -> t.Optional[str]:
+    if isinstance(v, exp.Expression):
+        return v.name
+    return str(v) if v is not None else None
+
+
 @field_validator("defaults", mode="before", check_fields=False)
 def audit_map_validator(cls: t.Type, v: t.Any, values: t.Any) -> t.Dict[str, t.Any]:
     from sqlmesh.utils.pydantic import get_dialect
@@ -131,6 +138,7 @@ class ModelAudit(PydanticModel, AuditMixin, frozen=True):
 
     name: str
     dialect: str = ""
+    description: t.Optional[str] = None
     skip: bool = False
     blocking: bool = True
     run_only: bool = False
@@ -147,6 +155,7 @@ class ModelAudit(PydanticModel, AuditMixin, frozen=True):
     _query_validator = ParsableSql.validator()
     _bool_validator = bool_validator
     _string_validator = audit_string_validator
+    _description_validator = audit_description_validator
     _map_validator = audit_map_validator
 
     def __str__(self) -> str:
@@ -419,6 +428,9 @@ def load_audit(
         raise
 
     meta_fields = {p.name: p.args.get("value") for p in meta.expressions if p}
+
+    if meta.comments and "description" not in meta_fields:
+        meta_fields["description"] = "\n".join(comment.strip() for comment in meta.comments)
 
     standalone_field = meta_fields.pop("standalone", None)
     if standalone_field and not isinstance(standalone_field, exp.Boolean):
