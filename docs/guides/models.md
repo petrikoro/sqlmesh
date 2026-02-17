@@ -262,6 +262,41 @@ An html file containing your project's DAG will be placed at the root of your pr
 
 SQLMesh can generate dbt-compatible metadata and a browsable documentation site from your project models.
 
+### Define model docs in dbt-compatible YAML
+
+You can keep model documentation in dedicated YAML files under your `models/` directory. SQLMesh supports the dbt-style `models` section in any `*.yml` or `*.yaml` file under `models/`.
+
+Supported fields:
+
+- `models[].description`
+- `models[].columns[].description`
+- `models[].tags`
+- `models[].config.tags`
+
+If descriptions or tags exist both in model SQL/Python and YAML, YAML takes precedence.
+
+Model matching behavior for `models[].name`:
+
+- You can use a short name (for example, `orders`) or a fully-qualified name (for example, `sushi.orders` or `catalog.sushi.orders`).
+- If a short name is ambiguous and matches multiple models, you must use a fully-qualified name.
+
+When both `models[].tags` and `models[].config.tags` are present, SQLMesh combines them and removes duplicates.
+
+```yaml
+version: 2
+models:
+  - name: orders
+    description: Curated orders model.
+    tags:
+      - finance
+      - curated
+    columns:
+      - name: id
+        description: Primary key.
+      - name: amount
+        description: Order amount in USD.
+```
+
 ### Generate a dbt-compatible `manifest.json`
 
 Use the `parse` command to build a dbt-compatible manifest from your SQLMesh project:
