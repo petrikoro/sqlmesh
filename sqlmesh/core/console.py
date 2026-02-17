@@ -440,6 +440,7 @@ class Console(
         duration_ms: t.Optional[int],
         num_audits_passed: int,
         num_audits_failed: int,
+        num_audits_skipped: int,
         audit_only: bool = False,
         execution_stats: t.Optional[QueryExecutionStats] = None,
         auto_restatement_triggers: t.Optional[t.List[SnapshotId]] = None,
@@ -605,6 +606,7 @@ class NoopConsole(Console):
         duration_ms: t.Optional[int],
         num_audits_passed: int,
         num_audits_failed: int,
+        num_audits_skipped: int,
         audit_only: bool = False,
         execution_stats: t.Optional[QueryExecutionStats] = None,
         auto_restatement_triggers: t.Optional[t.List[SnapshotId]] = None,
@@ -928,6 +930,8 @@ class TerminalConsole(Console):
     AUDIT_PASS_MARK = "\u2714"
     GREEN_AUDIT_PASS_MARK = f"[green]{AUDIT_PASS_MARK}[/green]"
     AUDIT_FAIL_MARK = "\u274c"
+    AUDIT_SKIP_MARK = "\u23f8"
+    YELLOW_AUDIT_SKIP_MARK = f"[yellow]{AUDIT_SKIP_MARK}[/yellow]"
     AUDIT_PADDING = 0
     CHECK_MARK = f"{AUDIT_PASS_MARK} "
 
@@ -1108,6 +1112,7 @@ class TerminalConsole(Console):
         duration_ms: t.Optional[int],
         num_audits_passed: int,
         num_audits_failed: int,
+        num_audits_skipped: int,
         audit_only: bool = False,
         execution_stats: t.Optional[QueryExecutionStats] = None,
         auto_restatement_triggers: t.Optional[t.List[SnapshotId]] = None,
@@ -1137,6 +1142,8 @@ class TerminalConsole(Console):
                     audits_str += f" {self.AUDIT_PASS_MARK}{num_audits_passed}"
                 if num_audits_failed:
                     audits_str += f" {self.AUDIT_FAIL_MARK}{num_audits_failed}"
+                if num_audits_skipped:
+                    audits_str += f" {self.AUDIT_SKIP_MARK}{num_audits_skipped}"
                 audits_str = f", audits{audits_str}" if audits_str else ""
                 annotation_len = self.evaluation_column_widths["annotation"]
                 # don't adjust the annotation_len if we're using AUDIT_PADDING
@@ -1152,7 +1159,7 @@ class TerminalConsole(Console):
 
                 msg = f"{f'{batch} ' if not audit_only else ''}{display_name}   {annotation}   {duration}".replace(
                     self.AUDIT_PASS_MARK, self.GREEN_AUDIT_PASS_MARK
-                )
+                ).replace(self.AUDIT_SKIP_MARK, self.YELLOW_AUDIT_SKIP_MARK)
 
                 self.evaluation_progress_live.console.print(msg)
 
@@ -3299,6 +3306,8 @@ class MarkdownConsole(CaptureTerminalConsole):
     AUDIT_PASS_MARK = "passed "
     GREEN_AUDIT_PASS_MARK = AUDIT_PASS_MARK
     AUDIT_FAIL_MARK = "failed "
+    AUDIT_SKIP_MARK = "skipped "
+    YELLOW_AUDIT_SKIP_MARK = AUDIT_SKIP_MARK
     AUDIT_PADDING = 7
 
     def __init__(self, **kwargs: t.Any) -> None:
@@ -3758,6 +3767,7 @@ class DatabricksMagicConsole(CaptureTerminalConsole):
         duration_ms: t.Optional[int],
         num_audits_passed: int,
         num_audits_failed: int,
+        num_audits_skipped: int,
         audit_only: bool = False,
         execution_stats: t.Optional[QueryExecutionStats] = None,
         auto_restatement_triggers: t.Optional[t.List[SnapshotId]] = None,
@@ -3929,17 +3939,18 @@ class DebuggerTerminalConsole(TerminalConsole):
         duration_ms: t.Optional[int],
         num_audits_passed: int,
         num_audits_failed: int,
+        num_audits_skipped: int,
         audit_only: bool = False,
         execution_stats: t.Optional[QueryExecutionStats] = None,
         auto_restatement_triggers: t.Optional[t.List[SnapshotId]] = None,
     ) -> None:
-        message = f"Evaluated {snapshot.name} | batch={batch_idx} | duration={duration_ms}ms | num_audits_passed={num_audits_passed} | num_audits_failed={num_audits_failed}"
+        message = f"Evaluated {snapshot.name} | batch={batch_idx} | duration={duration_ms}ms | num_audits_passed={num_audits_passed} | num_audits_failed={num_audits_failed} | num_audits_skipped={num_audits_skipped}"
 
         if auto_restatement_triggers:
             message += f" | auto_restatement_triggers=[{', '.join(trigger.name for trigger in auto_restatement_triggers)}]"
 
         if audit_only:
-            message = f"Audited {snapshot.name} | duration={duration_ms}ms | num_audits_passed={num_audits_passed} | num_audits_failed={num_audits_failed}"
+            message = f"Audited {snapshot.name} | duration={duration_ms}ms | num_audits_passed={num_audits_passed} | num_audits_failed={num_audits_failed} | num_audits_skipped={num_audits_skipped}"
 
         self._write(message)
 

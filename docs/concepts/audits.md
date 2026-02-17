@@ -3,7 +3,7 @@ Audits are one of the tools SQLMesh provides to validate your models. Along with
 
 Unlike tests, audits are used to validate the output of a model after every run. When you apply a [plan](./plans.md), SQLMesh will automatically run each model's audits.
 
-By default, SQLMesh will halt plan application when an audit fails so potentially invalid data does not propagate further downstream. This behavior can be changed for individual audits - refer to [Non-blocking audits](#non-blocking-audits).
+By default, SQLMesh will halt plan application when an audit fails so potentially invalid data does not propagate further downstream. This behavior can be changed for individual audits - refer to [Non-blocking audits](#non-blocking-audits). Audits can also be configured to only run during scheduled executions - refer to [Run-only audits](#run-only-audits).
 
 A comprehensive suite of audits can identify data issues upstream, whether they are from your vendors or other teams. Audits also empower your data engineers and analysts to work with confidence by catching problems early as they work on new features or make updates to your models.
 
@@ -722,3 +722,33 @@ MODEL (
   )
 );
 ```
+
+### Run-only audits
+Some audits are only meaningful during scheduled `sqlmesh run` executions and would produce false failures during `plan` -- for example, data freshness checks. A freshness audit verifies that data has been recently updated, but during local development or plan application the target table may not have up-to-date data, causing the audit to fail unnecessarily.
+
+Setting `run_only` to `true` causes the audit to be **completely skipped** during `plan` and only executed during `sqlmesh run`:
+
+```sql linenums="1" hl_lines="4"
+AUDIT (
+  name assert_data_is_fresh,
+  blocking true,
+  run_only true
+);
+
+SELECT 1
+FROM @this_model
+HAVING MAX(@column) < CURRENT_TIMESTAMP - @threshold
+```
+
+Like `blocking`, the `run_only` property can also be set at the model level:
+
+```sql linenums="1" hl_lines="5"
+MODEL (
+  name sushi.items,
+  audits (
+    assert_data_is_fresh(column := updated_at, threshold := INTERVAL '1' HOUR, run_only := true)
+  )
+);
+```
+
+The model-level override takes precedence over the audit definition default.
