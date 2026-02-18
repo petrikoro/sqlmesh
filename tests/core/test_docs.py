@@ -296,9 +296,12 @@ def test_html_lineage_blocks_render_datahub_style_sections(
     assert "lineage-col-label current-model-label" not in html
     assert "h += '<div class=\"lineage-col lineage-col-current\">';" in html
     assert ".lineage-home-text {" in html
+    assert ".lineage-home-text.hidden { display: none; }" in html
     assert ".lineage-home-text svg { width: 15px; height: 15px; }" in html
     assert ".lineage-col-current {" in html
     assert "gap: 6px;" in html
+    assert ".lblock-shell {" in html
+    assert "h += '<div class=\"lblock-shell\">';" in html
     assert ".lblock-home-wrap {" not in html
     assert ".lblock-home-pill {" not in html
     assert ".lblock-home-tail {" not in html
@@ -320,7 +323,7 @@ def test_html_lineage_renders_table_level_edges(sushi_context: Context, output_d
     assert ".lineage-canvas svg.lineage-svg path.table-path" in html
     assert ".lineage-canvas svg.lineage-svg path.column-path" in html
     assert "var selectedNodeId = getSelectedLineageNode(canvasId);" in html
-    assert "if (!selectedPathSet) return;" in html
+    assert "if (selectedPathSet) {" in html
     assert '"column-path hl"' in html
 
 
@@ -339,22 +342,25 @@ def test_html_lineage_has_column_search_and_scroll_container(
     assert "overflow-y: auto;" in html
 
 
-def test_html_lineage_shows_top_10_columns_with_faded_more(
+def test_html_columns_uses_scroll_without_fade_overlay(
     sushi_context: Context, output_dir: Path
 ) -> None:
     result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
     html = result.read_text(encoding="utf-8")
 
-    assert "var LINEAGE_COLUMNS_PREVIEW_LIMIT = 10;" in html
-    assert 'data-col-idx="' in html
-    assert "var hiddenByPreview = colIndex >= LINEAGE_COLUMNS_PREVIEW_LIMIT;" in html
-    assert 'style="display:none"' in html
-    assert 'class="lblock-col-more-wrap"' in html
-    assert 'class="lblock-col-fade"' in html
-    assert 'class="lblock-col-more"' in html
-    assert "window.expandLineageColumnsInBlock = function(buttonEl)" in html
-    assert "updateLineageColumnsInBlock(body);" in html
-    assert "var passLimit = query || showAll || colIndex < LINEAGE_COLUMNS_PREVIEW_LIMIT;" in html
+    assert ".col-tbl-wrap {" in html
+    assert "max-height: 420px;" in html
+    assert "overflow-y: auto;" in html
+    assert 'class="columns-scroll-fade"' not in html
+    assert "window.updateColumnsSectionFade = function(section)" not in html
+    assert 'onscroll="updateColumnsSectionFade(this.closest(' not in html
+    assert (
+        "h += '<span class=\"columns-filter-count\">' + m.columns.length + ' / ' + m.columns.length + '</span>';"
+        in html
+    )
+    assert "window.expandColumnsInSection = function(buttonEl)" not in html
+    assert 'class="columns-more-wrap"' not in html
+    assert 'class="columns-more-btn"' not in html
 
 
 def test_html_lineage_has_expand_and_collapse_all_columns_controls(
@@ -369,6 +375,95 @@ def test_html_lineage_has_expand_and_collapse_all_columns_controls(
     assert "setBlockColumnsOpen(block, isOpen);" in html
     assert "setBlockColumnsExpanded(block, isOpen, true);" in html
     assert "clearHighlight(canvas);" in html
+    assert html.index('title="Collapse all columns"') < html.index('title="Expand all columns"')
+
+
+def test_html_lineage_has_per_node_branch_toggle_controls(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert 'class="lblock-hop-toggle upstream"' in html
+    assert 'class="lblock-hop-toggle downstream"' in html
+    assert 'data-hop-dir="upstream"' in html
+    assert 'data-hop-dir="downstream"' in html
+    assert "window.toggleLineageNeighbors = function(buttonEl, direction)" in html
+    assert "function getLineageToggleState(canvasId)" in html
+    assert "function getImmediateLineageNeighbors(modelFqn, direction)" in html
+    assert "function getLineageBranchNeighbors(modelFqn, direction)" in html
+    assert "function applyLineageHiddenState(canvasId)" in html
+    assert "var reverseModelLineage = buildReverseModelLineageMap(modelLineage);" in html
+    assert 'data-model-fqn="' in html
+    assert 'data-ltable-in="' in html
+    assert 'data-ltable-out="' in html
+    assert (
+        'var hasUpToggle = getLineageBranchNeighbors(normalizedFqn, "upstream", normalizedRootFqn).length > 0;'
+        in html
+    )
+    assert (
+        'var hasDownToggle = getLineageBranchNeighbors(normalizedFqn, "downstream", normalizedRootFqn).length > 0;'
+        in html
+    )
+    assert (
+        'if (hasUpToggle) h += \'<button type="button" class="lblock-hop-toggle upstream"' in html
+    )
+    assert (
+        'if (hasDownToggle) h += \'<button type="button" class="lblock-hop-toggle downstream"'
+        in html
+    )
+    assert 'canvas.querySelectorAll("[data-ltable-in]").forEach(function(el) {' in html
+    assert 'canvas.querySelectorAll("[data-ltable-out]").forEach(function(el) {' in html
+    assert "var fromEl = srcAnchors.outgoing || srcAnchors.center || srcAnchors.incoming;" in html
+    assert (
+        "var toEl = targetAnchors.incoming || targetAnchors.center || targetAnchors.outgoing;"
+        in html
+    )
+    assert (
+        "var actionableNeighbors = getLineageBranchNeighbors(modelFqn, direction, rootModelFqn).filter(function(neighborFqn) {"
+        in html
+    )
+    assert "var shouldHide = modelFqn && isLineageModelHidden(canvasId, modelFqn);" in html
+    assert "Hide upstream branch" in html
+    assert "Hide downstream branch" in html
+    assert (
+        'var fromGap = fromEl.classList && fromEl.classList.contains("lblock-hop-toggle") ? 4 : 0;'
+        in html
+    )
+    assert (
+        'var toGap = toEl.classList && toEl.classList.contains("lblock-hop-toggle") ? 4 : 0;'
+        in html
+    )
+    assert 'var homeText = canvas.querySelector(".lineage-col-current .lineage-home-text");' in html
+    assert 'homeText.classList.toggle("hidden", hideHome);' in html
+
+
+def test_html_lineage_branch_neighbors_dont_skip_home_model(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert "function getLineageBranchNeighbors(modelFqn, direction)" in html
+    assert "if (rootFqn && nextFqn === rootFqn) continue;" not in html
+
+
+def test_html_lineage_uses_roomier_spacing_and_thinner_lines(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert ".lineage-flow {" in html
+    assert "gap: 96px;" in html
+    assert ".lineage-col {" in html
+    assert "gap: 20px;" in html
+    assert ".lineage-canvas svg.lineage-svg path {" in html
+    assert "stroke-width: 1;" in html
+    assert ".lineage-canvas svg.lineage-svg path.table-path" in html
+    assert ".lineage-canvas svg.lineage-svg path.column-path" in html
+    assert ".lineage-canvas svg.lineage-svg path.hl" in html
+    assert "stroke-width: 1.2;" in html
 
 
 def test_html_lineage_column_selection_is_click_only(
@@ -380,8 +475,55 @@ def test_html_lineage_column_selection_is_click_only(
     assert "function setSelectedLineageNode(canvasId, nodeId)" in html
     assert "function getSelectedLineageNode(canvasId)" in html
     assert 'row.addEventListener("click", function(ev)' in html
+    assert "if (ev.target.closest('.lblock-col-list')) return;" in html
+    assert 'canvas.dataset.skipClearSelectionClick = "1";' in html
+    assert 'if (canvas.dataset.skipClearSelectionClick === "1") return;' in html
+    assert 'ev.target.closest(".lblock")' in html
+    assert 'ev.target.closest(".lineage-controls")' in html
+    assert 'ev.target.closest(".lineage-expand-btn")' in html
+    assert "if (bid) togBlock(bid);" not in html
     assert 'row.addEventListener("mouseenter", function()' not in html
     assert 'row.addEventListener("mouseleave", function()' not in html
+
+
+def test_html_lineage_uses_only_scroll_visible_column_rows_for_paths(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert "function isVisible(el) {" in html
+    assert 'var list = el.closest(".lblock-col-list");' in html
+    assert "if (!list) return false;" in html
+    assert "var rowRect = el.getBoundingClientRect();" in html
+    assert "var listRect = list.getBoundingClientRect();" in html
+    assert (
+        "var intersectsViewport = rowRect.bottom > listRect.top && rowRect.top < listRect.bottom;"
+        in html
+    )
+    assert "return intersectsViewport;" in html
+
+
+def test_html_lineage_falls_back_to_table_anchor_for_offscreen_columns(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert "function resolveLineageEndpoint(nodeId, role) {" in html
+    assert "if (nodeMap[nodeId]) return { el: nodeMap[nodeId], edgeId: nodeId };" in html
+    assert (
+        'var fallbackEl = role === "source" ? (anchors.outgoing || anchors.center || anchors.incoming) : (anchors.incoming || anchors.center || anchors.outgoing);'
+        in html
+    )
+    assert "if (!fallbackEl) return null;" in html
+    assert 'var fromPoint = resolveLineageEndpoint(srcId, "source");' in html
+    assert 'var toPoint = resolveLineageEndpoint(nodeId, "target");' in html
+    assert "if (!fromPoint || !toPoint) return;" in html
+    assert (
+        'paths += makePath(fromPoint.el, toPoint.el, cr, 0, 0, fromPoint.edgeId, toPoint.edgeId, "column-path hl");'
+        in html
+    )
 
 
 def test_html_tree_defaults_to_collapsed_tables_under_schema(

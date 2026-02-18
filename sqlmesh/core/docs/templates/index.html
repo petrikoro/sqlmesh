@@ -682,8 +682,15 @@ body.on-overview .content { max-width: 100%; padding: 0; }
 .col-tbl-wrap {
   border: 1px solid var(--gray-100);
   border-radius: var(--radius);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 420px;
+  position: relative;
 }
+.col-tbl-wrap::-webkit-scrollbar { width: 6px; }
+.col-tbl-wrap::-webkit-scrollbar-track { background: transparent; }
+.col-tbl-wrap::-webkit-scrollbar-thumb { background: var(--gray-200); border-radius: 10px; }
+.col-tbl-wrap::-webkit-scrollbar-thumb:hover { background: var(--gray-300); }
 .columns-toolbar {
   display: flex;
   align-items: center;
@@ -861,28 +868,31 @@ table.col-tbl tr:hover td { background: var(--gray-50); }
 }
 .lineage-canvas svg.lineage-svg path {
   fill: none;
-  stroke: var(--accent-300);
-  stroke-width: 1.5;
-  opacity: .35;
+  stroke: var(--gray-300);
+  stroke-width: 1;
+  opacity: .88;
+  shape-rendering: geometricPrecision;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   transition: opacity .2s, stroke-width .2s, stroke .2s;
 }
 .lineage-canvas svg.lineage-svg path.table-path {
-  stroke: var(--accent-400);
-  stroke-width: 1.8;
-  opacity: .45;
+  stroke: var(--gray-300);
+  stroke-width: 1;
+  opacity: .88;
 }
 .lineage-canvas svg.lineage-svg path.column-path {
-  stroke: var(--accent-400);
-  stroke-width: 1.8;
-  opacity: .45;
+  stroke: var(--gray-300);
+  stroke-width: 1;
+  opacity: .88;
 }
 .lineage-canvas svg.lineage-svg path.hl {
-  stroke: var(--accent-400);
-  stroke-width: 1.8;
-  opacity: .45;
+  stroke: var(--accent-500);
+  stroke-width: 1.2;
+  opacity: .95;
 }
-.lineage-canvas.dimmed svg.lineage-svg path { opacity: .1; }
-.lineage-canvas.dimmed svg.lineage-svg path.hl { opacity: .45; }
+.lineage-canvas.dimmed svg.lineage-svg path { opacity: .12; }
+.lineage-canvas.dimmed svg.lineage-svg path.hl { opacity: .95; }
 
 .lineage-viewport {
   transform-origin: 0 0;
@@ -895,7 +905,7 @@ table.col-tbl tr:hover td { background: var(--gray-50); }
 .lineage-flow {
   display: flex;
   align-items: flex-start;
-  gap: 80px;
+  gap: 96px;
   position: relative;
   min-width: max-content;
   padding: 32px;
@@ -935,7 +945,7 @@ table.col-tbl tr:hover td { background: var(--gray-50); }
 .lineage-col {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 20px;
   flex: 0 0 340px;
   width: 340px;
   min-width: 340px;
@@ -956,6 +966,7 @@ table.col-tbl tr:hover td { background: var(--gray-50); }
   line-height: 1.2;
   letter-spacing: .01em;
 }
+.lineage-home-text.hidden { display: none; }
 .lineage-home-text svg { width: 15px; height: 15px; }
 .lineage-col-label {
   font-size: 10px;
@@ -967,24 +978,73 @@ table.col-tbl tr:hover td { background: var(--gray-50); }
   margin-bottom: 2px;
 }
 .lblock {
+  position: relative;
+  width: 100%;
+}
+.lblock-shell {
   border: 1px solid var(--gray-200);
   border-radius: 18px;
   overflow: hidden;
   background: #fff;
   box-shadow: var(--shadow-sm);
   transition: box-shadow .2s, opacity .2s;
-  position: relative;
-  width: 100%;
+}
+.lblock.lblock-hidden-hop {
+  display: none;
+}
+.lblock-hop-toggle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-200);
+  background: #fff;
+  color: var(--accent-600);
+  box-shadow: 0 0 0 2px #fff, var(--shadow-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 12;
+  padding: 0;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.lblock-hop-toggle:hover {
+  background: var(--accent-50);
+  color: var(--accent-700);
+  border-color: var(--accent-300);
+}
+.lblock-hop-toggle svg {
+  width: 10px;
+  height: 10px;
+}
+.lblock-hop-toggle.upstream {
+  left: -24px;
+}
+.lblock-hop-toggle.upstream svg {
+  transform: rotate(180deg);
+}
+.lblock-hop-toggle.downstream {
+  right: -24px;
+}
+.lblock-hop-toggle.collapsed {
+  background: var(--accent-100);
+  color: var(--accent-700);
+  border-color: var(--accent-300);
 }
 .lblock.dragging {
   z-index: 50;
+}
+.lblock.dragging .lblock-shell {
   box-shadow: var(--shadow-lg);
   opacity: .92;
   transition: none;
 }
-.lineage-canvas.dimmed .lblock { opacity: .35; }
-.lineage-canvas.dimmed .lblock.hl-block { opacity: 1; }
-.lblock:hover { box-shadow: var(--shadow); }
+.lineage-canvas.dimmed .lblock .lblock-shell { opacity: .35; }
+.lineage-canvas.dimmed .lblock.hl-block .lblock-shell { opacity: 1; }
+.lblock:hover .lblock-shell { box-shadow: var(--shadow); }
 .lblock-hd {
   display: flex;
   align-items: flex-start;
@@ -1096,7 +1156,7 @@ table.col-tbl tr:hover td { background: var(--gray-50); }
 }
 .lblock-hd .lblock-name a { color: inherit; text-decoration: none; cursor: pointer; }
 .lblock-hd .lblock-name a:hover { text-decoration: underline; }
-.lblock.current {
+.lblock.current .lblock-shell {
   border-color: var(--accent-300);
   box-shadow: 0 2px 12px rgba(100,116,139,.08);
 }
@@ -1196,43 +1256,6 @@ table.col-tbl tr:hover td { background: var(--gray-50); }
 .lblock-col-list::-webkit-scrollbar-track { background: transparent; }
 .lblock-col-list::-webkit-scrollbar-thumb { background: var(--gray-200); border-radius: 10px; }
 .lblock-col-list::-webkit-scrollbar-thumb:hover { background: var(--gray-300); }
-.lblock-col-more-wrap {
-  position: relative;
-  margin-top: -24px;
-  padding-top: 24px;
-  z-index: 1;
-}
-.lblock-col-fade {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(248,250,252,0) 0%, rgba(248,250,252,.92) 45%, rgba(248,250,252,1) 100%);
-  pointer-events: none;
-  border-radius: 0 0 12px 12px;
-}
-.lblock-col-more {
-  position: relative;
-  z-index: 1;
-  margin: 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 66px;
-  height: 26px;
-  border-radius: 999px;
-  border: 1px solid var(--gray-200);
-  background: rgba(255,255,255,.95);
-  color: var(--gray-600);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .02em;
-  cursor: pointer;
-  transition: all var(--transition);
-}
-.lblock-col-more:hover {
-  color: var(--gray-700);
-  border-color: var(--gray-300);
-  background: #fff;
-}
 .lblock-col-empty {
   display: none;
   margin-top: 8px;
@@ -1637,6 +1660,21 @@ function buildModelLineageMap(lineageMap) {
   return modelMap;
 }
 var modelLineage = buildModelLineageMap(colLineage);
+function buildReverseModelLineageMap(modelLineageMap) {
+  var reverseMap = {};
+  Object.keys(modelLineageMap || {}).forEach(function(targetModel) {
+    (modelLineageMap[targetModel] || []).forEach(function(srcModel) {
+      if (!srcModel || srcModel === targetModel) return;
+      if (!reverseMap[srcModel]) reverseMap[srcModel] = [];
+      reverseMap[srcModel].push(targetModel);
+    });
+  });
+  Object.keys(reverseMap).forEach(function(model) {
+    reverseMap[model] = reverseMap[model].sort();
+  });
+  return reverseMap;
+}
+var reverseModelLineage = buildReverseModelLineageMap(modelLineage);
 /* Reverse lineage index: reverseLineage[fqn][col] = [{model, column}] (consumers) */
 var reverseLineage = {};
 Object.keys(colLineage).forEach(function(mfqn) {
@@ -1653,7 +1691,7 @@ var externalLinks = manifestData.external_links || [];
 var byFqn = {}, byName = {};
 models.forEach(function(m) { byFqn[m.fqn] = m; byName[m.name] = m; });
 
-var curModel = null, sidebarQuery = "", _selectedLineageNodeByCanvas = {};
+var curModel = null, sidebarQuery = "", _selectedLineageNodeByCanvas = {}, _lineageToggleStateByCanvas = {};
 
 function escapeHtml(s) { if (s == null) return ""; return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 function normalizeFqn(s) { return s ? String(s).replace(/"/g, "") : ""; }
@@ -1750,13 +1788,16 @@ function normalizeColumnSearchText(text) {
   return String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-var LINEAGE_COLUMNS_PREVIEW_LIMIT = 10;
-
 window.filterColumnsInSection = function(inputEl) {
   var section = inputEl && inputEl.closest ? inputEl.closest(".section") : null;
   if (!section) return;
+  updateColumnsInSection(section);
+};
 
-  var query = normalizeColumnSearchText(inputEl.value);
+function updateColumnsInSection(section) {
+  if (!section) return;
+  var input = section.querySelector(".columns-filter-input");
+  var query = normalizeColumnSearchText(input ? input.value : "");
   var rows = section.querySelectorAll('tr[data-col-row="1"]');
   var visibleCount = 0;
 
@@ -1788,24 +1829,14 @@ function updateLineageColumnsInBlock(body) {
   var input = body.querySelector(".lblock-col-search input");
   var query = normalizeColumnSearchText(input ? input.value : "");
   var rows = list.querySelectorAll(".lcol-row");
-  var showAll = list.dataset.expanded === "1";
   var visibleCount = 0;
-  var matchedCount = 0;
 
   rows.forEach(function(row) {
     var rowSearch = row.getAttribute("data-col-search") || "";
-    var colIndex = parseInt(row.getAttribute("data-col-idx") || "0", 10);
     var match = !query || rowSearch.indexOf(query) >= 0;
-    if (match) matchedCount++;
-    var passLimit = query || showAll || colIndex < LINEAGE_COLUMNS_PREVIEW_LIMIT;
-    var visible = match && passLimit;
-    row.style.display = visible ? "" : "none";
-    if (visible) visibleCount++;
+    row.style.display = match ? "" : "none";
+    if (match) visibleCount++;
   });
-
-  var hasHiddenOverflow = !query && !showAll && matchedCount > LINEAGE_COLUMNS_PREVIEW_LIMIT;
-  var moreWrap = body.querySelector(".lblock-col-more-wrap");
-  if (moreWrap) moreWrap.style.display = hasHiddenOverflow ? "block" : "none";
 
   var emptyEl = body.querySelector(".lblock-col-empty");
   if (emptyEl) emptyEl.style.display = visibleCount ? "none" : "block";
@@ -1830,19 +1861,6 @@ function updateLineageColumnsInBlock(body) {
     if (svg && svg.id && canvas.id) drawLineageLinesIn(svg.id, canvas.id);
   }
 }
-
-window.expandLineageColumnsInBlock = function(buttonEl) {
-  var body = buttonEl && buttonEl.closest ? buttonEl.closest(".lblock-body") : null;
-  if (!body) return;
-  var list = body.querySelector(".lblock-col-list");
-  if (!list) return;
-  list.dataset.expanded = "1";
-  updateLineageColumnsInBlock(body);
-  var canvas = body.closest(".lineage-canvas");
-  if (!canvas) return;
-  var svg = canvas.querySelector(".lineage-svg");
-  if (svg && svg.id && canvas.id) drawLineageLinesIn(svg.id, canvas.id);
-};
 
 window.toggleColumnDescription = function(button) {
   if (!button) return;
@@ -2411,6 +2429,8 @@ function renderModelPage(id) {
   }
 
   document.getElementById("C").innerHTML = h;
+  var columnsSection = document.querySelector("#sec-columns .section");
+  if (columnsSection) updateColumnsInSection(columnsSection);
 
   /* Init lineage: pan/zoom canvas, interactions, block drag */
   if (hasLineage || hasDown) {
@@ -2631,7 +2651,7 @@ function renderLineageCanvas(m, upLevels, maxUp, downLevels, maxDown, canvasId, 
     if (!upLevels[lv]) continue;
     h += '<div class="lineage-col">';
     upLevels[lv].sort(function(a,b) { return a.fqn < b.fqn ? -1 : 1; }).forEach(function(info) {
-      h += renderLineageBlock(info.fqn, info.cols);
+      h += renderLineageBlock(info.fqn, info.cols, false, m.fqn);
     });
     h += '</div>';
   }
@@ -2639,7 +2659,7 @@ function renderLineageCanvas(m, upLevels, maxUp, downLevels, maxDown, canvasId, 
   /* Current model */
   h += '<div class="lineage-col lineage-col-current">';
   h += '<div class="lineage-home-text">' + ICONS.home + '<span>Home</span></div>';
-  h += renderLineageBlock(m.fqn, m.columns, true);
+  h += renderLineageBlock(m.fqn, m.columns, true, m.fqn);
   h += '</div>';
 
   /* Downstream columns */
@@ -2647,7 +2667,7 @@ function renderLineageCanvas(m, upLevels, maxUp, downLevels, maxDown, canvasId, 
     if (!downLevels[lv]) continue;
     h += '<div class="lineage-col">';
     downLevels[lv].sort(function(a,b) { return a.fqn < b.fqn ? -1 : 1; }).forEach(function(info) {
-      h += renderLineageBlock(info.fqn, info.cols);
+      h += renderLineageBlock(info.fqn, info.cols, false, m.fqn);
     });
     h += '</div>';
   }
@@ -2656,8 +2676,8 @@ function renderLineageCanvas(m, upLevels, maxUp, downLevels, maxDown, canvasId, 
 
   /* Controls strip (React Flow style) */
   h += '<div class="lineage-controls">';
-  h += '<button onclick="lcSetAllColumns(\'' + canvasId + '\',\'' + svgId + '\',true)" title="Expand all columns">' + ICONS.expandAllColumns + '</button>';
   h += '<button onclick="lcSetAllColumns(\'' + canvasId + '\',\'' + svgId + '\',false)" title="Collapse all columns">' + ICONS.collapseAllColumns + '</button>';
+  h += '<button onclick="lcSetAllColumns(\'' + canvasId + '\',\'' + svgId + '\',true)" title="Expand all columns">' + ICONS.expandAllColumns + '</button>';
   h += '<button onclick="lcZoom(\'' + canvasId + '\',\'' + svgId + '\',1)" title="Zoom in">' + ICONS.zoomIn + '</button>';
   h += '<button onclick="lcZoom(\'' + canvasId + '\',\'' + svgId + '\',-1)" title="Zoom out">' + ICONS.zoomOut + '</button>';
   h += '<button onclick="lcFit(\'' + canvasId + '\',\'' + svgId + '\')" title="Fit to view">' + ICONS.fitView + '</button>';
@@ -2672,15 +2692,22 @@ function renderLineageCanvas(m, upLevels, maxUp, downLevels, maxDown, canvasId, 
   return h;
 }
 
-function renderLineageBlock(fqn, cols, isCurrent) {
+function renderLineageBlock(fqn, cols, isCurrent, rootFqn) {
   var mdl = byFqn[fqn];
+  var normalizedFqn = normalizeFqn(fqn);
+  var normalizedRootFqn = normalizeFqn(rootFqn || fqn);
   var parsed = parseLineageFqnParts(fqn);
   var fullFqn = parsed.fullFqn;
   var name = parsed.table || formatLineageLabel(fqn);
   var breadcrumb = parsed.breadcrumb || parsed.schema || "";
   var kind = mdl && mdl.details && mdl.details.kind ? mdl.details.kind : "";
   var bid = isCurrent ? "lb_current" : "lb_" + fqn.replace(/[^a-zA-Z0-9]/g, "_");
-  var h = '<div class="lblock' + (isCurrent ? ' current' : '') + '" id="' + bid + '">';
+  var hasUpToggle = getLineageBranchNeighbors(normalizedFqn, "upstream", normalizedRootFqn).length > 0;
+  var hasDownToggle = getLineageBranchNeighbors(normalizedFqn, "downstream", normalizedRootFqn).length > 0;
+  var h = '<div class="lblock' + (isCurrent ? ' current' : '') + '" id="' + bid + '" data-model-fqn="' + escapeHtml(normalizedFqn) + '" data-is-current="' + (isCurrent ? "1" : "0") + '">';
+  if (hasUpToggle) h += '<button type="button" class="lblock-hop-toggle upstream" data-hop-dir="upstream" data-ltable-in="' + escapeHtml(fullFqn) + '" title="Hide upstream branch" onclick="event.stopPropagation(); toggleLineageNeighbors(this, \'upstream\')">' + ICONS.chevron + '</button>';
+  if (hasDownToggle) h += '<button type="button" class="lblock-hop-toggle downstream" data-hop-dir="downstream" data-ltable-out="' + escapeHtml(fullFqn) + '" title="Hide downstream branch" onclick="event.stopPropagation(); toggleLineageNeighbors(this, \'downstream\')">' + ICONS.chevron + '</button>';
+  h += '<div class="lblock-shell">';
   h += '<div class="lblock-hd">';
   h += '<span class="lblock-arrow">' + ICONS.chevron + '</span>';
   h += '<span class="lblock-icon">' + ICONS.table + '</span>';
@@ -2704,25 +2731,20 @@ function renderLineageBlock(fqn, cols, isCurrent) {
   h += ICONS.search;
   h += '<input type="text" placeholder="Find column" oninput="filterLineageColumnsInBlock(this)" aria-label="Find column in lineage table">';
   h += '</label>';
-  h += '<div class="lblock-col-list" data-expanded="0">';
-  cols.forEach(function(col, colIndex) {
+  h += '<div class="lblock-col-list">';
+  cols.forEach(function(col) {
     var colName = typeof col === "string" ? col : col.name;
     var ct = typeof col === "string" ? colType(fqn, col) : (col.type || "");
     var colSearch = normalizeColumnSearchText([colName, ct].join(" "));
-    var hiddenByPreview = colIndex >= LINEAGE_COLUMNS_PREVIEW_LIMIT;
-    h += '<div class="lcol-row" data-col-idx="' + colIndex + '" data-col-search="' + escapeHtml(colSearch) + '" data-lnode="' + escapeHtml(normalizeFqn(fqn)) + '|' + escapeHtml(colName) + '"' + (hiddenByPreview ? ' style="display:none"' : '') + '>';
+    h += '<div class="lcol-row" data-col-search="' + escapeHtml(colSearch) + '" data-lnode="' + escapeHtml(normalizeFqn(fqn)) + '|' + escapeHtml(colName) + '">';
     h += '<span class="lcol-icon">' + ICONS.columns + '</span><span class="lcol-name">' + escapeHtml(colName) + '</span>';
     if (ct) h += '<span class="lcol-type">' + escapeHtml(ct) + '</span>';
     h += '</div>';
   });
   h += '</div>';
-  h += '<div class="lblock-col-more-wrap"' + (cols.length > LINEAGE_COLUMNS_PREVIEW_LIMIT ? '' : ' style="display:none"') + '>';
-  h += '<div class="lblock-col-fade"></div>';
-  h += '<button type="button" class="lblock-col-more" onclick="event.stopPropagation(); expandLineageColumnsInBlock(this)">More</button>';
-  h += '</div>';
   h += '<div class="lblock-col-empty">No columns match the current filter.</div>';
   h += '</div>';
-  h += '</div></div>';
+  h += '</div></div></div>';
   return h;
 }
 
@@ -2811,7 +2833,7 @@ function setBlockColumnsExpanded(block, isExpanded, resetSearch) {
   if (!body) return;
   var list = body.querySelector(".lblock-col-list");
   if (!list) return;
-  list.dataset.expanded = isExpanded ? "1" : "0";
+  void isExpanded;
   var input = body.querySelector(".lblock-col-search input");
   if (resetSearch && input) input.value = "";
   updateLineageColumnsInBlock(body);
@@ -2847,6 +2869,169 @@ window.lcSetAllColumns = function(canvasId, svgId, isOpen) {
     setBlockColumnsExpanded(block, isOpen, true);
   });
   drawLineageLinesIn(svgId, canvasId);
+};
+
+function createLineageToggleState() {
+  return {
+    collapsedByKey: {},
+    hiddenModelRefCounts: {}
+  };
+}
+
+function getLineageToggleState(canvasId) {
+  if (!_lineageToggleStateByCanvas[canvasId]) {
+    _lineageToggleStateByCanvas[canvasId] = createLineageToggleState();
+  }
+  return _lineageToggleStateByCanvas[canvasId];
+}
+
+function resetLineageToggleState(canvasId) {
+  _lineageToggleStateByCanvas[canvasId] = createLineageToggleState();
+}
+
+function lineageToggleKey(modelFqn, direction) {
+  return normalizeFqn(modelFqn) + "|" + direction;
+}
+
+function getImmediateLineageNeighbors(modelFqn, direction) {
+  var fqn = normalizeFqn(modelFqn);
+  if (!fqn) return [];
+  var list = direction === "upstream" ? (modelLineage[fqn] || []) : (reverseModelLineage[fqn] || []);
+  return list.map(normalizeFqn).filter(Boolean);
+}
+
+function getLineageBranchNeighbors(modelFqn, direction) {
+  var startFqn = normalizeFqn(modelFqn);
+  if (!startFqn) return [];
+  var result = new Set();
+  var seen = new Set();
+  var queue = getImmediateLineageNeighbors(startFqn, direction).slice();
+  while (queue.length) {
+    var nextFqn = normalizeFqn(queue.shift());
+    if (!nextFqn || nextFqn === startFqn || seen.has(nextFqn)) continue;
+    seen.add(nextFqn);
+    result.add(nextFqn);
+    getImmediateLineageNeighbors(nextFqn, direction).forEach(function(childFqn) {
+      var normalizedChildFqn = normalizeFqn(childFqn);
+      if (!normalizedChildFqn || seen.has(normalizedChildFqn)) return;
+      queue.push(normalizedChildFqn);
+    });
+  }
+  return Array.from(result);
+}
+
+function isLineageModelHidden(canvasId, modelFqn) {
+  var state = getLineageToggleState(canvasId);
+  return !!state.hiddenModelRefCounts[normalizeFqn(modelFqn)];
+}
+
+function getLineageRootModelFqn(canvas) {
+  if (!canvas) return "";
+  var rootBlock = canvas.querySelector(".lblock.current");
+  if (!rootBlock) return "";
+  return normalizeFqn(rootBlock.dataset.modelFqn || "");
+}
+
+function setLineageToggleButtonState(button, isCollapsed) {
+  if (!button) return;
+  var direction = button.dataset.hopDir || "";
+  var hideLabel = direction === "upstream" ? "Hide upstream branch" : "Hide downstream branch";
+  var showLabel = direction === "upstream" ? "Show upstream branch" : "Show downstream branch";
+  button.classList.toggle("collapsed", isCollapsed);
+  button.title = isCollapsed ? showLabel : hideLabel;
+}
+
+function updateLineageToggleButtons(canvasId) {
+  var canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  var state = getLineageToggleState(canvasId);
+  canvas.querySelectorAll(".lblock[data-model-fqn]").forEach(function(block) {
+    var modelFqn = normalizeFqn(block.dataset.modelFqn || "");
+    block.querySelectorAll(".lblock-hop-toggle").forEach(function(button) {
+      var direction = button.dataset.hopDir || "";
+      var key = lineageToggleKey(modelFqn, direction);
+      setLineageToggleButtonState(button, !!state.collapsedByKey[key]);
+    });
+  });
+}
+
+function applyLineageHiddenState(canvasId) {
+  var canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  canvas.querySelectorAll(".lblock[data-model-fqn]").forEach(function(block) {
+    var modelFqn = normalizeFqn(block.dataset.modelFqn || "");
+    var shouldHide = modelFqn && isLineageModelHidden(canvasId, modelFqn);
+    block.classList.toggle("lblock-hidden-hop", shouldHide);
+  });
+  var homeText = canvas.querySelector(".lineage-col-current .lineage-home-text");
+  var currentBlock = canvas.querySelector(".lineage-col-current .lblock.current");
+  if (homeText) {
+    var hideHome = !!(currentBlock && currentBlock.classList.contains("lblock-hidden-hop"));
+    homeText.classList.toggle("hidden", hideHome);
+  }
+  updateLineageToggleButtons(canvasId);
+
+  var selectedNodeId = getSelectedLineageNode(canvasId);
+  if (selectedNodeId) {
+    var selectedModelFqn = selectedNodeId.split("|")[0];
+    if (isLineageModelHidden(canvasId, selectedModelFqn)) {
+      clearHighlight(canvas);
+    }
+  }
+}
+
+function setLineageNeighborsVisibility(canvasId, modelFqn, direction, shouldHide) {
+  var canvas = document.getElementById(canvasId);
+  if (!canvas) return false;
+  var rootModelFqn = getLineageRootModelFqn(canvas);
+  var state = getLineageToggleState(canvasId);
+  var key = lineageToggleKey(modelFqn, direction);
+  var actionableNeighbors = getLineageBranchNeighbors(modelFqn, direction, rootModelFqn).filter(function(neighborFqn) {
+    var normalizedNeighborFqn = normalizeFqn(neighborFqn);
+    return normalizedNeighborFqn && normalizedNeighborFqn !== normalizeFqn(modelFqn);
+  });
+  if (!actionableNeighbors.length) {
+    delete state.collapsedByKey[key];
+    return false;
+  }
+  if (shouldHide) state.collapsedByKey[key] = true;
+  else delete state.collapsedByKey[key];
+
+  actionableNeighbors.forEach(function(neighborFqn) {
+    if (!neighborFqn || neighborFqn === modelFqn) return;
+    var count = state.hiddenModelRefCounts[neighborFqn] || 0;
+    if (shouldHide) {
+      state.hiddenModelRefCounts[neighborFqn] = count + 1;
+    } else if (count <= 1) {
+      delete state.hiddenModelRefCounts[neighborFqn];
+    } else {
+      state.hiddenModelRefCounts[neighborFqn] = count - 1;
+    }
+  });
+  return true;
+}
+
+window.toggleLineageNeighbors = function(buttonEl, direction) {
+  var button = buttonEl && buttonEl.closest ? buttonEl.closest(".lblock-hop-toggle") : null;
+  var block = button ? button.closest(".lblock") : null;
+  var canvas = block ? block.closest(".lineage-canvas") : null;
+  if (!button || !block || !canvas) return;
+  if (direction !== "upstream" && direction !== "downstream") return;
+
+  var modelFqn = normalizeFqn(block.dataset.modelFqn || "");
+  if (!modelFqn) return;
+  var state = getLineageToggleState(canvas.id);
+  var key = lineageToggleKey(modelFqn, direction);
+  var isCollapsed = !!state.collapsedByKey[key];
+  var isChanged = setLineageNeighborsVisibility(canvas.id, modelFqn, direction, !isCollapsed);
+  if (!isChanged) {
+    setLineageToggleButtonState(button, false);
+    return;
+  }
+  applyLineageHiddenState(canvas.id);
+
+  var svgEl = canvas.querySelector(".lineage-svg");
+  if (svgEl && svgEl.id && canvas.id) drawLineageLinesIn(svgEl.id, canvas.id);
 };
 
 /* ---- Canvas pan / zoom (React Flow style) ---- */
@@ -2918,6 +3103,7 @@ function setupCanvasPanZoom(canvasId, svgId) {
 
   /* Wheel zoom (toward cursor) */
   canvas.addEventListener('wheel', function(ev) {
+    if (ev.target.closest('.lblock-col-list')) return;
     ev.preventDefault();
     var cr = canvas.getBoundingClientRect();
     var mx = ev.clientX - cr.left, my = ev.clientY - cr.top;
@@ -2936,9 +3122,13 @@ function setupCanvasPanZoom(canvasId, svgId) {
     ev.preventDefault();
     var startX = ev.clientX, startY = ev.clientY;
     var ox = st.panX, oy = st.panY;
+    var moved = false;
     canvas.classList.add('panning');
 
     function onMove(ev) {
+      var dx = ev.clientX - startX;
+      var dy = ev.clientY - startY;
+      if (!moved && (dx !== 0 || dy !== 0)) moved = true;
       st.panX = ox + (ev.clientX - startX);
       st.panY = oy + (ev.clientY - startY);
       applyLineageCanvasTransform(canvasId, svgId);
@@ -2947,6 +3137,10 @@ function setupCanvasPanZoom(canvasId, svgId) {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       canvas.classList.remove('panning');
+      if (moved) {
+        canvas.dataset.skipClearSelectionClick = "1";
+        requestAnimationFrame(function() { delete canvas.dataset.skipClearSelectionClick; });
+      }
     }
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
@@ -3004,10 +3198,6 @@ function setupBlockDrag(canvasId, svgId) {
         if (dragging) {
           block.classList.remove("dragging");
           drawLineageLinesIn(svgId, canvasId);
-        } else {
-          /* It was a click → toggle block */
-          var bid = block.id;
-          if (bid) togBlock(bid);
         }
       }
 
@@ -3070,18 +3260,47 @@ function drawLineageLinesIn(svgId, canvasId) {
   var paths = "";
 
   var tableMap = {};
+  function getTableAnchors(modelFqn) {
+    var key = normalizeFqn(modelFqn || "");
+    if (!key) return null;
+    if (!tableMap[key]) {
+      tableMap[key] = { center: null, incoming: null, outgoing: null };
+    }
+    return tableMap[key];
+  }
+
   canvas.querySelectorAll("[data-ltable]").forEach(function(el) {
-    var model = normalizeFqn(el.dataset.ltable || "");
-    if (model) tableMap[model] = el;
+    var block = el.closest(".lblock");
+    if (!block || block.classList.contains("lblock-hidden-hop")) return;
+    var anchors = getTableAnchors(el.dataset.ltable || "");
+    if (anchors) anchors.center = el;
+  });
+  canvas.querySelectorAll("[data-ltable-in]").forEach(function(el) {
+    var block = el.closest(".lblock");
+    if (!block || block.classList.contains("lblock-hidden-hop")) return;
+    var anchors = getTableAnchors(el.dataset.ltableIn || "");
+    if (anchors) anchors.incoming = el;
+  });
+  canvas.querySelectorAll("[data-ltable-out]").forEach(function(el) {
+    var block = el.closest(".lblock");
+    if (!block || block.classList.contains("lblock-hidden-hop")) return;
+    var anchors = getTableAnchors(el.dataset.ltableOut || "");
+    if (anchors) anchors.outgoing = el;
   });
 
   Object.keys(modelLineage).forEach(function(targetModel) {
-    if (!tableMap[targetModel]) return;
+    var targetAnchors = tableMap[targetModel];
+    if (!targetAnchors) return;
     (modelLineage[targetModel] || []).forEach(function(srcModel) {
-      if (!tableMap[srcModel] || srcModel === targetModel) return;
+      if (srcModel === targetModel) return;
+      var srcAnchors = tableMap[srcModel];
+      if (!srcAnchors) return;
+      var fromEl = srcAnchors.outgoing || srcAnchors.center || srcAnchors.incoming;
+      var toEl = targetAnchors.incoming || targetAnchors.center || targetAnchors.outgoing;
+      if (!fromEl || !toEl) return;
       paths += makePath(
-        tableMap[srcModel],
-        tableMap[targetModel],
+        fromEl,
+        toEl,
         cr,
         0,
         0,
@@ -3104,18 +3323,38 @@ function drawLineageLinesIn(svgId, canvasId) {
     if (isVisible(el)) nodeMap[el.dataset.lnode] = el;
   });
 
-  Object.keys(nodeMap).forEach(function(nodeId) {
-    if (!selectedPathSet) return;
+  function resolveLineageEndpoint(nodeId, role) {
+    if (nodeMap[nodeId]) return { el: nodeMap[nodeId], edgeId: nodeId };
     var parts = nodeId.split("|");
-    var fqn = parts[0], col = parts[1];
-    var srcs = (colLineage[fqn] || {})[col] || [];
-    srcs.forEach(function(src) {
-      var srcId = normalizeFqn(src.model) + "|" + src.column;
-      if (nodeMap[srcId] && selectedPathSet.has(srcId) && selectedPathSet.has(nodeId)) {
-        paths += makePath(nodeMap[srcId], nodeMap[nodeId], cr, 0, 0, srcId, nodeId, "column-path hl");
-      }
+    var modelFqn = normalizeFqn(parts[0] || "");
+    if (!modelFqn) return null;
+    var anchors = tableMap[modelFqn];
+    if (!anchors) return null;
+    var fallbackEl = role === "source" ? (anchors.outgoing || anchors.center || anchors.incoming) : (anchors.incoming || anchors.center || anchors.outgoing);
+    if (!fallbackEl) return null;
+    return { el: fallbackEl, edgeId: nodeId };
+  }
+
+  if (selectedPathSet) {
+    selectedPathSet.forEach(function(nodeId) {
+      var parts = nodeId.split("|");
+      var fqn = normalizeFqn(parts[0] || "");
+      var col = parts[1];
+      if (!fqn || !col) return;
+      var srcs = (colLineage[fqn] || {})[col] || [];
+      srcs.forEach(function(src) {
+        var srcId = normalizeFqn(src.model) + "|" + src.column;
+        if (!selectedPathSet.has(srcId) || !selectedPathSet.has(nodeId)) return;
+        var srcVisible = !!nodeMap[srcId];
+        var targetVisible = !!nodeMap[nodeId];
+        if (!srcVisible && !targetVisible) return;
+        var fromPoint = resolveLineageEndpoint(srcId, "source");
+        var toPoint = resolveLineageEndpoint(nodeId, "target");
+        if (!fromPoint || !toPoint) return;
+        paths += makePath(fromPoint.el, toPoint.el, cr, 0, 0, fromPoint.edgeId, toPoint.edgeId, "column-path hl");
+      });
     });
-  });
+  }
 
   svg.innerHTML = paths;
 }
@@ -3130,17 +3369,31 @@ function redrawVisibleLineageCanvases() {
 }
 
 function isVisible(el) {
+  var block = el.closest(".lblock");
+  if (!block || block.classList.contains("lblock-hidden-hop")) return false;
   var panel = el.closest(".lblock-cols-panel");
-  return panel && panel.classList.contains("open") && el.style.display !== "none";
+  if (!(panel && panel.classList.contains("open")) || el.style.display === "none") return false;
+  var list = el.closest(".lblock-col-list");
+  if (!list) return false;
+  var rowRect = el.getBoundingClientRect();
+  var listRect = list.getBoundingClientRect();
+  var intersectsViewport = rowRect.bottom > listRect.top && rowRect.top < listRect.bottom;
+  return intersectsViewport;
 }
 
 function makePath(fromEl, toEl, canvasRect, scrollLeft, scrollTop, srcId, tgtId, pathClass) {
   var fr = fromEl.getBoundingClientRect();
   var tr = toEl.getBoundingClientRect();
-  var x1 = fr.right - canvasRect.left + scrollLeft;
+  var fromGap = fromEl.classList && fromEl.classList.contains("lblock-hop-toggle") ? 4 : 0;
+  var toGap = toEl.classList && toEl.classList.contains("lblock-hop-toggle") ? 4 : 0;
+  var x1 = fr.right - canvasRect.left + scrollLeft + fromGap;
   var y1 = fr.top + fr.height / 2 - canvasRect.top + scrollTop;
-  var x2 = tr.left - canvasRect.left + scrollLeft;
+  var x2 = tr.left - canvasRect.left + scrollLeft - toGap;
   var y2 = tr.top + tr.height / 2 - canvasRect.top + scrollTop;
+  x1 = Math.round(x1 * 10) / 10;
+  y1 = Math.round(y1 * 10) / 10;
+  x2 = Math.round(x2 * 10) / 10;
+  y2 = Math.round(y2 * 10) / 10;
   var dx = Math.abs(x2 - x1) * 0.45;
   return '<path class="' + escapeHtml(pathClass || "") + '" d="M' + x1 + ' ' + y1 + ' C' + (x1 + dx) + ' ' + y1 + ' ' + (x2 - dx) + ' ' + y2 + ' ' + x2 + ' ' + y2 + '" data-from="' + escapeHtml(srcId) + '" data-to="' + escapeHtml(tgtId) + '"/>';
 }
@@ -3169,6 +3422,8 @@ function traceFullPath(startFqn, startCol) {
 function setupLineageInteractionsIn(canvasId) {
   var canvas = document.getElementById(canvasId);
   if (!canvas) return;
+  resetLineageToggleState(canvasId);
+  applyLineageHiddenState(canvasId);
 
   canvas.querySelectorAll(".lcol-row").forEach(function(row) {
     var nodeId = row.dataset.lnode;
@@ -3188,11 +3443,16 @@ function setupLineageInteractionsIn(canvasId) {
   });
 
   canvas.addEventListener("click", function(ev) {
-    if (!ev.target.closest(".lcol-row")) {
-      clearHighlight(canvas);
-      var svgEl = canvas.querySelector(".lineage-svg");
-      if (svgEl && svgEl.id && canvas.id) drawLineageLinesIn(svgEl.id, canvas.id);
-    }
+    if (canvas.dataset.skipClearSelectionClick === "1") return;
+    if (
+      ev.target.closest(".lcol-row") ||
+      ev.target.closest(".lblock") ||
+      ev.target.closest(".lineage-controls") ||
+      ev.target.closest(".lineage-expand-btn")
+    ) return;
+    clearHighlight(canvas);
+    var svgEl = canvas.querySelector(".lineage-svg");
+    if (svgEl && svgEl.id && canvas.id) drawLineageLinesIn(svgEl.id, canvas.id);
   });
 }
 
