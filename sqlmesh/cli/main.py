@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.server
 import logging
 import os
 import sys
@@ -41,6 +42,16 @@ SKIP_LOAD_COMMANDS = (
     "table_name",
 )
 SKIP_CONTEXT_COMMANDS = ("init",)
+
+
+class DocsHTTPServer(http.server.HTTPServer):
+    """HTTP server used for serving SQLMesh docs locally."""
+
+    def handle_error(self, request: t.Any, client_address: t.Any) -> None:
+        _, error, _ = sys.exc_info()
+        if isinstance(error, (BrokenPipeError, ConnectionResetError)):
+            return
+        super().handle_error(request, client_address)
 
 
 def _sqlmesh_version() -> str:
@@ -1289,7 +1300,6 @@ def docs_generate(
 def docs_serve(obj: Context, docs_path: t.Optional[Path], port: int, host: str) -> None:
     """Serve generated documentation via a local HTTP server."""
     import functools
-    import http.server
 
     from sqlmesh.core.docs.generator import DOCS_DIRNAME, INDEX_FILENAME
 
@@ -1302,7 +1312,7 @@ def docs_serve(obj: Context, docs_path: t.Optional[Path], port: int, host: str) 
 
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(output_dir))
     click.echo(f"Serving docs at http://{host}:{port}")
-    with http.server.HTTPServer((host, port), handler) as server:
+    with DocsHTTPServer((host, port), handler) as server:
         try:
             server.serve_forever()
         except KeyboardInterrupt:

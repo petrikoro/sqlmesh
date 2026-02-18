@@ -33,6 +33,42 @@ def runner() -> CliRunner:
     return CliRunner(env={"COLUMNS": "80"})
 
 
+def test_docs_http_server_ignores_client_disconnect_errors(monkeypatch):
+    from sqlmesh.cli.main import DocsHTTPServer
+
+    base_handle_error = MagicMock()
+    monkeypatch.setattr("socketserver.BaseServer.handle_error", base_handle_error)
+
+    server = DocsHTTPServer.__new__(DocsHTTPServer)
+
+    try:
+        raise ConnectionResetError(54, "Connection reset by peer")
+    except ConnectionResetError:
+        server.handle_error(None, ("127.0.0.1", 12345))
+
+    try:
+        raise BrokenPipeError(32, "Broken pipe")
+    except BrokenPipeError:
+        server.handle_error(None, ("127.0.0.1", 12345))
+
+    base_handle_error.assert_not_called()
+
+
+def test_docs_http_server_delegates_non_disconnect_errors(monkeypatch):
+    from sqlmesh.cli.main import DocsHTTPServer
+
+    base_handle_error = MagicMock()
+    monkeypatch.setattr("socketserver.BaseServer.handle_error", base_handle_error)
+
+    server = DocsHTTPServer.__new__(DocsHTTPServer)
+    try:
+        raise RuntimeError("boom")
+    except RuntimeError:
+        server.handle_error(None, ("127.0.0.1", 12345))
+
+    base_handle_error.assert_called_once_with(None, ("127.0.0.1", 12345))
+
+
 def create_example_project(temp_dir, template=ProjectTemplate.DEFAULT) -> None:
     """
     Sets up CLI tests requiring a real SQLMesh project by:
