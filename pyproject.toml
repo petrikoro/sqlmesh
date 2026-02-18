@@ -152,6 +152,7 @@ include = ["sqlmesh", "sqlmesh.*", "sqlmesh_dbt", "sqlmesh_dbt.*"]
 
 [tool.setuptools.package-data]
 "*" = ["py.typed"]
+"sqlmesh" = ["core/docs/templates/*.html"]
 
 [tool.ty.environment]
 python-platform = "all"
