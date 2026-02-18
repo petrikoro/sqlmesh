@@ -737,7 +737,9 @@ class SqlMeshLoader(Loader):
 
         return column_descriptions, column_tags, column_meta
 
-    def _iter_model_docs_columns(self, columns: t.Any) -> t.Iterator[t.Tuple[str, t.Dict[str, t.Any]]]:
+    def _iter_model_docs_columns(
+        self, columns: t.Any
+    ) -> t.Iterator[t.Tuple[str, t.Dict[str, t.Any]]]:
         if isinstance(columns, list):
             for column in columns:
                 if not isinstance(column, dict):
@@ -822,7 +824,9 @@ class SqlMeshLoader(Loader):
             has_column_tags_updates = False
             has_column_meta_updates = False
             merged_column_descriptions = dict(model.column_descriptions)
-            merged_column_tags = {column_name: list(tags) for column_name, tags in model.column_tags.items()}
+            merged_column_tags = {
+                column_name: list(tags) for column_name, tags in model.column_tags.items()
+            }
             merged_column_meta = {
                 column_name: dict(metadata) for column_name, metadata in model.column_meta.items()
             }

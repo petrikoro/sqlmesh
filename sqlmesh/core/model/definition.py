@@ -3084,8 +3084,7 @@ META_FIELD_CONVERTER: t.Dict[str, t.Callable] = {
             exp.to_column(c).eq(
                 exp.Tuple(
                     expressions=[
-                        exp.Literal.string(str(k)).eq(exp.convert(v))
-                        for k, v in metadata.items()
+                        exp.Literal.string(str(k)).eq(exp.convert(v)) for k, v in metadata.items()
                     ]
                 )
             )
