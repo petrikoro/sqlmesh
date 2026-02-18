@@ -486,6 +486,25 @@ body.on-overview .content { max-width: 100%; padding: 0; }
 .pg-title { font-size: 22px; font-weight: 700; line-height: 1.3; color: var(--gray-900); letter-spacing: -.02em; }
 .pg-sub { font-size: 12px; color: var(--gray-400); font-family: var(--mono); margin-top: 4px; }
 .pg-desc { font-size: 14px; color: var(--gray-600); margin-top: 8px; line-height: 1.6; }
+.md-content p { margin: 0 0 8px; }
+.md-content p:last-child { margin-bottom: 0; }
+.md-content ul,
+.md-content ol { margin: 6px 0 10px 18px; padding: 0; }
+.md-content li { margin-bottom: 4px; }
+.md-content li:last-child { margin-bottom: 0; }
+.md-content a { color: var(--accent-700); text-decoration: underline; word-break: break-word; }
+.md-content code {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid var(--gray-150, var(--gray-200));
+  background: var(--gray-50);
+  color: var(--gray-700);
+}
+.md-compact p { margin-bottom: 4px; }
+.md-compact ul,
+.md-compact ol { margin-top: 4px; margin-bottom: 6px; }
 
 /* ---- Badge ---- */
 .badge {
@@ -649,29 +668,6 @@ body.on-overview .content { max-width: 100%; padding: 0; }
   border-radius: 0;
 }
 /* ---- Details grid ---- */
-.details-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0;
-}
-.detail-item {
-  display: flex;
-  align-items: baseline;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--gray-50);
-  font-size: 13px;
-}
-.detail-item .dk {
-  width: 130px;
-  min-width: 130px;
-  color: var(--gray-400);
-  font-weight: 500;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: .3px;
-}
-.detail-item .dv { color: var(--gray-700); font-family: var(--mono); font-size: 12px; }
-
 /* ---- Tags ---- */
 .tags { display: inline-flex; flex-wrap: wrap; gap: 5px; align-items: center; }
 .tag {
@@ -697,6 +693,50 @@ body.on-overview .content { max-width: 100%; padding: 0; }
   border-radius: var(--radius);
   overflow: hidden;
 }
+.columns-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.columns-filter-wrap {
+  position: relative;
+  flex: 1;
+  max-width: 460px;
+}
+.columns-filter-wrap svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  color: var(--gray-300);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.columns-filter-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px 0 32px;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--gray-700);
+  background: #fff;
+}
+.columns-filter-input::placeholder { color: var(--gray-300); }
+.columns-filter-input:focus {
+  outline: none;
+  border-color: var(--accent-400);
+  box-shadow: 0 0 0 3px rgba(100,116,139,.07);
+}
+.columns-filter-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--gray-400);
+}
 table.col-tbl { width: 100%; border-collapse: collapse; }
 table.col-tbl th {
   text-align: left;
@@ -712,15 +752,59 @@ table.col-tbl th {
 table.col-tbl td {
   padding: 8px 16px;
   border-bottom: 1px solid var(--gray-50);
-  vertical-align: middle;
+  vertical-align: top;
   font-size: 13px;
 }
 table.col-tbl tbody tr:last-child td { border-bottom: none; }
 table.col-tbl tr { transition: background var(--transition); }
 table.col-tbl tr:hover td { background: var(--gray-50); }
 .cn { font-family: var(--mono); font-weight: 500; font-size: 13px; color: var(--gray-800); }
+.cn-cell { vertical-align: top; }
+.c-tags-cell { min-width: 140px; }
+.c-tags { gap: 4px; }
+.c-tags .tag {
+  padding: 1px 6px;
+  font-size: 10px;
+  color: var(--gray-400);
+  background: transparent;
+  border-color: var(--gray-200);
+}
+.c-tags .tag svg { width: 9px; height: 9px; opacity: .35; }
 .ct { font-family: var(--mono); font-size: 12px; color: var(--accent-500); font-weight: 400; }
 .cd { font-size: 12px; color: var(--gray-500); line-height: 1.4; }
+.cd-content { word-break: break-word; overflow-wrap: anywhere; }
+.cd-content.collapsed {
+  max-height: 5.8em;
+  overflow: hidden;
+  position: relative;
+}
+.cd-content.collapsed::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 22px;
+  background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,.96));
+}
+.cd-toggle {
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent-600);
+  cursor: pointer;
+}
+.cd-toggle:hover { color: var(--accent-700); text-decoration: underline; }
+.columns-filter-empty {
+  display: none;
+  padding: 12px 4px 2px;
+  font-size: 12px;
+  color: var(--gray-400);
+  font-style: italic;
+}
 .lineage-dot {
   display: inline-block;
   width: 6px;
@@ -1074,7 +1158,6 @@ body.on-overview .search-trigger { display: none; }
   .sidebar, .resize-handle { display: none; }
   .topbar .search-trigger { min-width: auto; }
   .topbar .search-trigger .kbd { display: none; }
-  .details-grid { grid-template-columns: 1fr; }
   .content { padding: 24px 20px 60px; }
   /* (removed stats / quality responsive overrides) */
 }
@@ -1297,6 +1380,95 @@ var curModel = null, sidebarQuery = "", _pinnedCol = null;
 function escapeHtml(s) { if (s == null) return ""; return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 function normalizeFqn(s) { return s ? String(s).replace(/"/g, "") : ""; }
 
+function renderInlineMarkdown(text) {
+  var escaped = escapeHtml(text);
+  var tokens = [];
+  function stash(html) {
+    var key = "@@MDTOKEN" + tokens.length + "@@";
+    tokens.push(html);
+    return key;
+  }
+
+  escaped = escaped.replace(/`([^`\n]+)`/g, function(_, code) {
+    return stash("<code>" + code + "</code>");
+  });
+  escaped = escaped.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, function(_, label, url) {
+    return stash('<a href="' + url + '" target="_blank" rel="noopener">' + label + "</a>");
+  });
+  escaped = escaped.replace(/\*\*([^\n*][^*]*?)\*\*/g, "<strong>$1</strong>");
+  escaped = escaped.replace(/__([^\n_][^_]*?)__/g, "<strong>$1</strong>");
+  escaped = escaped.replace(/(^|[\s(])(https?:\/\/[^\s<]+)/g, function(_, prefix, url) {
+    var cleanUrl = url;
+    var trailing = "";
+    while (cleanUrl && /[),.;!?]$/.test(cleanUrl)) {
+      trailing = cleanUrl.slice(-1) + trailing;
+      cleanUrl = cleanUrl.slice(0, -1);
+    }
+    return prefix + '<a href="' + cleanUrl + '" target="_blank" rel="noopener">' + cleanUrl + "</a>" + trailing;
+  });
+
+  return escaped.replace(/@@MDTOKEN(\d+)@@/g, function(_, index) {
+    return tokens[+index] || "";
+  });
+}
+
+function renderMarkdown(text) {
+  if (text == null || text === "") return "";
+  var normalized = String(text).replace(/\r\n?/g, "\n").trim();
+  if (!normalized) return "";
+
+  var blocks = normalized.split(/\n{2,}/);
+  var htmlBlocks = blocks.map(function(block) {
+    var lines = block.split("\n");
+    var isList = lines.length > 1 && lines.every(function(line) { return /^\s*[-*]\s+/.test(line); });
+    if (isList) {
+      var items = lines.map(function(line) {
+        return "<li>" + renderInlineMarkdown(line.replace(/^\s*[-*]\s+/, "")) + "</li>";
+      }).join("");
+      return "<ul>" + items + "</ul>";
+    }
+    return "<p>" + renderInlineMarkdown(block).replace(/\n/g, "<br>") + "</p>";
+  });
+
+  return htmlBlocks.join("");
+}
+
+function normalizeColumnSearchText(text) {
+  return String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+window.filterColumnsInSection = function(inputEl) {
+  var section = inputEl && inputEl.closest ? inputEl.closest(".section") : null;
+  if (!section) return;
+
+  var query = normalizeColumnSearchText(inputEl.value);
+  var rows = section.querySelectorAll('tr[data-col-row="1"]');
+  var visibleCount = 0;
+
+  rows.forEach(function(row) {
+    var rowSearch = row.getAttribute("data-col-search") || "";
+    var match = !query || rowSearch.indexOf(query) >= 0;
+    row.style.display = match ? "" : "none";
+    if (match) visibleCount++;
+  });
+
+  var countEl = section.querySelector(".columns-filter-count");
+  if (countEl) countEl.textContent = visibleCount + " / " + rows.length;
+
+  var emptyEl = section.querySelector(".columns-filter-empty");
+  if (emptyEl) emptyEl.style.display = visibleCount ? "none" : "block";
+};
+
+window.toggleColumnDescription = function(button) {
+  if (!button) return;
+  var content = button.previousElementSibling;
+  if (!content) return;
+
+  var isCollapsed = content.classList.toggle("collapsed");
+  button.textContent = isCollapsed ? "Show more" : "Show less";
+  button.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+};
+
 function badgeClass(type) {
   type = (type || "").toLowerCase();
   if (type === "sql" || type === "model") return "badge-green";
@@ -1484,8 +1656,20 @@ function doSearch() {
     var descMatch = allTokensMatch(desc, tokens);
     var colMatch = false;
     var matchedCols = [];
+    var columnTagMatch = false;
+    var columnTagMatches = [];
     m.columns.forEach(function(c) {
       if (allTokensMatch(c.name, tokens)) { colMatch = true; matchedCols.push(c.name); }
+      if (!Array.isArray(c.tags)) return;
+      c.tags.forEach(function(tag) {
+        var cleanTag = (tag || "").trim();
+        if (!cleanTag) return;
+        if (allTokensMatch(cleanTag, tokens)) {
+          columnTagMatch = true;
+          var match = c.name + ": " + cleanTag;
+          if (columnTagMatches.indexOf(match) < 0) columnTagMatches.push(match);
+        }
+      });
     });
     var tagMatch = false;
     var matchedTags = [];
@@ -1495,11 +1679,11 @@ function doSearch() {
 
     /* Apply filter */
     var matched = false;
-    if (searchFilter === "all") matched = nameMatch || descMatch || colMatch || tagMatch;
+    if (searchFilter === "all") matched = nameMatch || descMatch || colMatch || tagMatch || columnTagMatch;
     else if (searchFilter === "name") matched = nameMatch;
     else if (searchFilter === "description") matched = descMatch;
     else if (searchFilter === "column") matched = colMatch;
-    else if (searchFilter === "tag") matched = tagMatch;
+    else if (searchFilter === "tag") matched = tagMatch || columnTagMatch;
 
     if (matched) {
       /* Score for ranking */
@@ -1507,14 +1691,14 @@ function doSearch() {
       if (name.toLowerCase() === raw.toLowerCase()) score = 100;
       else if (nameMatch && name.toLowerCase().indexOf(raw.toLowerCase()) === 0) score = 80;
       else if (nameMatch) score = 50;
-      else if (tagMatch) score = 25;
+      else if (tagMatch || columnTagMatch) score = 25;
       else if (descMatch) score = 20;
       else if (colMatch) score = 10;
 
       results.push({
         model: m, score: score, nameMatch: nameMatch, descMatch: descMatch,
-        colMatch: colMatch, tagMatch: tagMatch, matchedCols: matchedCols,
-        matchedTags: matchedTags
+        colMatch: colMatch, tagMatch: tagMatch, columnTagMatch: columnTagMatch,
+        matchedCols: matchedCols, matchedTags: matchedTags, columnTagMatches: columnTagMatches
       });
     }
   });
@@ -1540,6 +1724,11 @@ function doSearch() {
     }
     if (r.tagMatch && r.matchedTags.length && (searchFilter === "all" || searchFilter === "tag")) {
       h += '<div class="sr-match-hint">' + ICONS.tag + ' ' + r.matchedTags.map(function(t) { return highlightTokens(t, tokens); }).join(", ") + '</div>';
+    }
+    if (r.columnTagMatch && r.columnTagMatches.length && (searchFilter === "all" || searchFilter === "tag")) {
+      h += '<div class="sr-match-hint">Column tags: ' + r.columnTagMatches.slice(0, 3).map(function(t) { return highlightTokens(t, tokens); }).join(", ");
+      if (r.columnTagMatches.length > 3) h += " +" + (r.columnTagMatches.length - 3) + " more";
+      h += '</div>';
     }
     if (r.colMatch && r.matchedCols.length && (searchFilter === "all" || searchFilter === "column")) {
       h += '<div class="sr-match-hint">Columns: ' + r.matchedCols.slice(0, 3).map(function(c) { return highlightTokens(c, tokens); }).join(", ");
@@ -1747,7 +1936,7 @@ function renderModelPage(id) {
 
   h += '</div>';
   h += '<div class="pg-sub">' + escapeHtml(model.fqn) + '</div>';
-  if (model.description) h += '<div class="pg-desc">' + escapeHtml(model.description) + '</div>';
+  if (model.description) h += '<div class="pg-desc md-content">' + renderMarkdown(model.description) + '</div>';
   h += '</div>';
 
   /* Section data */
@@ -1763,13 +1952,12 @@ function renderModelPage(id) {
   if (hasLineage || hasDown) {
     h += '<a href="javascript:void(0)" onclick="scrollToSec(\'sec-lineage\')" data-sec="sec-lineage">' + ICONS.lineage + ' Lineage</a>';
   }
-  h += '<a href="javascript:void(0)" onclick="scrollToSec(\'sec-properties\')" data-sec="sec-properties">' + ICONS.info + ' Properties</a>';
   if (hasCode) {
     h += '<a href="javascript:void(0)" onclick="scrollToSec(\'sec-code\')" data-sec="sec-code">' + ICONS.code + ' Code</a>';
   }
   h += '</div>';
 
-  /* All sections on one page: Columns → Lineage → Properties → Code */
+  /* All sections on one page: Columns → Lineage → Code */
   h += '<div id="sec-columns" class="model-section">';
   h += renderColumnsSection(model, cl);
   h += '</div>';
@@ -1779,10 +1967,6 @@ function renderModelPage(id) {
     h += renderLineageTab(model);
     h += '</div>';
   }
-
-  h += '<div id="sec-properties" class="model-section">';
-  h += renderPropertiesSection(model);
-  h += '</div>';
 
   if (hasCode) {
     h += '<div id="sec-code" class="model-section">';
@@ -1905,54 +2089,63 @@ function collectLevels(curFqn, lineageMap) {
   });
   return levels;
 }
-/* ---- Properties Section ---- */
-function renderPropertiesSection(m) {
-  var h = '';
-
-  h += '<div class="section"><div class="section-hd">Model Properties</div>';
-  h += '<div class="details-grid">';
-
-  var topItems = [
-    ["Type", m.type],
-    ["Dialect", m.dialect],
-    ["Path", m.path],
-  ];
-  topItems.forEach(function(kv) {
-    if (kv[1] != null && kv[1] !== "") {
-      h += '<div class="detail-item"><div class="dk">' + escapeHtml(kv[0]) + '</div><div class="dv">' + escapeHtml(String(kv[1])) + '</div></div>';
-    }
-  });
-
-  var d = m.details || {};
-  var detailKeys = Object.keys(d).filter(function(k) { return k !== "tags"; }).sort();
-  detailKeys.forEach(function(k) {
-    var v = d[k];
-    if (v == null || v === "") return;
-    var label = k.replace(/_/g, " ").replace(/\b\w/g, function(c) { return c.toUpperCase(); });
-    h += '<div class="detail-item"><div class="dk">' + escapeHtml(label) + '</div><div class="dv">' + escapeHtml(String(v)) + '</div></div>';
-  });
-
-  h += '</div></div>';
-  return h;
-}
-
 /* ---- Columns Section ---- */
 function renderColumnsSection(m, cl) {
   cl = cl || {};
   var h = '';
   h += '<div class="section"><div class="section-hd">Columns <span class="tab-count">' + m.columns.length + '</span></div>';
   if (m.columns.length) {
-    h += '<div class="col-tbl-wrap"><table class="col-tbl"><thead><tr><th style="width:30px"></th><th>Column</th><th>Type</th><th>Description</th></tr></thead><tbody>';
+    h += '<div class="columns-toolbar">';
+    h += '<label class="columns-filter-wrap">';
+    h += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>';
+    h += '<input type="text" class="columns-filter-input" placeholder="Filter fields by name, type, description, tags..." oninput="filterColumnsInSection(this)" aria-label="Filter fields in current model">';
+    h += '</label>';
+    h += '<span class="columns-filter-count">' + m.columns.length + ' / ' + m.columns.length + '</span>';
+    h += '</div>';
+    h += '<div class="col-tbl-wrap"><table class="col-tbl"><thead><tr><th style="width:30px"></th><th>Column</th><th>Type</th><th>Tags</th><th>Description</th></tr></thead><tbody>';
     m.columns.forEach(function(c) {
       var hasSrc = cl[c.name] && cl[c.name].length > 0;
-      h += '<tr>';
+      var description = c.description || "";
+      var descriptionLineCount = description ? description.split(/\r\n?|\n/).length : 0;
+      var shouldCollapseDescription = description.length > 280 || descriptionLineCount > 6;
+      var columnTags = Array.isArray(c.tags) ? c.tags.map(function(tag) { return (tag || "").trim(); }).filter(Boolean) : [];
+      var searchable = normalizeColumnSearchText([
+        c.name,
+        c.type,
+        description,
+        columnTags.join(" ")
+      ].join(" "));
+
+      h += '<tr data-col-row="1" data-col-search="' + escapeHtml(searchable) + '">';
       h += '<td><span class="lineage-dot' + (hasSrc ? "" : " none") + '" title="' + (hasSrc ? "Has upstream lineage" : "No lineage info") + '"></span></td>';
-      h += '<td class="cn">' + escapeHtml(c.name) + '</td>';
+      h += '<td class="cn-cell">';
+      h += '<div class="cn">' + escapeHtml(c.name) + '</div>';
+      h += '</td>';
       h += '<td class="ct">' + escapeHtml(c.type) + '</td>';
-      h += '<td class="cd">' + escapeHtml(c.description || "") + '</td>';
+      h += '<td class="c-tags-cell">';
+      if (columnTags.length) {
+        h += '<div class="tags c-tags">';
+        columnTags.forEach(function(tag) {
+          h += '<span class="tag">' + ICONS.tag + escapeHtml(tag) + '</span>';
+        });
+        h += '</div>';
+      }
+      h += '</td>';
+      h += '<td class="cd">';
+      if (description) {
+        var descriptionClass = shouldCollapseDescription
+          ? "md-content md-compact cd-content collapsed"
+          : "md-content md-compact cd-content";
+        h += '<div class="' + descriptionClass + '">' + renderMarkdown(description) + '</div>';
+        if (shouldCollapseDescription) {
+          h += '<button type="button" class="cd-toggle" aria-expanded="false" onclick="toggleColumnDescription(this)">Show more</button>';
+        }
+      }
+      h += '</td>';
       h += '</tr>';
     });
     h += '</tbody></table></div>';
+    h += '<div class="columns-filter-empty">No fields match the current filter.</div>';
   } else {
     h += '<div class="empty-state"><p>Column information is not available for this model</p></div>';
   }

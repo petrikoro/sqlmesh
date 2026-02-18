@@ -8,6 +8,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 from sqlmesh.api.models import Model
+from sqlmesh.core.dialect import format_model_expressions
 from sqlmesh.core.lineage import _column_dependencies_from_model
 
 if t.TYPE_CHECKING:
@@ -309,14 +310,29 @@ def _get_raw_code(internal_models: t.Mapping[str, t.Any], model: Model) -> str:
             return ""
 
         source_type = getattr(sqlmesh_model, "source_type", "")
+        path = getattr(sqlmesh_model, "_path", None)
 
         if source_type == "sql":
+            # Prefer the model file when available so docs show the full SQLMesh model
+            # definition, including the MODEL (...) block.
+            if path is not None and path.exists():
+                return path.read_text(encoding="utf-8")
+
+            render_definition = getattr(sqlmesh_model, "render_definition", None)
+            if callable(render_definition):
+                expressions = render_definition(include_python=False)
+                if expressions:
+                    return format_model_expressions(
+                        expressions,
+                        dialect=model.dialect,
+                        rewrite_casts=False,
+                    )
+
             query = getattr(sqlmesh_model, "query", None)
             if query is not None:
                 return query.sql(pretty=True, dialect=model.dialect)
 
         elif source_type == "python":
-            path = getattr(sqlmesh_model, "_path", None)
             if path is not None and path.exists():
                 return path.read_text(encoding="utf-8")
 
