@@ -36,6 +36,7 @@ class ModelDetails(PydanticModel):
     storage_format: t.Optional[str] = None
     time_column: t.Optional[str] = None
     tags: t.Optional[str] = None
+    meta: t.Optional[t.Dict[str, t.Any]] = None
     references: t.List[Reference] = []
     partitioned_by: t.Optional[str] = None
     clustered_by: t.Optional[str] = None
@@ -50,6 +51,8 @@ class Column(PydanticModel):
     name: str
     type: str
     description: t.Optional[str] = None
+    tags: t.Optional[t.List[str]] = None
+    meta: t.Optional[t.Dict[str, t.Any]] = None
 
 
 class Model(PydanticModel):

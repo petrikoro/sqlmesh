@@ -119,6 +119,86 @@ def test_docs_data_has_models(sushi_context: Context) -> None:
     assert "columns" in catalog_data["models"][model["fqn"]]
 
 
+def test_docs_data_includes_model_meta_and_column_metadata(sushi_context: Context) -> None:
+    manifest_data, catalog_data = _build_docs_data(sushi_context)
+    model = next(
+        (m for m in manifest_data["models"] if m["name"] == "sushi.yaml_documented_orders"), None
+    )
+
+    assert model
+    assert model["details"]["meta"]["owner_team"] == "finance"
+    assert model["details"]["meta"]["contains_pii"] is True
+
+    catalog_columns = {
+        column["name"]: column for column in catalog_data["models"][model["fqn"]]["columns"]
+    }
+    assert catalog_columns["order_id"]["tags"] == ["primary_key", "pii"]
+    assert catalog_columns["order_id"]["meta"] == {"classification": "sensitive"}
+    assert catalog_columns["event_date"]["tags"] == ["event_time"]
+    assert catalog_columns["event_date"]["meta"] == {"grain": "day"}
+
+
+def test_docs_data_uses_full_sql_model_definition(sushi_context: Context) -> None:
+    manifest_data, _ = _build_docs_data(sushi_context)
+    model = next(
+        (m for m in manifest_data["models"] if m["name"] == "sushi.yaml_documented_orders"), None
+    )
+
+    assert model
+    assert model["definition"]
+    assert "MODEL (" in model["definition"]
+    assert "name sushi.yaml_documented_orders" in model["definition"]
+    assert "SELECT" in model["definition"]
+
+
+def test_html_template_renders_column_tags_without_properties(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert "Model Properties" not in html
+    assert "sec-properties" not in html
+    assert " Properties</a>" not in html
+    assert "<th>Tags</th>" in html
+    assert "Array.isArray(c.tags)" in html
+    assert "c-tags-cell" in html
+    assert "c-tags" in html
+    assert "cn-tags" not in html
+    assert "cd-tags" not in html
+    assert "c.tags.forEach(function(tag)" in html
+    assert "columnTagMatch" in html
+    assert "columnTagMatches" in html
+
+
+def test_html_template_renders_markdown_descriptions(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert "function renderMarkdown(text)" in html
+    assert "function renderInlineMarkdown(text)" in html
+    assert "renderMarkdown(model.description)" in html
+    assert "renderMarkdown(description)" in html
+    assert 'replace(/\\n/g, "<br>")' in html
+
+
+def test_html_template_supports_column_filter_and_collapsible_descriptions(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert "columns-filter-input" in html
+    assert "Filter fields by name, type, description, tags..." in html
+    assert "window.filterColumnsInSection = function(inputEl)" in html
+    assert "data-col-search" in html
+    assert "window.toggleColumnDescription = function(button)" in html
+    assert "cd-content collapsed" in html
+    assert "Show more" in html
+
+
 def test_docs_data_has_dag(sushi_context: Context) -> None:
     manifest_data, _ = _build_docs_data(sushi_context)
 
