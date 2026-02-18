@@ -510,7 +510,19 @@ class ModelMeta(_Node):
         refs = []
 
         for v in vs:
+            if isinstance(v, exp.Literal) and v.is_string:
+                # Normalize string literals to column references so values like
+                # references ('id') behave consistently with references (id).
+                literal_value = v.this.strip()
+                if not literal_value:
+                    # Treat empty placeholders as unset instead of creating an
+                    # invalid reference expression (e.g. references ('')).
+                    continue
+                v = exp.column(literal_value)
             v = exp.column(v) if isinstance(v, exp.Identifier) else v
+            if isinstance(v, exp.Column) and not v.output_name:
+                # Skip empty column placeholders after normalization.
+                continue
             v.meta["dialect"] = dialect
             refs.append(v)
 
