@@ -256,6 +256,182 @@ def test_html_contains_column_lineage(sushi_context: Context, output_dir: Path) 
     assert "lineage-canvas" in html
 
 
+def test_html_lineage_formats_schema_table_and_full_fqn_tooltip(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert "function parseLineageFqnParts(fqn)" in html
+    assert "function formatLineageLabel(fqn)" in html
+    assert "var name = parsed.table || formatLineageLabel(fqn);" in html
+    assert "var fullFqn = parsed.fullFqn;" in html
+    assert '<span class="lblock-name" title="' in html
+    assert 'document.getElementById("loTitle").textContent' not in html
+    assert 'id="loTitle"' not in html
+
+
+def test_html_lineage_blocks_render_datahub_style_sections(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert "h += '<div class=\"lblock-meta\">';" in html
+    assert "h += '<div class=\"lblock-meta-top\">';" in html
+    assert "h += '<span class=\"lblock-entity-pill\">Table</span>';" in html
+    assert 'h += \'<span class="lblock-kind-pill"' in html
+    assert (
+        'h += \'<div class="lblock-cols-header" onclick="event.stopPropagation(); togBlock(' in html
+    )
+    assert "h += '<span class=\"lblock-cols-title\">Columns</span>';" in html
+    assert "h += '<span class=\"lblock-cols-arrow\">' + ICONS.chevron + '</span>';" in html
+    assert "h += '<div class=\"lblock-cols-panel\">';" in html
+    assert "h += '<div class=\"lblock-cols-panel open\">';" not in html
+    assert (
+        "h += '<div class=\"lineage-home-text\">' + ICONS.home + '<span>Home</span></div>';" in html
+    )
+    assert "current-model-home" not in html
+    assert "current-model-tag" not in html
+    assert "lineage-col-label current-model-label" not in html
+    assert "h += '<div class=\"lineage-col lineage-col-current\">';" in html
+    assert ".lineage-home-text {" in html
+    assert ".lineage-home-text svg { width: 15px; height: 15px; }" in html
+    assert ".lineage-col-current {" in html
+    assert "gap: 6px;" in html
+    assert ".lblock-home-wrap {" not in html
+    assert ".lblock-home-pill {" not in html
+    assert ".lblock-home-tail {" not in html
+    assert ".lblock-home-tail::after {" not in html
+    assert "flex: 0 0 340px;" in html
+    assert "width: 340px;" in html
+    assert "flex-wrap: nowrap;" in html
+
+
+def test_html_lineage_renders_table_level_edges(sushi_context: Context, output_dir: Path) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert "function buildModelLineageMap(lineageMap)" in html
+    assert "var modelLineage = buildModelLineageMap(colLineage);" in html
+    assert 'class="ltable-anchor" data-ltable="' in html
+    assert 'canvas.querySelectorAll("[data-ltable]")' in html
+    assert '"table-path"' in html
+    assert ".lineage-canvas svg.lineage-svg path.table-path" in html
+    assert ".lineage-canvas svg.lineage-svg path.column-path" in html
+    assert "var selectedNodeId = getSelectedLineageNode(canvasId);" in html
+    assert "if (!selectedPathSet) return;" in html
+    assert '"column-path hl"' in html
+
+
+def test_html_lineage_has_column_search_and_scroll_container(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert "window.filterLineageColumnsInBlock = function(inputEl)" in html
+    assert 'class="lblock-col-search"' in html
+    assert 'placeholder="Find column"' in html
+    assert 'class="lblock-col-list"' in html
+    assert ".lblock-col-list {" in html
+    assert "max-height: 420px;" in html
+    assert "overflow-y: auto;" in html
+
+
+def test_html_lineage_shows_top_10_columns_with_faded_more(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert "var LINEAGE_COLUMNS_PREVIEW_LIMIT = 10;" in html
+    assert 'data-col-idx="' in html
+    assert "var hiddenByPreview = colIndex >= LINEAGE_COLUMNS_PREVIEW_LIMIT;" in html
+    assert 'style="display:none"' in html
+    assert 'class="lblock-col-more-wrap"' in html
+    assert 'class="lblock-col-fade"' in html
+    assert 'class="lblock-col-more"' in html
+    assert "window.expandLineageColumnsInBlock = function(buttonEl)" in html
+    assert "updateLineageColumnsInBlock(body);" in html
+    assert "var passLimit = query || showAll || colIndex < LINEAGE_COLUMNS_PREVIEW_LIMIT;" in html
+
+
+def test_html_lineage_has_expand_and_collapse_all_columns_controls(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert "window.lcSetAllColumns = function(canvasId, svgId, isOpen)" in html
+    assert 'title="Expand all columns"' in html
+    assert 'title="Collapse all columns"' in html
+    assert "setBlockColumnsOpen(block, isOpen);" in html
+    assert "setBlockColumnsExpanded(block, isOpen, true);" in html
+    assert "clearHighlight(canvas);" in html
+
+
+def test_html_lineage_column_selection_is_click_only(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert "function setSelectedLineageNode(canvasId, nodeId)" in html
+    assert "function getSelectedLineageNode(canvasId)" in html
+    assert 'row.addEventListener("click", function(ev)' in html
+    assert 'row.addEventListener("mouseenter", function()' not in html
+    assert 'row.addEventListener("mouseleave", function()' not in html
+
+
+def test_html_tree_defaults_to_collapsed_tables_under_schema(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert "var projOpen = isTreeNodeOpen(projKey, true);" in html
+    assert "var catOpen = isTreeNodeOpen(catKey, true);" in html
+    assert "var schemaOpen = isTreeNodeOpen(schemaKey, false);" in html
+    assert (
+        "h += '<span class=\"tree-arrow' + (schemaOpen ? ' open' : '') + '\">' + ICONS.chevron + '</span>';"
+        in html
+    )
+    assert "h += '<div class=\"tree-children' + (schemaOpen ? ' open' : '') + '\">';" in html
+
+
+def test_html_tree_preserves_expand_state_between_renders(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert "var _treeOpenState = loadTreeOpenState();" in html
+    assert "function treeNodeKey(parts)" in html
+    assert "function isTreeNodeOpen(key, defaultOpen)" in html
+    assert "function setTreeNodeOpen(key, isOpen)" in html
+    assert 'data-tree-key="' in html
+    assert 'var key = header.dataset.treeKey || "";' in html
+    assert 'setTreeNodeOpen(key, children.classList.contains("open"));' in html
+
+
+def test_html_tree_persists_open_state_in_local_storage(
+    sushi_context: Context, output_dir: Path
+) -> None:
+    result = DocsGenerator(sushi_context).generate(output_path=str(output_dir))
+    html = result.read_text(encoding="utf-8")
+
+    assert 'var TREE_OPEN_STATE_STORAGE_KEY = "sqlmesh-docs-tree-open-state";' in html
+    assert "function loadTreeOpenState()" in html
+    assert "function persistTreeOpenState()" in html
+    assert "var raw = localStorage.getItem(TREE_OPEN_STATE_STORAGE_KEY);" in html
+    assert (
+        "localStorage.setItem(TREE_OPEN_STATE_STORAGE_KEY, JSON.stringify(_treeOpenState));" in html
+    )
+    assert "var _treeOpenState = loadTreeOpenState();" in html
+    assert "persistTreeOpenState();" in html
+
+
 def test_select_models_filters(sushi_context: Context) -> None:
     manifest_full, _ = _build_docs_data(sushi_context)
     total = len(manifest_full["models"])
