@@ -216,16 +216,6 @@ class SQLMeshMagics(Magics):
         type=str,
         help="Project template. Supported values: default, empty.",
     )
-    @argument(
-        "--dlt-pipeline",
-        type=str,
-        help="DLT pipeline for which to generate a SQLMesh project. Use alongside template: dlt",
-    )
-    @argument(
-        "--dlt-path",
-        type=str,
-        help="The directory where the DLT pipeline resides. Use alongside template: dlt",
-    )
     @line_magic
     def init(self, line: str) -> None:
         """Creates a SQLMesh project scaffold with a default SQL dialect."""
@@ -241,8 +231,6 @@ class SQLMeshMagics(Magics):
             engine_type=args.engine,
             dialect=None,
             template=project_template,
-            pipeline=args.dlt_pipeline,
-            dlt_path=args.dlt_path,
         )
         html = str(
             h(
@@ -696,26 +684,6 @@ class SQLMeshMagics(Magics):
         self.display(df)
 
     @magic_arguments()
-    @argument("--file", "-f", type=str, help="An optional file path to write the HTML output to.")
-    @argument(
-        "--select-model",
-        type=str,
-        nargs="*",
-        help="Select specific models to include in the dag.",
-    )
-    @line_magic
-    @pass_sqlmesh_context
-    def dag(self, context: Context, line: str) -> None:
-        """Displays the HTML DAG."""
-        args = parse_argstring(self.dag, line)
-        dag = context.get_dag(args.select_model)
-        if args.file:
-            with open(args.file, "w", encoding="utf-8") as file:
-                file.write(str(dag))
-        # TODO: Have this go through console instead of calling display directly
-        self.display(dag)
-
-    @magic_arguments()
     @line_magic
     @pass_sqlmesh_context
     def migrate(self, context: Context, line: str) -> None:
@@ -826,100 +794,6 @@ class SQLMeshMagics(Magics):
             skip_grain_check=args.skip_grain_check,
             warn_grain_check=args.warn_grain_check,
             schema_diff_ignore_case=args.schema_diff_ignore_case,
-        )
-
-    @magic_arguments()
-    @argument(
-        "model_name",
-        nargs="?",
-        type=str,
-        help="The name of the model to get the table name for.",
-    )
-    @argument(
-        "--environment",
-        type=str,
-        help="The environment to source the model version from.",
-    )
-    @argument(
-        "--prod",
-        action="store_true",
-        help="If set, return the name of the physical table that will be used in production for the model version promoted in the target environment.",
-    )
-    @line_magic
-    @pass_sqlmesh_context
-    def table_name(self, context: Context, line: str) -> None:
-        """Prints the name of the physical table for the given model."""
-        args = parse_argstring(self.table_name, line)
-        context.console.log_status_update(
-            context.table_name(args.model_name, args.environment, args.prod)
-        )
-
-    @magic_arguments()
-    @argument(
-        "pipeline",
-        nargs="?",
-        type=str,
-        help="The dlt pipeline to attach for this SQLMesh project.",
-    )
-    @argument(
-        "--table",
-        "-t",
-        type=str,
-        nargs="*",
-        help="The specific dlt tables to refresh in the SQLMesh models.",
-    )
-    @argument(
-        "--force",
-        "-f",
-        action="store_true",
-        help="If set, existing models are overwritten with the new DLT tables.",
-    )
-    @argument(
-        "--dlt-path",
-        type=str,
-        help="The directory where the DLT pipeline resides.",
-    )
-    @line_magic
-    @pass_sqlmesh_context
-    def dlt_refresh(self, context: Context, line: str) -> None:
-        """Attaches to a DLT pipeline with the option to update specific or all missing tables in the SQLMesh project."""
-        from sqlmesh.integrations.dlt import generate_dlt_models
-
-        args = parse_argstring(self.dlt_refresh, line)
-        sqlmesh_models = generate_dlt_models(
-            context, args.pipeline, list(args.table or []), args.force, args.dlt_path
-        )
-        if sqlmesh_models:
-            model_names = "\n".join([f"- {model_name}" for model_name in sqlmesh_models])
-            context.console.log_success(f"Updated SQLMesh project with models:\n{model_names}")
-        else:
-            context.console.log_success("All SQLMesh models are up to date.")
-
-    @magic_arguments()
-    @argument(
-        "--read",
-        type=str,
-        default="",
-        help="The input dialect of the sql string.",
-    )
-    @argument(
-        "--write",
-        type=str,
-        default="",
-        help="The output dialect of the sql string.",
-    )
-    @line_cell_magic
-    @pass_sqlmesh_context
-    def rewrite(self, context: Context, line: str, sql: str) -> None:
-        """Rewrite a sql expression with semantic references into an executable query.
-
-        https://sqlmesh.readthedocs.io/en/latest/concepts/metrics/overview/
-        """
-        args = parse_argstring(self.rewrite, line)
-        context.console.show_sql(
-            context.rewrite(sql, args.read).sql(
-                dialect=args.write or context.config.dialect, pretty=True
-            )
         )
 
     @magic_arguments()

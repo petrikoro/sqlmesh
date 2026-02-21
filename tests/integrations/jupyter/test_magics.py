@@ -646,23 +646,6 @@ def test_janitor(
     ]
 
 
-def test_dag(tmp_path_factory, notebook, sushi_context):
-    temp_dir = tmp_path_factory.mktemp("dag")
-    dag_file = temp_dir / "dag.html"
-    with capture_output() as output:
-        notebook.run_line_magic(magic_name="dag", line=f"--file {str(dag_file)}")
-
-    assert not output.stdout
-    assert not output.stderr
-    assert len(output.outputs) == 1
-    output_plain = output.outputs[0].data["text/plain"]
-    # When we capture output it just captures the repr of the class, but it gets displayed fine in a notebook
-    assert "GraphHTML" in output_plain
-    file_contents = dag_file.read_text()
-    assert '<div id="sqlglot-lineage">' in file_contents
-    assert "waiter_revenue_by_day" in file_contents
-
-
 def test_create_test(notebook, sushi_context):
     with capture_output():
         notebook.run_line_magic(
@@ -841,20 +824,6 @@ def test_table_diff(notebook, loaded_sushi_context, convert_all_html_output_to_t
     assert convert_all_html_output_to_text(output) == [
         "No models contain differences with the selection criteria: 'sushi.top_waiters'"
     ]
-
-
-@pytest.mark.slow
-@time_machine.travel(FREEZE_TIME)
-def test_table_name(notebook, loaded_sushi_context, convert_all_html_output_to_text):
-    with capture_output() as output:
-        notebook.run_line_magic(magic_name="table_name", line="sushi.orders")
-
-    assert not output.stdout
-    assert not output.stderr
-    assert len(output.outputs) == 1
-    assert convert_all_html_output_to_text(output)[0].startswith(
-        "memory.sqlmesh__sushi.sushi__orders__"
-    )
 
 
 def test_lint(notebook, sushi_context):

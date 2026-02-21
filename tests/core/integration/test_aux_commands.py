@@ -31,60 +31,6 @@ from tests.core.integration.utils import add_projection_to_model, apply_to_envir
 pytestmark = pytest.mark.slow
 
 
-@time_machine.travel("2023-01-08 15:00:00 UTC")
-def test_table_name(init_and_plan_context: t.Callable):
-    context, plan = init_and_plan_context("examples/sushi")
-    context.apply(plan)
-
-    snapshot = context.get_snapshot("sushi.waiter_revenue_by_day")
-    assert snapshot
-    assert (
-        context.table_name("sushi.waiter_revenue_by_day", "prod")
-        == f"memory.sqlmesh__sushi.sushi__waiter_revenue_by_day__{snapshot.version}"
-    )
-
-    with pytest.raises(SQLMeshError, match="Environment 'dev' was not found."):
-        context.table_name("sushi.waiter_revenue_by_day", "dev")
-
-    with pytest.raises(
-        SQLMeshError, match="Model 'sushi.missing' was not found in environment 'prod'."
-    ):
-        context.table_name("sushi.missing", "prod")
-
-    # Add a new projection
-    model = context.get_model("sushi.waiter_revenue_by_day")
-    context.upsert_model(add_projection_to_model(t.cast(SqlModel, model)))
-
-    context.plan("dev_a", auto_apply=True, no_prompts=True, skip_tests=True)
-
-    new_snapshot = context.get_snapshot("sushi.waiter_revenue_by_day")
-    assert new_snapshot.version != snapshot.version
-
-    assert (
-        context.table_name("sushi.waiter_revenue_by_day", "dev_a")
-        == f"memory.sqlmesh__sushi.sushi__waiter_revenue_by_day__{new_snapshot.version}"
-    )
-
-    # Make a forward-only change
-    context.upsert_model(model, stamp="forward_only")
-
-    context.plan("dev_b", auto_apply=True, no_prompts=True, skip_tests=True, forward_only=True)
-
-    forward_only_snapshot = context.get_snapshot("sushi.waiter_revenue_by_day")
-    assert forward_only_snapshot.version == snapshot.version
-    assert forward_only_snapshot.dev_version != snapshot.version
-
-    assert (
-        context.table_name("sushi.waiter_revenue_by_day", "dev_b")
-        == f"memory.sqlmesh__sushi.sushi__waiter_revenue_by_day__{forward_only_snapshot.dev_version}__dev"
-    )
-
-    assert (
-        context.table_name("sushi.waiter_revenue_by_day", "dev_b", prod=True)
-        == f"memory.sqlmesh__sushi.sushi__waiter_revenue_by_day__{snapshot.version}"
-    )
-
-
 def test_janitor_cleanup_order(mocker: MockerFixture, tmp_path: Path):
     def setup_scenario():
         models_dir = tmp_path / "models"

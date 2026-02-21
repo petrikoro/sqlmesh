@@ -70,7 +70,7 @@ options:
 
 #### init
 ```
-%init [--template TEMPLATE] [--dlt-pipeline PIPELINE] path sql_dialect
+%init [--template TEMPLATE] path sql_dialect
 
 Creates a SQLMesh project scaffold with a default SQL dialect.
 
@@ -87,10 +87,7 @@ positional arguments:
 options:
   --template TEMPLATE, -t TEMPLATE
                         Project template. Supported values: dbt,
-                        dlt, default, empty.
-  --dlt-pipeline PIPELINE
-                        DLT pipeline for which to generate a SQLMesh project.
-                        This option is supported if the template is dlt.
+                        default, empty.
 ```
 
 #### plan
@@ -236,32 +233,11 @@ options:
                         creating new lines in pretty mode.
 ```
 
-#### dag
-```
-%dag [--file FILE]
-
-Displays the HTML DAG.
-
-options:
-  --file FILE, -f FILE  An optional file path to write the HTML output to.
-```
-
 #### destroy
 ```
 %destroy
 
 Removes all state tables, the SQLMesh cache, and other project resources, including warehouse objects. This includes all tables, views, and schemas managed by SQLMesh, as well as any external resources that may have been created by other tools within those schemas.
-```
-
-#### dlt_refresh
-```
-%dlt_refresh PIPELINE [--table] TABLE [--force]
-
-Attaches to a DLT pipeline with the option to update specific or all models of the SQLMesh project.
-
-options:
-  --table TABLE, -t TABLE  The DLT tables to generate SQLMesh models from. When none specified, all new missing tables will be generated.
-  --force, -f              If set it will overwrite existing models with the new generated models from the DLT tables.
 ```
 
 #### environments
@@ -496,19 +472,6 @@ Rollback SQLMesh to the previous migration.
 %clean
 
 Clears the SQLMesh cache and any build artifacts.
-```
-
-#### rewrite
-```
-%rewrite [--read READ] [--write WRITE]
-
-Rewrite a sql expression with semantic references into an executable query.
-
-https://sqlmesh.readthedocs.io/en/latest/concepts/metrics/overview/
-
-options:
-  --read READ    The input dialect of the sql string.
-  --write WRITE  The output dialect of the sql string.
 ```
 
 #### format

@@ -79,7 +79,7 @@ from sqlmesh.core.loader import Loader
 from sqlmesh.core.linter.definition import AnnotatedRuleViolation, Linter
 from sqlmesh.core.linter.rules import BUILTIN_RULES
 from sqlmesh.core.macros import ExecutableOrMacro, macro
-from sqlmesh.core.metric import Metric, rewrite
+from sqlmesh.core.metric import Metric
 from sqlmesh.core.model import Model, update_model_schemas
 from sqlmesh.core.config.model import ModelDefaultsConfig
 from sqlmesh.core.notification_target import (
@@ -89,7 +89,6 @@ from sqlmesh.core.notification_target import (
 )
 from sqlmesh.core.plan import Plan, PlanBuilder, SnapshotIntervals, PlanExplainer
 from sqlmesh.core.plan.definition import UserProvidedFlags
-from sqlmesh.core.reference import ReferenceGraph
 from sqlmesh.core.scheduler import Scheduler, CompletionStatus
 from sqlmesh.core.schema_loader import create_external_models_file
 from sqlmesh.core.selector import Selector, NativeSelector
@@ -2352,26 +2351,6 @@ class GenericContext(BaseContext, t.Generic[C]):
         return not errors
 
     @python_api_analytics
-    def rewrite(self, sql: str, dialect: str = "") -> exp.Expression:
-        """Rewrite a sql expression with semantic references into an executable query.
-
-        https://sqlmesh.readthedocs.io/en/latest/concepts/metrics/overview/
-
-        Args:
-            sql: The sql string to rewrite.
-            dialect: The dialect of the sql string, defaults to the project dialect.
-
-        Returns:
-            A SQLGlot expression with semantic references expanded.
-        """
-        return rewrite(
-            sql,
-            graph=ReferenceGraph(self.models.values()),
-            metrics=self._metrics,
-            dialect=dialect or self.default_dialect,
-        )
-
-    @python_api_analytics
     def check_intervals(
         self,
         environment: t.Optional[str],
@@ -2593,47 +2572,6 @@ class GenericContext(BaseContext, t.Generic[C]):
     def _apply(self, plan: Plan, circuit_breaker: t.Optional[t.Callable[[], bool]]) -> None:
         self._scheduler.create_plan_evaluator(self).evaluate(
             plan.to_evaluatable(), circuit_breaker=circuit_breaker
-        )
-
-    @python_api_analytics
-    def table_name(
-        self, model_name: str, environment: t.Optional[str] = None, prod: bool = False
-    ) -> str:
-        """Returns the name of the pysical table for the given model name in the target environment.
-
-        Args:
-            model_name: The name of the model.
-            environment: The environment to source the model version from.
-            prod: If True, return the name of the physical table that will be used in production for the model version
-                promoted in the target environment.
-
-        Returns:
-            The name of the physical table.
-        """
-        environment = environment or self.config.default_target_environment
-        fqn = self._node_or_snapshot_to_fqn(model_name)
-        target_env = self.state_reader.get_environment(environment)
-        if not target_env:
-            raise SQLMeshError(f"Environment '{environment}' was not found.")
-
-        snapshot_info = None
-        for s in target_env.snapshots:
-            if s.name == fqn:
-                snapshot_info = s
-                break
-        if not snapshot_info:
-            raise SQLMeshError(
-                f"Model '{model_name}' was not found in environment '{environment}'."
-            )
-
-        if target_env.name == c.PROD or prod:
-            return snapshot_info.table_name()
-
-        snapshots = self.state_reader.get_snapshots(target_env.snapshots)
-        deployability_index = DeployabilityIndex.create(snapshots)
-
-        return snapshot_info.table_name(
-            is_deployable=deployability_index.is_deployable(snapshot_info.snapshot_id)
         )
 
     def clear_caches(self) -> None:

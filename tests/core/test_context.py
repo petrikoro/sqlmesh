@@ -122,14 +122,6 @@ def test_custom_macros(sushi_context):
     assert "add_one" in sushi_context._macros
 
 
-def test_dag(sushi_context):
-    assert set(sushi_context.dag.upstream('"memory"."sushi"."customer_revenue_by_day"')) == {
-        '"memory"."sushi"."items"',
-        '"memory"."sushi"."orders"',
-        '"memory"."sushi"."order_items"',
-    }
-
-
 @pytest.mark.slow
 def test_render_sql_model(sushi_context, assert_exp_eq, copy_to_temp_path: t.Callable):
     assert_exp_eq(

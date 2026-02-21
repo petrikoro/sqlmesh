@@ -4,7 +4,6 @@ from pathlib import Path
 from dataclasses import dataclass
 from rich.prompt import Prompt
 from rich.console import Console
-from sqlmesh.integrations.dlt import generate_dlt_models_and_settings
 from sqlmesh.utils.date import yesterday_ds
 from sqlmesh.utils.errors import SQLMeshError
 from sqlmesh.core.config.connection import (
@@ -20,7 +19,6 @@ PRIMITIVES = (str, int, bool, float)
 class ProjectTemplate(Enum):
     DEFAULT = "default"
     EMPTY = "empty"
-    DLT = "dlt"
 
 
 class InitCliMode(Enum):
@@ -117,7 +115,6 @@ linter:
     }
 
     default_configs[ProjectTemplate.EMPTY] = default_configs[ProjectTemplate.DEFAULT]
-    default_configs[ProjectTemplate.DLT] = default_configs[ProjectTemplate.DEFAULT]
 
     flow_cli_mode = """
 # FLOW: Minimal prompts, automatic changes, summary output
@@ -274,8 +271,6 @@ def init_example_project(
     engine_type: t.Optional[str],
     dialect: t.Optional[str] = None,
     template: ProjectTemplate = ProjectTemplate.DEFAULT,
-    pipeline: t.Optional[str] = None,
-    dlt_path: t.Optional[str] = None,
     schema_name: str = "sqlmesh_example",
     cli_mode: InitCliMode = InitCliMode.DEFAULT,
     start: t.Optional[str] = None,
@@ -306,28 +301,11 @@ def init_example_project(
             f"Invalid engine '{engine_type}'. Please specify one of '{engine_types}'."
         )
 
-    models: t.Set[t.Tuple[str, str]] = set()
     settings = None
-    if engine_type and template == ProjectTemplate.DLT:
-        project_dialect = dialect or DIALECT_TO_TYPE.get(engine_type)
-        if pipeline and project_dialect:
-            dlt_models, settings, start = generate_dlt_models_and_settings(
-                pipeline_name=pipeline, dialect=project_dialect, dlt_path=dlt_path
-            )
-        else:
-            raise SQLMeshError(
-                "Please provide a DLT pipeline with the `--dlt-pipeline` flag to generate a SQLMesh project from DLT."
-            )
 
     _create_config(config_path, engine_type, dialect, settings, start, template, cli_mode)
 
     _create_folders([audits_path, macros_path, models_path, seeds_path, tests_path])
-
-    if template == ProjectTemplate.DLT:
-        _create_object_files(
-            models_path, {model[0].split(".")[-1]: model[1] for model in dlt_models}, "sql"
-        )
-        return config_path
 
     example_objects = _gen_example_objects(schema_name=schema_name)
 

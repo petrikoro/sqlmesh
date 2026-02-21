@@ -131,8 +131,22 @@ Consider an existing table named `my_schema.existing_table`. Migrating this tabl
 
     c. Create the model in the SQLMesh project without backfilling any data by running `sqlmesh plan [environment name] --empty-backfill --start 2024-01-01`, replacing "[environment name]" with an environment name other than `prod` and using the same start date from the `MODEL` DDL in step 3b.
 
-4. Determine the name of the model's snapshot physical table by running `sqlmesh table_name --env [environment name] --prod my_schema.existing_table`. For example, it might return `sqlmesh__my_schema.existing_table_123456`.
-5. Rename the original table `my_schema.existing_table_temp` to `sqlmesh__my_schema.existing_table_123456`
+4. Determine the model's snapshot physical table name using the Python API:
+
+    ```python
+    from sqlmesh import Context
+
+    context = Context(paths=".")
+    snapshot_name = context.get_snapshot("my_schema.existing_table").name
+    target_environment = context.state_reader.get_environment("[environment name]")
+    snapshot = next(
+        snapshot for snapshot in target_environment.snapshots if snapshot.name == snapshot_name
+    )
+    print(snapshot.table_name())
+    ```
+
+    For example, it might return `sqlmesh__my_schema.existing_table_123456`.
+5. Rename the original table `my_schema.existing_table_temp` to the physical table name returned in step 4.
 
 The model would have code similar to:
 

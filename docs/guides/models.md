@@ -232,32 +232,6 @@ To delete a model:
 
 4. Verify that the `full_model.sql` model was removed from the output.
 
-## Viewing the DAG of a project's models
-
----
-
-Before generating a DAG, ensure that you have already installed the graphviz package.
-
-To install the package with `pip`, enter the following command:
-
-```bash
-pip install graphviz
-```
-
-Alternatively, enter the following command to install graphviz with `apt-get`:
-
-```bash
-sudo apt-get install graphviz
-```
-
----
-
-To view the DAG, enter the following command:
-
-`sqlmesh dag FILE`
-
-An html file containing your project's DAG will be placed at the root of your project folder. The DAG can then be viewed by opening this file in your browser.
-
 ## Generating model documentation artifacts
 
 SQLMesh can generate dbt-compatible metadata and a browsable documentation site from your project models.

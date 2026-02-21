@@ -32,6 +32,7 @@ from sqlmesh.core.model import (
 )
 from sqlmesh.core.plan import SnapshotIntervals
 from sqlmesh.core.snapshot import (
+    DeployabilityIndex,
     Snapshot,
     SnapshotId,
 )
@@ -828,7 +829,17 @@ def test_prod_restatement_plan_clears_unaligned_intervals_in_derived_dev_tables(
     ]
 
     # mess with A independently of SQLMesh to prove a whole day gets restated for B instead of just 1hr
-    snapshot_table_name = ctx.table_name("test.a", "dev")
+    target_env = ctx.state_reader.get_environment("dev")
+    assert target_env
+    snapshot_name = ctx.get_snapshot("test.a").name
+    snapshot_info = next(
+        snapshot for snapshot in target_env.snapshots if snapshot.name == snapshot_name
+    )
+    snapshots = ctx.state_reader.get_snapshots(target_env.snapshots)
+    deployability_index = DeployabilityIndex.create(snapshots)
+    snapshot_table_name = snapshot_info.table_name(
+        is_deployable=deployability_index.is_deployable(snapshot_info.snapshot_id)
+    )
     engine_adapter.execute(
         f"delete from {snapshot_table_name} where cast(ts as date) == '2024-01-01'"
     )
