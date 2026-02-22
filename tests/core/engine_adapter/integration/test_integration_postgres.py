@@ -189,7 +189,7 @@ def test_janitor_drop_cascade(ctx: TestContext, tmp_path: Path) -> None:
             database=str(tmp_path / "state.db")
         )
 
-    with time_machine.travel("2020-01-01 00:00:00"):
+    with time_machine.travel("2020-01-01 00:00:00+00:00"):
         sqlmesh = ctx.create_context(
             path=tmp_path, config_mutator=_mutate_config, ephemeral_state_connection=False
         )
@@ -213,7 +213,7 @@ def test_janitor_drop_cascade(ctx: TestContext, tmp_path: Path) -> None:
     # new dev environment - touch models to create new snapshots
     # model a / b expiry in prod should remain unmodified
     # model a / b expiry in dev should be as at today
-    with time_machine.travel("2020-01-02 00:00:00"):
+    with time_machine.travel("2020-01-02 00:00:00+00:00"):
         (models_dir / "model_a.sql").write_text(f"""
         MODEL (
             name {schema}.model_a,
@@ -251,7 +251,7 @@ def test_janitor_drop_cascade(ctx: TestContext, tmp_path: Path) -> None:
     # move forward 3 days
     # touch model b in dev but leave model a
     # this bumps the model b expiry but model a remains unchanged, so will expire before model b even though model b depends on it
-    with time_machine.travel("2020-01-05 00:00:00"):
+    with time_machine.travel("2020-01-05 00:00:00+00:00"):
         (models_dir / "model_b.sql").write_text(f"""
         MODEL (
             name {schema}.model_b,
@@ -323,7 +323,7 @@ def test_janitor_drop_cascade(ctx: TestContext, tmp_path: Path) -> None:
     # - table model a is expired so will be cleaned up and this will cascade to view model b
     # - view model b is not expired, but because it got cascaded to, this will cascade again to view model c
     # - table model d is a not a view, so even though its parent view model b got dropped, it doesnt need to be dropped
-    with time_machine.travel("2020-01-10 00:00:00"):
+    with time_machine.travel("2020-01-10 00:00:00+00:00"):
         sqlmesh = ctx.create_context(
             path=tmp_path, config_mutator=_mutate_config, ephemeral_state_connection=False
         )
