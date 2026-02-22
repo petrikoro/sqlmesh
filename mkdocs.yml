@@ -70,8 +70,6 @@ nav:
   - Integrations:
     - "Overview": integrations/overview.md
     - Tools:
-      - integrations/dbt.md
-      - integrations/dlt.md
       - integrations/github.md
     - Execution engines:
       - integrations/engines/athena.md

@@ -1438,9 +1438,8 @@ model_defaults:
 
 
 def test_load_configs_without_main_connection(tmp_path: Path):
-    # this is for DBT projects where the main connection is defined in profiles.yml
-    # but we also need to be able to specify the sqlmesh state connection without editing any DBT files
-    # and without also duplicating the main connection
+    # Support loading projects where only a state connection is configured in sqlmesh.yaml
+    # without duplicating the primary warehouse connection.
     config_file = tmp_path / "sqlmesh.yaml"
     with config_file.open("w") as f:
         yaml.dump(

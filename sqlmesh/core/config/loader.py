@@ -13,7 +13,6 @@ from sqlmesh.core import constants as c
 from sqlmesh.core.config.common import (
     ALL_CONFIG_FILENAMES,
     YAML_CONFIG_FILENAMES,
-    DBT_PROJECT_FILENAME,
 )
 from sqlmesh.core.config.model import ModelDefaultsConfig
 from sqlmesh.core.config.root import Config
@@ -162,33 +161,6 @@ def load_config_from_paths(
         )
 
     no_dialect_err_msg = "Default model SQL dialect is a required configuration parameter. Set it in the `model_defaults` `dialect` key in your config file."
-
-    # if "dbt_project.yml" is present *and there was no python config already defined*,
-    # create a basic one to ensure we are using the DBT loader.
-    # any config within yaml files will get overlayed on top of it.
-    if not python_config:
-        potential_project_files = [f / DBT_PROJECT_FILENAME for f in visited_folders]
-        dbt_project_file = next((f for f in potential_project_files if f.exists()), None)
-        if dbt_project_file:
-            from sqlmesh.dbt.loader import sqlmesh_config
-
-            infer_state_schema_name = False
-            if dbt := non_python_config.dbt:
-                infer_state_schema_name = dbt.infer_state_schema_name
-
-            dbt_python_config = sqlmesh_config(
-                project_root=dbt_project_file.parent,
-                profiles_dir=kwargs.pop("profiles_dir", None),
-                dbt_profile_name=kwargs.pop("profile", None),
-                dbt_target_name=kwargs.pop("target", None),
-                variables=variables,
-                threads=kwargs.pop("threads", None),
-                infer_state_schema_name=infer_state_schema_name,
-            )
-            if type(dbt_python_config) != config_type:
-                dbt_python_config = convert_config_type(dbt_python_config, config_type)
-
-            python_config = dbt_python_config  # ty:ignore[invalid-assignment]
 
     if python_config:
         model_defaults = python_config.model_defaults

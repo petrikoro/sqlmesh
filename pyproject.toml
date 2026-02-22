@@ -52,25 +52,12 @@ bigquery = [
 ]
 clickhouse = ["clickhouse-connect"]
 databricks = ["databricks-sql-connector[pyarrow]"]
-dbt = ["dbt-core<2"]
 dev = [
     "agate",
     "beautifulsoup4",
     "clickhouse-connect",
     "cryptography",
     "databricks-sql-connector",
-    "dbt-athena-community",
-    "dbt-bigquery",
-    "dbt-clickhouse",
-    "dbt-core",
-    "dbt-databricks",
-    "dbt-duckdb>=1.7.1",
-    "dbt-redshift",
-    # version 1.10.1 of dbt-snowflake declares that it's compatible with dbt-adapters>=1.16 but in reality
-    # it depends on the 'InvalidCatalogIntegrationConfigError' class that only exists as of dbt-adapters==1.16.6
-    # so we exclude it to prevent failures and hope that upstream releases a new version with the correct constraint
-    "dbt-snowflake!=1.10.1",
-    "dbt-trino",
     "Faker",
     "google-auth",
     "google-cloud-bigquery",
@@ -97,7 +84,6 @@ dev = [
     "ty~=0.0.17",
     "typing-extensions",
 ]
-dlt = ["dlt"]
 duckdb = []
 fabric = ["pyodbc>=5.0.0"]
 gcppostgres = ["cloud-sql-python-connector[pg8000]>=1.8.0"]
@@ -126,7 +112,6 @@ trino = ["trino"]
 [project.scripts]
 sqlmesh = "sqlmesh.cli.main:cli"
 sqlmesh_cicd = "sqlmesh.cicd.bot:bot"
-sqlmesh_dbt = "sqlmesh_dbt.cli:dbt"
 sqlmesh_lsp = "sqlmesh.lsp.main:main"
 
 [project.urls]
@@ -148,7 +133,7 @@ fallback_version = "0.0.0"
 local_scheme = "no-local-version"
 
 [tool.setuptools.packages.find]
-include = ["sqlmesh", "sqlmesh.*", "sqlmesh_dbt", "sqlmesh_dbt.*"]
+include = ["sqlmesh", "sqlmesh.*"]
 
 [tool.setuptools.package-data]
 "*" = ["py.typed"]
@@ -190,7 +175,6 @@ banned-module-level-imports = [
 [tool.ruff.lint.per-file-ignores]
 # TID251 is used to ignore the import of sqlmesh.lsp in files outside sqlmesh/lsp
 "benchmarks/lsp*.py" = ["TID251"]
-"sqlmesh/dbt/builtin.py" = ["T100"]
 "sqlmesh/lsp/**/*.py" = ["TID251"]
 "tests/lsp/**/*.py" = ["TID251"]
 
@@ -209,7 +193,6 @@ markers = [
     # Test Domain Markers
     # default: core functionality
     "cli: test for CLI",
-    "dbt: test for dbt adapter",
     "github: test for Github CI/CD bot",
     "jupyter: tests for Jupyter integration",
     # Engine Adapters

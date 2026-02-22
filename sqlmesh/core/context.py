@@ -49,7 +49,6 @@ from types import MappingProxyType
 from datetime import datetime
 
 from sqlglot import Dialect, exp
-from sqlglot.helper import first
 from sqlglot.lineage import GraphHTML
 
 from sqlmesh.core import analytics
@@ -1565,8 +1564,6 @@ class GenericContext(BaseContext, t.Generic[C]):
             include_unmodified = self.config.plan.include_unmodified
 
         if skip_backfill and not no_gaps and not is_dev:
-            # note: we deliberately don't mention the --no-gaps flag in case the plan came from the sqlmesh_dbt command
-            # todo: perhaps we could have better error messages if we check sys.argv[0] for which cli is running?
             self.console.log_warning(
                 "Skipping the backfill stage for production can lead to unexpected results, such as tables being empty or incremental data with non-contiguous time ranges being made available.\n"
                 "If you are doing this deliberately to create an empty version of a table to test a change, please consider using Virtual Data Environments instead."
@@ -1738,11 +1735,7 @@ class GenericContext(BaseContext, t.Generic[C]):
             end_override_per_model=max_interval_end_per_model,
             console=self.console,
             user_provided_flags=user_provided_flags,
-            selected_models={
-                dbt_unique_id
-                for model in model_selector.expand_model_selections(select_models or "*")
-                if (dbt_unique_id := snapshots[model].node.dbt_unique_id)
-            },
+            selected_models=set(model_selector.expand_model_selections(select_models or "*")),
             explain=explain or False,
             ignore_cron=ignore_cron or False,
         )
@@ -2180,7 +2173,7 @@ class GenericContext(BaseContext, t.Generic[C]):
         output_path: t.Optional[t.Union[str, Path]] = None,
         select_models: t.Optional[t.Collection[str]] = None,
     ) -> Path:
-        """Generate a dbt-compatible ``manifest.json`` for the project.
+        """Generate ``manifest.json`` artifacts for the project.
 
         Args:
             output_path: Directory where the manifest will be written.
@@ -3005,11 +2998,7 @@ class GenericContext(BaseContext, t.Generic[C]):
 
     @cached_property
     def _project_type(self) -> str:
-        project_types = {
-            c.DBT if loader.__class__.__name__.lower().startswith(c.DBT) else c.NATIVE
-            for loader in self._loaders
-        }
-        return c.HYBRID if len(project_types) > 1 else first(project_types)
+        return c.NATIVE
 
     def _nodes_to_snapshots(self, nodes: t.Dict[str, Node]) -> t.Dict[str, Snapshot]:
         snapshots: t.Dict[str, Snapshot] = {}
@@ -3048,9 +3037,6 @@ class GenericContext(BaseContext, t.Generic[C]):
     def _plan_preview_enabled(self) -> bool:
         if self.config.plan.enable_preview is not None:
             return self.config.plan.enable_preview
-        # It is dangerous to enable preview by default for dbt projects that rely on engines that don't support cloning.
-        # Enabling previews in such cases can result in unintended full refreshes because dbt incremental models rely on
-        # the maximum timestamp value in the target table.
         return self._project_type == c.NATIVE or self.engine_adapter.SUPPORTS_CLONING
 
     def _get_plan_default_start_end(

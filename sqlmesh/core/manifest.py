@@ -18,6 +18,7 @@ if t.TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 MANIFEST_FILENAME = "manifest.json"
+CATALOG_FILENAME = "catalog.json"
 ARTIFACTS_DIRNAME = "dbt_artifacts"
 
 _MODEL_TYPE_TO_RESOURCE_TYPE: t.Dict[str, str] = {
@@ -30,7 +31,7 @@ _MODEL_TYPE_TO_RESOURCE_TYPE: t.Dict[str, str] = {
 
 
 class ManifestGenerator:
-    """Generates a dbt-compatible manifest.json for a SQLMesh project."""
+    """Generates dbt-compatible manifest and catalog artifacts for a SQLMesh project."""
 
     def __init__(self, context: Context) -> None:
         self.context = context
@@ -40,7 +41,7 @@ class ManifestGenerator:
         output_path: t.Optional[t.Union[str, Path]] = None,
         select_models: t.Optional[t.Collection[str]] = None,
     ) -> Path:
-        """Generate ``manifest.json`` and return its path.
+        """Generate ``manifest.json`` / ``catalog.json`` and return manifest path.
 
         Args:
             output_path: Optional directory or file path to write.
@@ -96,7 +97,7 @@ def generate_manifest(
     output_path: t.Optional[t.Union[str, Path]] = None,
     select_models: t.Optional[t.Collection[str]] = None,
 ) -> Path:
-    """Generate dbt-compatible ``manifest.json``.
+    """Generate dbt-compatible ``manifest.json`` and ``catalog.json``.
 
     Args:
         models: Serialised API model list (from ``get_models``).
@@ -138,7 +139,70 @@ def generate_manifest(
         json.dumps(manifest, indent=2, default=str),
         encoding="utf-8",
     )
+
+    catalog = build_catalog(manifest)
+    catalog_path = output_dir / CATALOG_FILENAME
+    catalog_path.write_text(
+        json.dumps(catalog, indent=2, default=str),
+        encoding="utf-8",
+    )
     return manifest_path
+
+
+def build_catalog(manifest: t.Dict[str, t.Any]) -> t.Dict[str, t.Any]:
+    """Build a dbt-compatible catalog payload from the manifest payload."""
+    metadata = manifest.get("metadata", {})
+    nodes = manifest.get("nodes", {})
+    sources = manifest.get("sources", {})
+
+    return {
+        "metadata": {
+            "dbt_schema_version": "https://schemas.getdbt.com/dbt/catalog/v1.json",
+            "dbt_version": metadata.get("dbt_version", "1.10.0"),
+            "generated_at": metadata.get("generated_at"),
+            "invocation_id": metadata.get("invocation_id"),
+            "invocation_started_at": metadata.get("invocation_started_at"),
+            "env": metadata.get("env", {}),
+        },
+        "nodes": {
+            unique_id: _build_catalog_entry(unique_id, node) for unique_id, node in nodes.items()
+        },
+        "sources": {
+            unique_id: _build_catalog_entry(unique_id, source)
+            for unique_id, source in sources.items()
+        },
+        "errors": None,
+    }
+
+
+def _build_catalog_entry(unique_id: str, relation: t.Dict[str, t.Any]) -> t.Dict[str, t.Any]:
+    columns = relation.get("columns") or {}
+    return {
+        "metadata": {
+            "type": _catalog_relation_type(relation),
+            "schema": relation.get("schema"),
+            "name": relation.get("name"),
+            "database": relation.get("database"),
+            "comment": relation.get("description") or None,
+            "owner": None,
+        },
+        "columns": {
+            column_name: {
+                "name": column_name,
+                "type": column.get("type"),
+                "index": index,
+                "comment": column.get("description") or None,
+            }
+            for index, (column_name, column) in enumerate(columns.items(), start=1)
+        },
+        "stats": {},
+        "unique_id": unique_id,
+    }
+
+
+def _catalog_relation_type(relation: t.Dict[str, t.Any]) -> str:
+    materialized = relation.get("config", {}).get("materialized")
+    return "view" if isinstance(materialized, str) and materialized.lower() == "view" else "table"
 
 
 def build_manifest(

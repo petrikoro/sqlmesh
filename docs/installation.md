@@ -36,8 +36,6 @@ Some extras add features, like the Github CI/CD bot:
     | Feature             | `pip` command                   |
     | ------------------- | ------------------------------- |
     | Github CI/CD bot    | `pip install "sqlmesh[github]"` |
-    | dbt projects        | `pip install "sqlmesh[dbt]"`    |
-    | dlt projects        | `pip install "sqlmesh[dlt]"`    |
     | Slack notifications | `pip install "sqlmesh[slack]"`  |
     | Development setup   | `pip install "sqlmesh[dev]"`    |
     | LLM SQL prompt      | `pip install "sqlmesh[llm]"`    |
@@ -71,5 +69,3 @@ SQLMesh has two user interfaces - choose one for the example project and jump ri
 
 - [Command line interface (CLI)](./quickstart/cli.md)
 - [Notebook interface](./quickstart/notebook.md)
-
-Have an existing dbt project you want to run? Install the dbt extra and [check out SQLMesh's dbt adapter](./integrations/dbt.md).

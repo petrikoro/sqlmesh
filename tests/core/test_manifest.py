@@ -8,10 +8,12 @@ import pytest
 
 from sqlmesh.core.context import Context
 from sqlmesh.core.manifest import (
+    CATALOG_FILENAME,
     MANIFEST_FILENAME,
     ManifestGenerator,
     _build_fqn_to_uid,
     _parse_fqn_parts,
+    build_catalog,
 )
 
 
@@ -26,10 +28,12 @@ def test_generate_creates_manifest_json(sushi_context: Context, tmp_path: Path) 
 
     assert result == tmp_path / MANIFEST_FILENAME
     assert result.exists()
+    assert (tmp_path / CATALOG_FILENAME).exists()
 
     data = json.loads(result.read_text(encoding="utf-8"))
     assert "metadata" in data
     assert "nodes" in data
+    assert json.loads((tmp_path / CATALOG_FILENAME).read_text(encoding="utf-8"))
 
 
 def test_generate_default_output_dir(sushi_context: Context) -> None:
@@ -39,6 +43,7 @@ def test_generate_default_output_dir(sushi_context: Context) -> None:
     assert result.exists()
     assert result.name == MANIFEST_FILENAME
     assert result.parent == sushi_context.cache_dir / "dbt_artifacts"
+    assert (result.parent / CATALOG_FILENAME).exists()
 
 
 def test_generate_supports_file_output_path(sushi_context: Context, tmp_path: Path) -> None:
@@ -48,6 +53,7 @@ def test_generate_supports_file_output_path(sushi_context: Context, tmp_path: Pa
 
     assert result == target_file
     assert result.exists()
+    assert (tmp_path / CATALOG_FILENAME).exists()
     data = json.loads(result.read_text(encoding="utf-8"))
     assert "metadata" in data
     assert "nodes" in data
@@ -65,6 +71,39 @@ def test_manifest_has_dbt_compatible_metadata(sushi_context: Context) -> None:
     assert "generated_at" in meta
     assert "adapter_type" in meta
     assert "project_name" in meta
+
+
+def test_catalog_metadata_is_schema_clean(sushi_context: Context) -> None:
+    manifest = ManifestGenerator(sushi_context).build_manifest()
+    catalog = build_catalog(manifest)
+
+    assert set(catalog["metadata"]) == {
+        "dbt_schema_version",
+        "dbt_version",
+        "generated_at",
+        "invocation_id",
+        "invocation_started_at",
+        "env",
+    }
+    assert catalog["metadata"]["invocation_id"] == manifest["metadata"]["invocation_id"]
+    assert (
+        catalog["metadata"]["invocation_started_at"]
+        == manifest["metadata"]["invocation_started_at"]
+    )
+    assert "adapter_type" not in catalog["metadata"]
+
+
+def test_catalog_entry_metadata_type_is_relation_type(sushi_context: Context) -> None:
+    manifest = ManifestGenerator(sushi_context).build_manifest()
+    catalog = build_catalog(manifest)
+
+    for uid, node in manifest["nodes"].items():
+        materialized = node.get("config", {}).get("materialized")
+        expected = "view" if materialized == "view" else "table"
+        assert catalog["nodes"][uid]["metadata"]["type"] == expected
+
+    for uid in manifest["sources"]:
+        assert catalog["sources"][uid]["metadata"]["type"] == "table"
 
 
 def test_manifest_has_sqlmesh_extensions(sushi_context: Context) -> None:

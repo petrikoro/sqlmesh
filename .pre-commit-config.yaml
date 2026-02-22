@@ -11,7 +11,6 @@ repos:
       - id: check-yaml
         exclude: ^tests/core/engine_adapter/integration/config\.yaml$
       - id: debug-statements
-        exclude: ^sqlmesh/dbt/builtin\.py$
       - id: check-case-conflict
       - id: pretty-format-json
         args:
@@ -33,7 +32,7 @@ repos:
         language: python
         types_or: [python, pyi]
         require_serial: true
-        files: &files ^(sqlmesh/|sqlmesh_dbt/|tests/|examples/|setup.py)
+        files: &files ^(sqlmesh/|tests/|examples/|setup.py)
       - id: ruff-format
         name: ruff-format
         entry: ruff format

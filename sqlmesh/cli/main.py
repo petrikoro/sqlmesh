@@ -38,7 +38,6 @@ SKIP_LOAD_COMMANDS = (
     "migrate",
     "rollback",
     "run",
-    "table_name",
 )
 SKIP_CONTEXT_COMMANDS = ("init",)
 
@@ -155,17 +154,7 @@ def cli(
     "-t",
     "--template",
     type=str,
-    help="Project template. Supported values: dbt, dlt, default, empty.",
-)
-@click.option(
-    "--dlt-pipeline",
-    type=str,
-    help="DLT pipeline for which to generate a SQLMesh project. Use alongside template: dlt",
-)
-@click.option(
-    "--dlt-path",
-    type=str,
-    help="The directory where the DLT pipeline resides. Use alongside template: dlt",
+    help="Project template. Supported values: default, empty.",
 )
 @click.pass_context
 @error_handler
@@ -174,8 +163,6 @@ def init(
     ctx: click.Context,
     engine: t.Optional[str] = None,
     template: t.Optional[str] = None,
-    dlt_pipeline: t.Optional[str] = None,
-    dlt_path: t.Optional[str] = None,
 ) -> None:
     """Create a new SQLMesh repository."""
     project_template = None
@@ -188,13 +175,11 @@ def init(
                 f"Invalid project template '{template}'. Please specify one of '{template_strings}'."
             )
 
-    if engine or project_template == ProjectTemplate.DBT:
+    if engine:
         init_example_project(
             path=ctx.obj,
             template=project_template or ProjectTemplate.DEFAULT,
             engine_type=engine,
-            pipeline=dlt_pipeline,
-            dlt_path=dlt_path,
         )
         return
 
@@ -209,8 +194,6 @@ def init(
         template=project_template,
         engine_type=engine_type,
         cli_mode=cli_mode or InitCliMode.DEFAULT,
-        pipeline=dlt_pipeline,
-        dlt_path=dlt_path,
     )
 
     engine_install_text = ""
@@ -219,16 +202,13 @@ def init(
             "pyspark" if engine_type == "spark" else f"sqlmesh\\[{engine_type.replace('_', '')}]"
         )
         engine_install_text = f'• Run command in CLI to install your SQL engine\'s Python dependencies: pip install "{install_text}"\n'
-    # interactive init does not support DLT template
     next_step_text = {
         ProjectTemplate.DEFAULT: f"{engine_install_text}• Update your gateway connection settings (e.g., username/password) in the project configuration file:\n    {config_path}",
-        ProjectTemplate.DBT: "",
     }
     next_step_text[ProjectTemplate.EMPTY] = next_step_text[ProjectTemplate.DEFAULT]
 
     quickstart_text = {
         ProjectTemplate.DEFAULT: "Quickstart guide:\nhttps://sqlmesh.readthedocs.io/en/stable/quickstart/cli/",
-        ProjectTemplate.DBT: "dbt guide:\nhttps://sqlmesh.readthedocs.io/en/stable/integrations/dbt/",
     }
     quickstart_text[ProjectTemplate.EMPTY] = quickstart_text[ProjectTemplate.DEFAULT]
 
@@ -656,24 +636,6 @@ def destroy(ctx: click.Context, **kwargs: t.Any) -> None:
     ctx.obj.destroy(**kwargs)
 
 
-@cli.command("dag")
-@click.argument("file", required=True)
-@click.option(
-    "--select-model",
-    type=str,
-    multiple=True,
-    help="Select specific models to include in the dag.",
-)
-@click.pass_context
-@error_handler
-@cli_analytics
-def dag(ctx: click.Context, file: str, select_model: t.List[str]) -> None:
-    """Render the DAG as an html file."""
-    rendered_dag_path = ctx.obj.render_dag(file, select_model)
-    if rendered_dag_path:
-        ctx.obj.console.log_success(f"Generated the dag to {rendered_dag_path}")
-
-
 @cli.command("create_test")
 @click.argument("model")
 @click.option(
@@ -998,31 +960,6 @@ def table_diff(
     )
 
 
-@cli.command("rewrite")
-@click.argument("sql")
-@click.option(
-    "--read",
-    type=str,
-    help="The input dialect of the sql string.",
-)
-@click.option(
-    "--write",
-    type=str,
-    help="The output dialect of the sql string.",
-)
-@click.pass_obj
-@error_handler
-@cli_analytics
-def rewrite(obj: Context, sql: str, read: str = "", write: str = "") -> None:
-    """Rewrite a SQL expression with semantic references into an executable query.
-
-    https://sqlmesh.readthedocs.io/en/latest/concepts/metrics/overview/
-    """
-    obj.console.show_sql(
-        obj.rewrite(sql, dialect=read).sql(pretty=True, dialect=write or obj.config.dialect),
-    )
-
-
 @cli.command("clean")
 @click.pass_obj
 @error_handler
@@ -1030,74 +967,6 @@ def rewrite(obj: Context, sql: str, read: str = "", write: str = "") -> None:
 def clean(obj: Context) -> None:
     """Clears the SQLMesh cache and any build artifacts."""
     obj.clear_caches()
-
-
-@cli.command("table_name")
-@click.argument("model_name", required=True)
-@click.option(
-    "--environment",
-    "--env",
-    help="The environment to source the model version from.",
-)
-@click.option(
-    "--prod",
-    is_flag=True,
-    default=False,
-    help="If set, return the name of the physical table that will be used in production for the model version promoted in the target environment.",
-)
-@click.pass_obj
-@error_handler
-@cli_analytics
-def table_name(
-    obj: Context,
-    model_name: str,
-    environment: t.Optional[str] = None,
-    prod: bool = False,
-) -> None:
-    """Prints the name of the physical table for the given model."""
-    print(obj.table_name(model_name, environment, prod))
-
-
-@cli.command("dlt_refresh")
-@click.argument("pipeline", required=True)
-@click.option(
-    "-t",
-    "--table",
-    type=str,
-    multiple=True,
-    help="The specific dlt tables to refresh in the SQLMesh models.",
-)
-@click.option(
-    "-f",
-    "--force",
-    is_flag=True,
-    default=False,
-    help="If set, existing models are overwritten with the new DLT tables.",
-)
-@click.option(
-    "--dlt-path",
-    type=str,
-    help="The directory where the DLT pipeline resides.",
-)
-@click.pass_context
-@error_handler
-@cli_analytics
-def dlt_refresh(
-    ctx: click.Context,
-    pipeline: str,
-    force: bool,
-    table: t.List[str] = [],
-    dlt_path: t.Optional[str] = None,
-) -> None:
-    """Attaches to a DLT pipeline with the option to update specific or all missing tables in the SQLMesh project."""
-    from sqlmesh.integrations.dlt import generate_dlt_models
-
-    sqlmesh_models = generate_dlt_models(ctx.obj, pipeline, list(table or []), force, dlt_path)
-    if sqlmesh_models:
-        model_names = "\n".join([f"- {model_name}" for model_name in sqlmesh_models])
-        ctx.obj.console.log_success(f"Updated SQLMesh project with models:\n{model_names}")
-    else:
-        ctx.obj.console.log_success("All SQLMesh models are up to date.")
 
 
 @cli.command("environments")
@@ -1214,7 +1083,7 @@ def state_import(obj: Context, input_file: Path, replace: bool, no_confirm: bool
     "--output",
     type=click.Path(file_okay=False, path_type=Path),
     default=None,
-    help="Output directory for the generated manifest.json.",
+    help="Output directory for the generated manifest.json and catalog.json.",
 )
 @click.pass_obj
 @error_handler

@@ -28,7 +28,6 @@ Commands:
   dag                     Render the DAG as an html file.
   destroy                 The destroy command removes all project resources.
   diff                    Show the diff between the local state and the...
-  dlt_refresh             Attaches to a DLT pipeline with the option to...
   docs                    Commands for interacting with documentation.
   environments            Prints the list of SQLMesh environments with...
   evaluate                Evaluate a model and return a dataframe with a...
@@ -40,7 +39,7 @@ Commands:
   janitor                 Run the janitor process on-demand.
   lint                    Run the linter for the target model(s).
   migrate                 Migrate SQLMesh to the current running version.
-  parse                   Parse project files and generate a dbt-compatible...
+  parse                   Parse project files and generate manifest.json...
   plan                    Apply local changes to the target environment.
   render                  Render a model's query, optionally expanding...
   rewrite                 Rewrite a SQL expression with semantic...
@@ -156,19 +155,6 @@ Usage: sqlmesh destroy
 
 Options:
   --help               Show this message and exit.
-```
-
-## dlt_refresh
-
-```
-Usage: dlt_refresh PIPELINE [OPTIONS]
-
-  Attaches to a DLT pipeline with the option to update specific or all models of the SQLMesh project.
-
-Options:
-  -t, --table TEXT  The DLT tables to generate SQLMesh models from. When none specified, all new missing tables will be generated.
-  -f, --force       If set it will overwrite existing models with the new generated models from the DLT tables.
-  --help            Show this message and exit.
 ```
 
 ## docs
@@ -322,12 +308,7 @@ Usage: sqlmesh init [OPTIONS] [ENGINE]
   Create a new SQLMesh repository.
 
 Options:
-  -t, --template TEXT  Project template. Supported values: dbt, dlt, default,
-                       empty.
-  --dlt-pipeline TEXT  DLT pipeline for which to generate a SQLMesh project.
-                       Use alongside template: dlt
-  --dlt-path TEXT      The directory where the DLT pipeline resides. Use
-                       alongside template: dlt
+  -t, --template TEXT  Project template. Supported values: default, empty.
   --help               Show this message and exit.
 ```
 
@@ -382,7 +363,7 @@ Options:
 ```
 Usage: sqlmesh parse [OPTIONS]
 
-  Parse project files and generate a dbt-compatible manifest.json.
+  Parse project files and generate manifest.json artifacts.
 
 Options:
   -o, --output DIRECTORY  Output directory for the generated manifest.json.

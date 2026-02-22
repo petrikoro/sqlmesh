@@ -32,11 +32,6 @@ git checkout $LAST_TAG
 # Install dependencies from the previous release.
 make install-dev
 
-# this is only needed temporarily until the released tag for $LAST_TAG includes this config
-if [ "$EXAMPLE_NAME" == "sushi_dbt" ]; then
-    echo 'migration_test_config = sqlmesh_config(Path(__file__).parent, dbt_target_name="duckdb")' >> $TEST_DIR/config.py
-fi
-
 # Run initial plan
 pushd $TEST_DIR
 rm -rf ./data/*
