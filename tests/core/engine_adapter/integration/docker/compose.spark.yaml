@@ -23,7 +23,7 @@ x-hive-metastore-environments: &hive_metastore_environments
 
 include:
   - ./_common-hive.yaml
-  
+
 services:
   spark:
     build:

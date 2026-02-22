@@ -178,17 +178,17 @@ def _parse_id_var(
         and self._is_connected()
         and (
             self._match_texts(("{", SQLMESH_MACRO_PREFIX))
-            or self._curr.token_type not in self.RESERVED_TOKENS
+            or self._curr.token_type not in self.RESERVED_TOKENS  # ty:ignore[unresolved-attribute]
         )
     ):
         this = identifier.name
         brace = False
 
-        if self._prev.text == "{":
+        if self._prev.text == "{":  # ty:ignore[unresolved-attribute]
             this += "{"
             brace = True
         else:
-            if self._prev.text == SQLMESH_MACRO_PREFIX:
+            if self._prev.text == SQLMESH_MACRO_PREFIX:  # ty:ignore[unresolved-attribute]
                 this += "@"
             if self._match(TokenType.L_BRACE):
                 this += "{"
@@ -213,10 +213,10 @@ def _parse_id_var(
 
 
 def _parse_macro(self: Parser, keyword_macro: str = "") -> t.Optional[exp.Expression]:
-    if self._prev.text != SQLMESH_MACRO_PREFIX:
+    if self._prev.text != SQLMESH_MACRO_PREFIX:  # ty:ignore[unresolved-attribute]
         return self._parse_parameter()
 
-    comments = self._prev.comments
+    comments = self._prev.comments  # ty:ignore[unresolved-attribute]
     index = self._index
     field = self._parse_primary() or self._parse_function(functions={}) or self._parse_id_var()
 
@@ -467,7 +467,7 @@ def _parse_props(self: Parser) -> t.Optional[exp.Expression]:
 
     if name == "path" and value:
         # Make sure if we get a windows path that it is converted to posix
-        value = exp.Literal.string(value.this.replace("\\", "/"))  # type: ignore
+        value = exp.Literal.string(value.this.replace("\\", "/"))
 
     return self.expression(exp.Property, this=name, value=value)
 
@@ -484,7 +484,10 @@ def _parse_types(
     )
 
     if schema and parsed_type:
-        parsed_type.meta["sql"] = self._find_sql(start, self._prev)
+        parsed_type.meta["sql"] = self._find_sql(
+            start,  # ty:ignore[invalid-argument-type]
+            self._prev,  # ty:ignore[invalid-argument-type]
+        )
 
     return parsed_type
 
@@ -516,11 +519,12 @@ def _parse_table_parts(
         # These cases can unambiguously be parsed using the base `_parse_table_parts`, as there
         # is no overlap with staged files https://docs.snowflake.com/en/user-guide/querying-stage
         if (
-            self._prev.token_type == TokenType.STRING
+            self._prev.token_type == TokenType.STRING  # ty:ignore[unresolved-attribute]
             or "{" in name
             or (
                 self._curr
-                and self._prev.token_type in (TokenType.L_PAREN, TokenType.R_PAREN)
+                and self._prev.token_type  # ty:ignore[unresolved-attribute]
+                in (TokenType.L_PAREN, TokenType.R_PAREN)
                 and self._curr.text.upper() not in ("FILE_FORMAT", "PATTERN")
                 and not (table.args.get("format") or table.args.get("pattern"))
             )
@@ -593,7 +597,10 @@ def _create_parser(expression_type: t.Type[exp.Expression], table_keys: t.List[s
 
             if key in table_keys:
                 value = self._parse_table_parts()
-                if value and self._prev.token_type == TokenType.STRING:
+                if (
+                    value
+                    and self._prev.token_type == TokenType.STRING  # ty:ignore[unresolved-attribute]
+                ):
                     self.raise_error(
                         f"'{key}' property cannot be a string value: {value}. "
                         "Please use the identifier syntax instead, e.g. foo.bar instead of 'foo.bar'"
@@ -642,7 +649,10 @@ def _create_parser(expression_type: t.Type[exp.Expression], table_keys: t.List[s
                 value = self._parse_bracket(self._parse_field(any_token=True))
 
             if isinstance(value, exp.Expression):
-                value.meta["sql"] = self._find_sql(start, self._prev)
+                value.meta["sql"] = self._find_sql(
+                    start,  # ty:ignore[invalid-argument-type]
+                    self._prev,  # ty:ignore[invalid-argument-type]
+                )
 
             expressions.append(self.expression(exp.Property, this=key, value=value))
 
@@ -725,7 +735,7 @@ def _whens_sql(self: Generator, expression: exp.Whens) -> str:
 
 
 def _override(klass: t.Type[Tokenizer | Parser], func: t.Callable) -> None:
-    name = func.__name__
+    name = func.__name__  # ty:ignore[unresolved-attribute]
     setattr(klass, f"_{name}", getattr(klass, name))
     setattr(klass, name, func)
 

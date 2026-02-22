@@ -373,8 +373,8 @@ The `filesystems` accepts a list of file systems to register in the DuckDB conne
             client_id: {{ env_var('AZURE_CLIENT_ID') }}
             client_secret: {{ env_var('AZURE_CLIENT_SECRET') }}
             tenant_id: {{ env_var('AZURE_TENANT_ID') }}
-            # anon: False # To use azure.identity.DefaultAzureCredential authentication 
+            # anon: False # To use azure.identity.DefaultAzureCredential authentication
     ```
 
 
-Refer to the documentation for `fsspec` [fsspec.filesystem](https://filesystem-spec.readthedocs.io/en/latest/api.html#fsspec.filesystem) and `adlfs` [adlfs.AzureBlobFileSystem](https://fsspec.github.io/adlfs/api/#api-reference) for a full list of storage options. 
+Refer to the documentation for `fsspec` [fsspec.filesystem](https://filesystem-spec.readthedocs.io/en/latest/api.html#fsspec.filesystem) and `adlfs` [adlfs.AzureBlobFileSystem](https://fsspec.github.io/adlfs/api/#api-reference) for a full list of storage options.

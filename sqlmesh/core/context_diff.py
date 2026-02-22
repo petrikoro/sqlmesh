@@ -27,7 +27,7 @@ from sqlmesh.utils.pydantic import PydanticModel
 if sys.version_info >= (3, 12):
     from importlib import metadata
 else:
-    import importlib_metadata as metadata  # type: ignore
+    import importlib_metadata as metadata
 
 
 if t.TYPE_CHECKING:
@@ -250,7 +250,7 @@ class ContextDiff(PydanticModel):
             requirements=requirements,
             diff_rendered=diff_rendered,
             previous_environment_statements=previous_environment_statements,
-            environment_statements=environment_statements,
+            environment_statements=environment_statements or [],
             previous_gateway_managed_virtual_layer=env.gateway_managed if env else False,
             gateway_managed_virtual_layer=gateway_managed_virtual_layer,
         )

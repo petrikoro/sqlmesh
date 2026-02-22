@@ -561,7 +561,7 @@ When the input format is `csv`, the data can be specified inline under `rows` :
 ```
 
 ### `<test_name>.inputs.<upstream_model>.format`
-  
+
 The optional `format` key allows for control over how the input data is loaded.
 
 ```yaml linenums="1"
@@ -572,13 +572,13 @@ The optional `format` key allows for control over how the input data is loaded.
 Currently, the following formats are supported: `yaml` (default), `csv`.
 
 ### `<test_name>.inputs.<upstream_model>.csv_settings`
-  
+
 When the`format` is CSV, you can control the behaviour of data loading under `csv_settings`:
 
 ```yaml linenums="1"
     <upstream_model>:
       format: csv
-      csv_settings: 
+      csv_settings:
         sep: "#"
         skip_blank_lines: true
       rows: |
@@ -588,11 +588,11 @@ When the`format` is CSV, you can control the behaviour of data loading under `cs
 ```
 
 Learn more about the [supported CSV settings](https://pandas.pydata.org/docs/reference/api/pandas.read_csv.html).
-  
+
 ### `<test_name>.inputs.<upstream_model>.path`
 
 The optional `path` key specifies the pathname of the data to be loaded.
-  
+
 ```yaml linenums="1"
     <upstream_model>:
       path: filepath/test_data.yaml

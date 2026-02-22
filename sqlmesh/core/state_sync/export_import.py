@@ -37,7 +37,7 @@ class SQLMeshJSONStreamEncoder(JSONStreamEncoder):
 
 def _dump_pydantic_model(model: PydanticModel) -> t.Dict[str, t.Any]:
     dump_args: t.Dict[str, t.Any] = PYDANTIC_DEFAULT_ARGS
-    return model.model_dump(mode="json", **dump_args)
+    return model.model_dump(mode="json", **dump_args)  # ty:ignore[invalid-argument-type]
 
 
 def _export(state_stream: StateStream, importable: bool, console: Console) -> StreamableDict:

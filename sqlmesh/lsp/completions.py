@@ -81,7 +81,7 @@ def get_macros(
     try:
         if context is not None:
             for name, m in context.context._macros.items():
-                macros[name] = getattr(m.func, "__doc__", None)
+                macros[name] = getattr(m.func, "__doc__", None)  # ty:ignore[unresolved-attribute]
     except Exception:
         pass
 

@@ -599,7 +599,7 @@ class GrantsFromInfoSchemaMixin(EngineAdapter):
                     )
                     for principal in principals
                 ]
-                expressions.append(dcl_cmd(**args))  # type: ignore[arg-type]
+                expressions.append(dcl_cmd(**args))
             else:
                 for principal in principals:
                     args["principals"] = [
@@ -608,7 +608,7 @@ class GrantsFromInfoSchemaMixin(EngineAdapter):
                             dialect=self.dialect,
                         )
                     ]
-                    expressions.append(dcl_cmd(**args))  # type: ignore[arg-type]
+                    expressions.append(dcl_cmd(**args))
 
         return expressions
 

@@ -59,7 +59,7 @@ cicd_bot:
       python: full
       sql: full
       seed: full
-    default_pr_start: 
+    default_pr_start:
     enable_deploy_command: true
     skip_pr_backfill: false
     pr_include_unmodified: true
@@ -269,7 +269,7 @@ plan:
     sql: off
     seed: full
   include_unmodified: true
-                                          
+
 cicd_bot:
   type: github
 

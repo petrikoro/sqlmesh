@@ -149,7 +149,7 @@ class AthenaEngineAdapter(PandasNativeFetchDFSupportMixin, RowDiffMixin):
         )
         result = self.fetchdf(query, quote_identifiers=True)
         return {
-            str(r.column_name): exp.DataType.build(str(r.data_type))
+            str(r.column_name): exp.DataType.build(str(r.data_type))  # type: ignore
             for r in result.itertuples(index=False)
         }
 
@@ -616,7 +616,7 @@ class AthenaEngineAdapter(PandasNativeFetchDFSupportMixin, RowDiffMixin):
             region_name=conn.region_name,
             config=conn.config,
             **conn._client_kwargs,
-        )  # type: ignore
+        )
 
     def get_current_catalog(self) -> t.Optional[str]:
         return self.connection.catalog_name

@@ -313,7 +313,7 @@ def _process_column_references(
     for column in scope.find_all(exp.Column):
         if column.table:
             if reference_type == "cte":
-                if column.table == reference_name:
+                if column.table == reference_name and cte_target_range is not None:
                     table_range = _get_column_table_range(column, read_file)
                     references.append(
                         CTEReference(
@@ -413,7 +413,7 @@ def get_yaml_model_name_ranges(path: Path) -> t.Optional[t.Dict[str, Range]]:
     model_name_ranges = {}
     for item in data:
         if isinstance(item, dict):
-            position_data = item.lc.data["name"]  # type: ignore
+            position_data = item.lc.data["name"]
             start = Position(line=position_data[2], character=position_data[3])
             end = Position(line=position_data[2], character=position_data[3] + len(item["name"]))
             name = item.get("name")

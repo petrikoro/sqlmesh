@@ -308,14 +308,14 @@ def test_merge_pr_has_non_breaking_change(
 
     expected_prod_plan_directly_modified_summary = """**Directly Modified:**
 * `memory.sushi.waiter_revenue_by_day` (Non-breaking)
-  
+
   ```diff
-  --- 
-  
-  +++ 
-  
+  ---
+
+  +++
+
   @@ -17,7 +17,8 @@
-  
+
    SELECT
      CAST(o.waiter_id AS INT) AS waiter_id,
      CAST(SUM(oi.quantity * i.price) AS DOUBLE) AS revenue,
@@ -521,14 +521,14 @@ def test_merge_pr_has_non_breaking_change_diff_start(
 
     expected_prod_plan_directly_modified_summary = """**Directly Modified:**
 * `memory.sushi.waiter_revenue_by_day` (Non-breaking)
-  
+
   ```diff
-  --- 
-  
-  +++ 
-  
+  ---
+
+  +++
+
   @@ -17,7 +17,8 @@
-  
+
    SELECT
      CAST(o.waiter_id AS INT) AS waiter_id,
      CAST(SUM(oi.quantity * i.price) AS DOUBLE) AS revenue,
@@ -1048,14 +1048,14 @@ def test_no_merge_since_no_deploy_signal(
 
     expected_prod_plan_directly_modified_summary = """**Directly Modified:**
 * `memory.sushi.waiter_revenue_by_day` (Non-breaking)
-  
+
   ```diff
-  --- 
-  
-  +++ 
-  
+  ---
+
+  +++
+
   @@ -17,7 +17,8 @@
-  
+
    SELECT
      CAST(o.waiter_id AS INT) AS waiter_id,
      CAST(SUM(oi.quantity * i.price) AS DOUBLE) AS revenue,
@@ -1250,14 +1250,14 @@ def test_no_merge_since_no_deploy_signal_no_approvers_defined(
     assert GithubCheckConclusion(prod_plan_preview_checks_runs[2]["conclusion"]).is_success
     expected_prod_plan_directly_modified_summary = """**Directly Modified:**
 * `memory.sushi.waiter_revenue_by_day` (Non-breaking)
-  
+
   ```diff
-  --- 
-  
-  +++ 
-  
+  ---
+
+  +++
+
   @@ -17,7 +17,8 @@
-  
+
    SELECT
      CAST(o.waiter_id AS INT) AS waiter_id,
      CAST(SUM(oi.quantity * i.price) AS DOUBLE) AS revenue,
@@ -1434,14 +1434,14 @@ def test_deploy_comment_pre_categorized(
     assert GithubCheckConclusion(prod_plan_preview_checks_runs[2]["conclusion"]).is_success
     expected_prod_plan_directly_modified_summary = """**Directly Modified:**
 * `memory.sushi.waiter_revenue_by_day` (Non-breaking)
-  
+
   ```diff
-  --- 
-  
-  +++ 
-  
+  ---
+
+  +++
+
   @@ -17,7 +17,8 @@
-  
+
    SELECT
      CAST(o.waiter_id AS INT) AS waiter_id,
      CAST(SUM(oi.quantity * i.price) AS DOUBLE) AS revenue,
@@ -1808,14 +1808,14 @@ def test_overlapping_changes_models(
 
     expected_prod_plan_directly_modified_summary = """**Directly Modified:**
 * `memory.sushi.customers` (Non-breaking)
-  
+
   ```diff
-  --- 
-  
-  +++ 
-  
+  ---
+
+  +++
+
   @@ -32,7 +32,8 @@
-  
+
    SELECT DISTINCT
      CAST(o.customer_id AS INT) AS customer_id,
      m.status,
@@ -1974,9 +1974,9 @@ def test_pr_add_model(
         """
         MODEL (
             name sushi.cicd_test_model,
-            kind FULL                          
+            kind FULL
         );
-                
+
         select 1;
         """
     )
@@ -2359,14 +2359,14 @@ def test_has_required_approval_but_not_base_branch(
     assert GithubCheckConclusion(prod_plan_preview_checks_runs[2]["conclusion"]).is_success
     expected_prod_plan_directly_modified_summary = """**Directly Modified:**
 * `memory.sushi.waiter_revenue_by_day` (Non-breaking)
-  
+
   ```diff
-  --- 
-  
-  +++ 
-  
+  ---
+
+  +++
+
   @@ -17,7 +17,8 @@
-  
+
    SELECT
      CAST(o.waiter_id AS INT) AS waiter_id,
      CAST(SUM(oi.quantity * i.price) AS DOUBLE) AS revenue,

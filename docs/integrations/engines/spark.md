@@ -16,10 +16,10 @@ NOTE: Spark may not be used for the SQLMesh [state connection](../../reference/c
 
 ## Catalog Support
 
-SQLMesh's Spark integration is only designed/tested with a single catalog usage in mind. 
+SQLMesh's Spark integration is only designed/tested with a single catalog usage in mind.
 Therefore all SQLMesh models must be defined with a single catalog.
 
 If `catalog` is not set, then the behavior changes based on spark release:
 
 * If >=3.4, then the default catalog is determined at runtime
-* If <3.4, then the default catalog is `spark_catalog` 
+* If <3.4, then the default catalog is `spark_catalog`

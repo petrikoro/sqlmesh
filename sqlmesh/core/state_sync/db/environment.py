@@ -286,12 +286,16 @@ class EnvironmentState:
 
     def _environment_from_row(self, row: t.Tuple[str, ...]) -> Environment:
         return Environment(
-            **{field: row[i] for i, field in enumerate(sorted(Environment.all_fields()))}
+            **{
+                field: row[i] for i, field in enumerate(sorted(Environment.all_fields()))
+            }  # ty:ignore[invalid-argument-type]
         )
 
     def _environment_summmary_from_row(self, row: t.Tuple[str, ...]) -> EnvironmentSummary:
         return EnvironmentSummary(
-            **{field: row[i] for i, field in enumerate(sorted(EnvironmentSummary.all_fields()))}
+            **{
+                field: row[i] for i, field in enumerate(sorted(EnvironmentSummary.all_fields()))
+            }  # ty:ignore[invalid-argument-type]
         )
 
     def _environments_query(

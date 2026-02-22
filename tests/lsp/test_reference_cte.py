@@ -3,7 +3,7 @@ from sqlmesh.core.context import Context
 from sqlmesh.lsp.context import LSPContext, ModelTarget
 from sqlmesh.lsp.reference import CTEReference, get_references
 from sqlmesh.lsp.uri import URI
-from lsprotocol.types import Range, Position
+from sqlmesh.core.linter.rule import Range, Position
 import typing as t
 
 

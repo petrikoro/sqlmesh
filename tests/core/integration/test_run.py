@@ -215,7 +215,7 @@ def test_snapshot_triggers(init_and_plan_context: t.Callable, mocker: MockerFixt
 
     scheduler = context.scheduler()
 
-    import sqlmesh
+    import sqlmesh.core.scheduler
 
     spy = mocker.spy(sqlmesh.core.scheduler.Scheduler, "run_merged_intervals")
 

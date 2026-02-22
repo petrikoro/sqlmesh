@@ -147,7 +147,7 @@ class ModelMeta(_Node):
             return normalize_identifiers(value, dialect=dialect) if normalize else value
 
         if isinstance(v, exp.Paren):
-            v = [v.unnest()]
+            v = [v.unnest()]  # ty:ignore[invalid-assignment]
 
         if isinstance(v, (exp.Tuple, exp.Array)):
             return [_normalize(e).name for e in v.expressions]
@@ -417,7 +417,7 @@ class ModelMeta(_Node):
             if (
                 getattr(self, field, None)
                 and not kind.is_materialized
-                and not (kind.is_view and kind.materialized)
+                and not (kind.is_view and kind.materialized)  # ty:ignore[unresolved-attribute]
             ):
                 name = field[:-1] if field.endswith("_") else field
                 raise ValueError(f"{name} field cannot be set for {kind.name} models")

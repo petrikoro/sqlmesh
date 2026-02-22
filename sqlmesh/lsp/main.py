@@ -342,7 +342,7 @@ class SQLMeshLanguageServer:
             context = self._context_get_or_load()
             lineage = model_lineage(params.modelName, context.context)
             non_set_lineage = {k: v for k, v in lineage.items() if v is not None}
-            return ApiResponseGetLineage(data=non_set_lineage)
+            return ApiResponseGetLineage(data=non_set_lineage)  # ty:ignore[invalid-argument-type]
         except Exception as e:
             ls.log_trace(f"Error getting model lineage: {e}")
             return ApiResponseGetLineage(response_error=str(e), data={})
@@ -417,7 +417,10 @@ class SQLMeshLanguageServer:
                         if hasattr(self.context_state, "context")
                         else None
                     )
-                    self.context_state = ContextFailed(error=e, context=context)
+                    self.context_state = ContextFailed(
+                        error=e,
+                        context=context,  # ty:ignore[invalid-argument-type]
+                    )
             else:
                 # If there's no context, reset to NoContext and try to create one from scratch
                 ls.log_trace("No partial context available, attempting fresh creation")
@@ -461,7 +464,11 @@ class SQLMeshLanguageServer:
         # Only publish diagnostics if client doesn't support pull diagnostics
         if not self.client_supports_pull_diagnostics:
             if hasattr(self.context_state, "lsp_context"):
-                diagnostics = self.context_state.lsp_context.lint_model(uri)
+                diagnostics = (
+                    self.context_state.lsp_context.lint_model(  # ty:ignore[unresolved-attribute]
+                        uri
+                    )
+                )
                 ls.publish_diagnostics(
                     document_uri,
                     LSPContext.diagnostics_to_lsp_diagnostics(diagnostics),

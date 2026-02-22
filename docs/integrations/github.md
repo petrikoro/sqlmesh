@@ -65,9 +65,9 @@ There are two fundamental ways the bot can be configured: synchronized or desync
 
 ### Synchronized vs. Desynchronized Deployments
 
-Typically, CI/CD workflows for data projects follow a flow where code is merged into a main branch and then the production datasets that are represented by the code in main are **eventually** updated to match the code. 
+Typically, CI/CD workflows for data projects follow a flow where code is merged into a main branch and then the production datasets that are represented by the code in main are **eventually** updated to match the code.
 This could either be on merge, and therefore they will be updated after the refresh job completes, or it could be on a schedule where the refresh job is run on a schedule.
-Either way the data in production is **lagging** behind the code in main and therefore code and data are **desynchronized**. 
+Either way the data in production is **lagging** behind the code in main and therefore code and data are **desynchronized**.
 ![Desynchronized](github/cicd_bot_desync.png)
 The advantage though of this approach is that users just need to merge a branch in order to see their changes **eventually** represented in production.
 The disadvantage is that it can be difficult for users to know the current state of production is and when their changes will be live.
@@ -99,7 +99,7 @@ Regardless of signal approach being used, the bot needs to be configured to use 
     ```python linenums="1"
     from sqlmesh.integrations.github.cicd.config import GithubCICDBotConfig, MergeMethod
     from sqlmesh.core.config import Config
-    
+
     config = Config(
         cicd_bot=GithubCICDBotConfig(
             merge_method=MergeMethod.SQUASH
@@ -111,7 +111,7 @@ In this example we configured the merge method to be `squash`. See [Bot Configur
 
 #### Required Approval Signal
 
-One way to signal to SQLMesh that a PR is ready to go to production is through the use of "Required Approvers". 
+One way to signal to SQLMesh that a PR is ready to go to production is through the use of "Required Approvers".
 In this approach users configure their SQLMesh project to list users that are designated as "Required Approver" and then when the bot detects an approval was received from one of these individuals then it determines that it is time to deploy to production.
 The bot will only do the deploy to prod if the base branch is a production branch (as defined in the bot's configuration but defaults to either `main` or `master`).
 This pattern can be a great fit for teams that already have an approval process like this in place and therefore it actually removes an extra step from either the author or the approver since SQLMesh will automate the deployment and merge until of it having to be manually done.
@@ -135,7 +135,7 @@ In order to configure this pattern, you need to define a user in your SQLMesh pr
     ```python linenums="1"
     from sqlmesh.core.config import Config
     from sqlmesh.core.user import User, UserRole
-    
+
     config = Config(
         users=[
             User(
@@ -147,7 +147,7 @@ In order to configure this pattern, you need to define a user in your SQLMesh pr
     )
     ```
 
-The GitHub Actions workflow needs to be updated to trigger the action based on if a pull request review has come in. 
+The GitHub Actions workflow needs to be updated to trigger the action based on if a pull request review has come in.
 
 ```yaml linenums="1"
 on:
@@ -169,12 +169,12 @@ Now if the bot detects an approval from this user then it will deploy the change
 
 In this approach users can issue a `/deploy` command to the bot to signal that they want the changes in the PR to be deployed to production.
 This pattern is more flexible than the required approval pattern.
-Deploy command signal can be used alongside the required approval signal or on its own. 
+Deploy command signal can be used alongside the required approval signal or on its own.
 The deploy command, if issued, overrides the required approval signal and will deploy the changes to production and merge the PR.
 
 #### Deploy Command Configuration
 
-This command must be enabled in the bot's configuration. 
+This command must be enabled in the bot's configuration.
 
 === "YAML"
 
@@ -190,7 +190,7 @@ This command must be enabled in the bot's configuration.
     ```python linenums="1"
     from sqlmesh.integrations.github.cicd.config import GithubCICDBotConfig, MergeMethod
     from sqlmesh.core.config import Config
-    
+
     config = Config(
         cicd_bot=GithubCICDBotConfig(
             enable_deploy_command=True
@@ -201,7 +201,7 @@ This command must be enabled in the bot's configuration.
 
 Optionally, a `command_namespace` can be configured to avoid clashing with other bots. See [Bot Configuration](#bot-configuration) for more details on the `command_namespace` option.
 
-The GitHub Actions workflow needs to be updated to trigger the action based on if a comment has been created. 
+The GitHub Actions workflow needs to be updated to trigger the action based on if a comment has been created.
 
 ```yaml linenums="1"
 on:
@@ -278,7 +278,7 @@ Below is an example of how to define the default config for the bot in either YA
     ```python linenums="1"
     from sqlmesh.integrations.github.cicd.config import GithubCICDBotConfig
     from sqlmesh.core.config import Config
-    
+
     config = Config(
         cicd_bot=GithubCICDBotConfig()
     )
@@ -330,7 +330,7 @@ Example with all properties defined:
     ```python linenums="1"
     from sqlmesh.integrations.github.cicd.config import GithubCICDBotConfig, MergeMethod
     from sqlmesh.core.config import AutoCategorizationMode, CategorizerConfig, Config
-    
+
     config = Config(
         cicd_bot=GithubCICDBotConfig(
             invalidate_environment_after_deploy=False,
@@ -353,7 +353,7 @@ Example with all properties defined:
 
 ## Bot Output
 
-Step outputs are created by the bot that capture the status of each of the checks that reach a conclusion in a run. 
+Step outputs are created by the bot that capture the status of each of the checks that reach a conclusion in a run.
 These can be used to potentially trigger follow up steps in the workflow.
 These are the possible outputs (based on how the bot is configured) that are created by the bot:
 
@@ -364,7 +364,7 @@ These are the possible outputs (based on how the bot is configured) that are cre
 * `prod_plan_preview`
 * `prod_environment_synced`
 
-[There are many possible conclusions](https://github.com/TobikoData/sqlmesh/blob/main/sqlmesh/integrations/github/cicd/controller.py#L96-L102) so the best use case for this is likely to check for `success` conclusion in order to potentially run follow up steps. 
+[There are many possible conclusions](https://github.com/TobikoData/sqlmesh/blob/main/sqlmesh/integrations/github/cicd/controller.py#L96-L102) so the best use case for this is likely to check for `success` conclusion in order to potentially run follow up steps.
 Note that in error cases conclusions may not be set and therefore you will get an empty string.
 
 Example of running a step after pr environment has been synced:
@@ -380,7 +380,7 @@ Example of running a step after pr environment has been synced:
 In addition, there are custom outputs listed below:
 
 * `created_pr_environment` - set to `"true"` (a string with a value of `true`) if a PR environment was created for the first time. It is absent, or considered empty string if you check for it, if it is not created for the first time
-* `pr_environment_name` - the name of the PR environment. It is output whenever PR environment synced check reaches a conclusion. Therefore make sure to check the status of `created_pr_environment` or `pr_environment_synced` before acting on this output 
+* `pr_environment_name` - the name of the PR environment. It is output whenever PR environment synced check reaches a conclusion. Therefore make sure to check the status of `created_pr_environment` or `pr_environment_synced` before acting on this output
 
 Note: The `linter` step will run only if it's enabled in the project's configuration (`config.yaml` / `config.py`). The step will fail if the linter finds errors, otherwise it'll output only the warnings.
 

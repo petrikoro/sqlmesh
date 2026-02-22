@@ -19,7 +19,7 @@ def macro_evaluator() -> MacroEvaluator:
     def filter_country(
         evaluator: MacroEvaluator, expression: exp.Condition, country: exp.Literal
     ) -> exp.Condition:
-        return t.cast(exp.Condition, exp.and_(expression, exp.column("country").eq(country)))
+        return exp.and_(expression, exp.column("country").eq(country))
 
     @macro("UPPER")
     def upper_case(evaluator: MacroEvaluator, expression: exp.Condition) -> str:

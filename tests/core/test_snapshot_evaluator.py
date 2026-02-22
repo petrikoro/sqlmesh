@@ -1420,7 +1420,7 @@ def test_migrate(mocker: MockerFixture, make_snapshot, make_mocked_engine_adapte
             DataObject(
                 schema="sqlmesh__test_schema",
                 name=f"test_schema__test_model__{snapshot.version}",
-                type="table",
+                type=DataObjectType.TABLE,
             )
         ],
     )
@@ -1502,7 +1502,7 @@ def test_migrate_view(
             DataObject(
                 schema="sqlmesh__test_schema",
                 name=f"test_schema__test_model__{snapshot.version}",
-                type="view",
+                type=DataObjectType.VIEW,
             )
         ],
     )
@@ -1543,7 +1543,7 @@ def test_migrate_snapshot_data_object_type_mismatch(
             DataObject(
                 schema="sqlmesh__test_schema",
                 name=f"test_schema__test_model__{snapshot.version}",
-                type="view",
+                type=DataObjectType.VIEW,
             )
         ],
     )

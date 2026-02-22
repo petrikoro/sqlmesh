@@ -1,2 +1,0 @@
-pyproject.toml
-sqlmesh/cli/main.py

@@ -34,10 +34,10 @@ def load_metric_ddl(
             ),
             **{prop.name.lower(): prop.args.get("value") for prop in expression.expressions},
             **kwargs,
-        }
+        }  # ty:ignore[invalid-argument-type]
     )
 
-    metric._path = path
+    metric._path = path  # ty:ignore[invalid-assignment]
 
     return metric
 
@@ -134,7 +134,7 @@ class MetricMeta(PydanticModel, frozen=True):
             expanded = exp.alias_(self.expression, self.name)
 
         metric = Metric(**self.dict(), expanded=expanded)
-        metric._path = self._path
+        metric._path = self._path  # ty:ignore[invalid-assignment]
         return metric
 
 

@@ -1,4 +1,4 @@
-from lsprotocol.types import Position
+from sqlmesh.core.linter.rule import Position
 from sqlmesh.core.context import Context
 from sqlmesh.lsp.context import LSPContext, ModelTarget
 from sqlmesh.lsp.reference import get_cte_references

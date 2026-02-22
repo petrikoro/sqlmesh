@@ -36,7 +36,7 @@ def lineage(
             scope = None
 
     if not query or not scope:
-        query = t.cast(exp.Query, model.render_query_or_raise().copy())
+        query = model.render_query_or_raise().copy()
 
         if model.managed_columns:
             query = query.select(
@@ -52,7 +52,11 @@ def lineage(
             query,
             dialect=model.dialect,
             schema=normalize_mapping_schema(model.mapping_schema, dialect=model.dialect),
-            **{"validate_qualify_columns": False, "infer_schema": True, **kwargs},
+            **{
+                "validate_qualify_columns": False,
+                "infer_schema": True,
+                **kwargs,
+            },  # ty:ignore[invalid-argument-type]
         )
 
         scope = build_scope(query)

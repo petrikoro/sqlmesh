@@ -108,8 +108,8 @@ class MySQLEngineAdapter(
         df = self.fetchdf(query)
         return [
             DataObject(
-                schema=row.schema_name,
-                name=row.name,
+                schema=row.schema_name,  # type: ignore
+                name=row.name,  # type: ignore
                 type=DataObjectType.from_str(row.type),  # type: ignore
             )
             for row in df.itertuples()

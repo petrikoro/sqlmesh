@@ -6,7 +6,7 @@ The example project runs locally on your machine with a DuckDB SQL engine, and S
 
 All you need to do is install SQLMesh on your machine - get started by ensuring your system meets the basic [prerequisites for using SQLMesh](./prerequisites.md).
 
-Head over to the [CLI Quickstart](./quickstart/cli.md) or check out the video below. 
+Head over to the [CLI Quickstart](./quickstart/cli.md) or check out the video below.
 
 ## Video Quickstart
 

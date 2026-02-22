@@ -3,19 +3,19 @@ Author: Denis Gribanov <itsme@petrikoro.ru>
 Date:   Sat Feb 14 17:35:24 2026 +0300
 
     chore(fork): deprecate webserver and vs code extension
-    
+
     * chore: add api module
-    
+
     * docs: update docs and agents
-    
+
     * chore: update deps
-    
+
     * chore: remove cli and add tests
-    
+
     * chore: remove webserver components
-    
+
     * chore: refactor lsp and vs code extension to support new api
-    
+
     * chore: remove vs code extension
 
 .nvmrc

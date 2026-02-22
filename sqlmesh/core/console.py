@@ -813,10 +813,12 @@ class NoopConsole(Console):
     ) -> None:
         pass
 
-    def log_error(self, message: str) -> None:
+    def log_error(self, message: str) -> None:  # ty:ignore[invalid-method-override]
         pass
 
-    def log_warning(self, short_message: str, long_message: t.Optional[str] = None) -> None:
+    def log_warning(
+        self, short_message: str, long_message: t.Optional[str] = None
+    ) -> None:  # ty:ignore[invalid-method-override]
         logger.warning(long_message or short_message)
 
     def log_success(self, message: str) -> None:
@@ -2328,10 +2330,12 @@ class TerminalConsole(Console):
                 format_additive_change_msg(snapshot_name, alter_operations, dialect, error)
             )
 
-    def log_error(self, message: str) -> None:
+    def log_error(self, message: str) -> None:  # ty:ignore[invalid-method-override]
         self._print(f"[red]{message}[/red]")
 
-    def log_warning(self, short_message: str, long_message: t.Optional[str] = None) -> None:
+    def log_warning(
+        self, short_message: str, long_message: t.Optional[str] = None
+    ) -> None:  # ty:ignore[invalid-method-override]
         logger.warning(long_message or short_message)
         if not self.ignore_warnings:
             if long_message:
@@ -2838,7 +2842,7 @@ class TerminalConsole(Console):
         if unittest_char_separator:
             self._print(f"\n{unittest.TextTestResult.separator1}\n\n", end="")
 
-        for (test_case, failure), test_failure_tables in zip_longest(  # type: ignore
+        for (test_case, failure), test_failure_tables in zip_longest(
             result.failures, result.failure_tables
         ):
             self._print(unittest.TextTestResult.separator2)
@@ -2934,8 +2938,8 @@ class NotebookMagicConsole(TerminalConsole):
 
     def _apply(self, button: widgets.Button) -> None:
         button.disabled = True
-        with button.output:
-            button.plan_builder.apply()
+        with button.output:  # ty:ignore[unresolved-attribute]
+            button.plan_builder.apply()  # ty:ignore[unresolved-attribute]
 
     def _prompt_promote(self, plan_builder: PlanBuilder) -> None:
         import ipywidgets as widgets
@@ -2952,9 +2956,9 @@ class NotebookMagicConsole(TerminalConsole):
         output = widgets.Output()
         self._add_to_dynamic_options(output)
 
-        button.plan_builder = plan_builder
+        button.plan_builder = plan_builder  # ty:ignore[unresolved-attribute]
         button.on_click(self._apply)
-        button.output = output
+        button.output = output  # ty:ignore[unresolved-attribute]
 
     def _prompt_effective_from(
         self, plan_builder: PlanBuilder, auto_apply: bool, default_catalog: t.Optional[str]
@@ -3085,9 +3089,9 @@ class NotebookMagicConsole(TerminalConsole):
             output = widgets.Output()
             self._add_to_dynamic_options(output)
 
-            button.plan_builder = plan_builder
+            button.plan_builder = plan_builder  # ty:ignore[unresolved-attribute]
             button.on_click(self._apply)
-            button.output = output
+            button.output = output  # ty:ignore[unresolved-attribute]
 
     def _show_options_after_categorization(
         self,
@@ -3582,10 +3586,12 @@ class MarkdownConsole(CaptureTerminalConsole):
         super().stop_promotion_progress(success)
         self._print("\n")
 
-    def log_warning(self, short_message: str, long_message: t.Optional[str] = None) -> None:
+    def log_warning(
+        self, short_message: str, long_message: t.Optional[str] = None
+    ) -> None:  # ty:ignore[invalid-method-override]
         super().log_warning(short_message, long_message, print=not self.warning_capture_only)
 
-    def log_error(self, message: str) -> None:
+    def log_error(self, message: str) -> None:  # ty:ignore[invalid-method-override]
         super().log_error(message, print=not self.error_capture_only)
 
     def log_success(self, message: str) -> None:
@@ -4154,7 +4160,10 @@ def create_console(
     if runtime_env.is_jupyter or runtime_env.is_google_colab:
         rich_console_kwargs["force_jupyter"] = True
     return runtime_env_mapping[runtime_env](
-        **{**{"console": RichConsole(**rich_console_kwargs)}, **kwargs}
+        **{
+            **{"console": RichConsole(**rich_console_kwargs)},
+            **kwargs,
+        }  # ty:ignore[invalid-argument-type]
     )
 
 

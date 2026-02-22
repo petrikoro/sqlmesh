@@ -89,8 +89,8 @@ def _update_model_schemas(
                     futures.remove(future)
                     fqn, entry_name, data_hash, metadata_hash, mapping_schema = future.result()
                     model = models[fqn]
-                    model._data_hash = data_hash
-                    model._metadata_hash = metadata_hash
+                    model._data_hash = data_hash  # ty:ignore[invalid-assignment]
+                    model._metadata_hash = metadata_hash  # ty:ignore[invalid-assignment]
                     if model.mapping_schema != mapping_schema:
                         model.set_mapping_schema(mapping_schema)
                     optimized_query_cache.with_optimized_query(model, entry_name)

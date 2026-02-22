@@ -100,7 +100,7 @@ def make_python_env(
 
         return appears_in_metadata_expression
 
-    expressions = ensure_list(expressions)
+    expressions = ensure_list(expressions)  # ty:ignore[invalid-assignment]
     for expression_metadata in expressions:
         if isinstance(expression_metadata, tuple):
             expression, is_metadata = expression_metadata

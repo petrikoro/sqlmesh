@@ -26,5 +26,3 @@ local_scheme = "no-local-version"
 
 [tool.setuptools.package-data]
 "*" = ["fixtures/**", "*.toml"]
-
-

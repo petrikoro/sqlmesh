@@ -44,10 +44,10 @@ class ModelTextTestResult(unittest.TextTestResult):
             exctype, value, tb = err
             err = (exctype, value, None)  # type: ignore
 
-            if err[0] and issubclass(err[0], test.failureException):
-                self.addFailure(test, err)
+            if err[0] and issubclass(err[0], test.failureException):  # ty:ignore[not-subscriptable]
+                self.addFailure(test, err)  # ty:ignore[invalid-argument-type]
             else:
-                self.addError(test, err)
+                self.addError(test, err)  # ty:ignore[invalid-argument-type]
 
     def _print_char(self, char: str) -> None:
         from sqlmesh.core.console import TerminalConsole

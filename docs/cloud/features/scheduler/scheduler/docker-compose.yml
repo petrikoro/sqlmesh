@@ -9,10 +9,10 @@ services:
       TCLOUD_URL: https://internal.cloud.tobikodata.com/sqlmesh/${ORGANIZATION}/${PROJECT}
       TCLOUD_CLIENT_ID: ${TCLOUD_CLIENT_ID}
       TCLOUD_CLIENT_SECRET: ${TCLOUD_CLIENT_SECRET}
-      
+
       # SQLMesh configuration
       SQLMESH__DEFAULT_GATEWAY: ${DEFAULT_GATEWAY:-GATEWAY_A}
-      
+
       # Example database configuration (adjust for your database)
       # All database parameters below should be customized for your specific setup
       SQLMESH__GATEWAYS__GATEWAY_A__CONNECTION__TYPE: ${DB_TYPE}
@@ -43,10 +43,10 @@ services:
       TCLOUD_URL: https://internal.cloud.tobikodata.com/sqlmesh/${ORGANIZATION}/${PROJECT}
       TCLOUD_CLIENT_ID: ${TCLOUD_CLIENT_ID}
       TCLOUD_CLIENT_SECRET: ${TCLOUD_CLIENT_SECRET}
-      
+
       # SQLMesh configuration
       SQLMESH__DEFAULT_GATEWAY: ${DEFAULT_GATEWAY:-GATEWAY_A}
-      
+
       # Example database configuration (adjust for your database)
       # All database parameters below should be customized for your specific setup
       SQLMESH__GATEWAYS__GATEWAY_A__CONNECTION__TYPE: ${DB_TYPE}

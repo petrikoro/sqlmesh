@@ -89,7 +89,8 @@ def func_globals(func: t.Callable) -> t.Dict[str, t.Any]:
     variables = {}
 
     if hasattr(func, "__code__"):
-        root_node = parse_source(func)
+        fn = t.cast(types.FunctionType, func)
+        root_node = parse_source(fn)
 
         func_args = next(node for node in ast.walk(root_node) if isinstance(node, ast.arguments))
         arg_defaults = (d for d in func_args.defaults + func_args.kw_defaults if d is not None)
@@ -100,15 +101,15 @@ def func_globals(func: t.Callable) -> t.Dict[str, t.Any]:
             n.id for default in arg_defaults for n in ast.walk(default) if isinstance(n, ast.Name)
         ]
 
-        code = func.__code__
+        code = fn.__code__
         for var in (
-            arg_globals + list(_code_globals(code)) + decorator_vars(func, root_node=root_node)
+            arg_globals + list(_code_globals(code)) + decorator_vars(fn, root_node=root_node)
         ):
-            if var in func.__globals__:
-                variables[var] = func.__globals__[var]
+            if var in fn.__globals__:
+                variables[var] = fn.__globals__[var]
 
-        if func.__closure__:
-            for var, value in zip(code.co_freevars, func.__closure__):
+        if fn.__closure__:
+            for var, value in zip(code.co_freevars, fn.__closure__):
                 variables[var] = value.cell_contents
 
     return variables
@@ -267,7 +268,7 @@ def normalize_source(obj: t.Any) -> str:
 
             # remove docstrings
             body = node.body
-            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Str):
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
                 node.body = body[1:]
 
             # remove function return type annotation

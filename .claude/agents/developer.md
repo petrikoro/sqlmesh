@@ -107,4 +107,3 @@ IMPORTANT: you SHOULD NOT refactor out a separate function unless there is a com
 6. **Import And Attribute Errors**: If the code raises `ImportError` or `AttributeError` try running the `make install-dev` command first to make sure all dependencies are up to date
 
 When implementing features, always consider the broader impact on the system, ensure proper error handling, and maintain the high code quality standards established in the project. Your implementations should be production-ready and align with SQLMesh's philosophy of safe, reliable data transformations.
-

@@ -68,7 +68,7 @@ class DatabricksEngineAdapter(SparkEngineAdapter, GrantsFromInfoSchemaMixin):
             return False
 
         try:
-            from databricks.connect import DatabricksSession  # noqa
+            from databricks.connect import DatabricksSession  # noqa  # ty:ignore[unresolved-import]
 
             return True
         except ImportError:
@@ -104,7 +104,7 @@ class DatabricksEngineAdapter(SparkEngineAdapter, GrantsFromInfoSchemaMixin):
         if not self._use_spark_session or self.is_spark_session_connection:
             return
 
-        from databricks.connect import DatabricksSession
+        from databricks.connect import DatabricksSession  # ty:ignore[unresolved-import]
 
         connect_kwargs = dict(
             host=self._extra_config["databricks_connect_server_hostname"],
@@ -216,7 +216,7 @@ class DatabricksEngineAdapter(SparkEngineAdapter, GrantsFromInfoSchemaMixin):
         if self.is_spark_session_connection:
             return super()._fetch_native_df(query, quote_identifiers=quote_identifiers)
         if self._spark_engine_adapter:
-            return self._spark_engine_adapter._fetch_native_df(  # type: ignore
+            return self._spark_engine_adapter._fetch_native_df(
                 query, quote_identifiers=quote_identifiers
             )
         self.execute(query)

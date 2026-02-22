@@ -231,7 +231,7 @@ class BuiltInPlanEvaluator(PlanEvaluator):
                     SnapshotIntervals(
                         name=snapshot.name,
                         identifier=snapshot.identifier,
-                        version=snapshot.version,
+                        version=snapshot.version or "",
                         dev_version=snapshot.dev_version,
                         intervals=intervals if is_deployable else [],
                         dev_intervals=intervals if not is_deployable else [],
@@ -480,7 +480,7 @@ class BuiltInPlanEvaluator(PlanEvaluator):
                     SnapshotIntervals(
                         name=snapshot.name,
                         identifier=snapshot.identifier,
-                        version=snapshot.version,
+                        version=snapshot.version or "",
                         dev_version=snapshot.dev_version,
                         dev_intervals=snapshot.dev_intervals,
                     )

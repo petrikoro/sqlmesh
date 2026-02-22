@@ -5,7 +5,7 @@ import itertools
 import pathlib
 import typing as t
 
-import ruamel
+import ruamel.yaml.comments
 
 from sqlmesh.utils import unique
 from sqlmesh.utils.pydantic import PydanticModel

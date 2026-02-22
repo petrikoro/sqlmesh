@@ -270,7 +270,7 @@ WHERE day BETWEEN @start_ds AND @end_ds
 make a change to it and run the following:
 
 ```bash linenums="1" hl_lines="8"
-$ sqlmesh plan dev --start '1 day ago' 
+$ sqlmesh plan dev --start '1 day ago'
 
 Models:
 └── Added:
@@ -290,9 +290,9 @@ Models:
     └── sqlmesh_example__dev.monthly_model
 Apply - Virtual Update [y/n]: y
 
-[1/1] sqlmesh_example__dev.monthly_model   [insert 2025-06-01 - 2025-06-30]   0.08s   
-Executing model batches ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100.0% • 1/1 • 0:00:00                                                             
-                                                                                                                                                    
+[1/1] sqlmesh_example__dev.monthly_model   [insert 2025-06-01 - 2025-06-30]   0.08s
+Executing model batches ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100.0% • 1/1 • 0:00:00
+
 ✔ Model batches executed
 ```
 
@@ -355,13 +355,13 @@ Some model changes destroy existing data in a table. SQLMesh automatically detec
 
 Forward-only plans treats all of the plan's model changes as forward-only. In these plans, SQLMesh will check all modified incremental models for destructive schema changes, not just forward-only models.
 
-SQLMesh determines what to do for each model based on this setting hierarchy: 
+SQLMesh determines what to do for each model based on this setting hierarchy:
 
 - **For destructive changes**: the [model's `on_destructive_change` value](../guides/incremental_time.md#schema-changes) (if present), the `on_destructive_change` [model defaults](../reference/model_configuration.md#model-defaults) value (if present), and the SQLMesh global default of `error`
 - **For additive changes**: the [model's `on_additive_change` value](../guides/incremental_time.md#schema-changes) (if present), the `on_additive_change` [model defaults](../reference/model_configuration.md#model-defaults) value (if present), and the SQLMesh global default of `allow`
 
-If you want to temporarily allow destructive changes to models that don't allow them, use the `plan` command's `--allow-destructive-model` selector to specify which models. 
-Similarly, if you want to temporarily allow additive changes to models configured with `on_additive_change=error`, use the `--allow-additive-model` selector. 
+If you want to temporarily allow destructive changes to models that don't allow them, use the `plan` command's `--allow-destructive-model` selector to specify which models.
+Similarly, if you want to temporarily allow additive changes to models configured with `on_additive_change=error`, use the `--allow-additive-model` selector.
 
 For example, to allow destructive changes to all models in the `analytics` schema:
 ```bash

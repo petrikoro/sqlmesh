@@ -91,7 +91,7 @@ class DuckDBEngineAdapter(LogicalMergeMixin, GetCurrentCatalogFromFunctionMixin,
             SourceQuery(
                 query_factory=lambda: self._select_columns(target_columns_to_types).from_(
                     temp_table
-                ),  # type: ignore
+                ),
                 cleanup_func=lambda: self.drop_table(temp_table),
             )
         ]
@@ -137,7 +137,7 @@ class DuckDBEngineAdapter(LogicalMergeMixin, GetCurrentCatalogFromFunctionMixin,
         df = self.fetchdf(query)
         return [
             DataObject(
-                catalog=catalog,  # type: ignore
+                catalog=catalog,
                 schema=row.schema,  # type: ignore
                 name=row.name,  # type: ignore
                 type=DataObjectType.from_str(row.type),  # type: ignore
@@ -145,7 +145,9 @@ class DuckDBEngineAdapter(LogicalMergeMixin, GetCurrentCatalogFromFunctionMixin,
             for row in df.itertuples()
         ]
 
-    def _normalize_decimal_value(self, col: exp.Expression, precision: int) -> exp.Expression:
+    def _normalize_decimal_value(
+        self, col: exp.Expression, precision: int
+    ) -> exp.Expression:  # ty:ignore[invalid-method-override]
         """
         duckdb truncates instead of rounding when casting to decimal.
 

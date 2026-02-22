@@ -70,5 +70,7 @@ class VersionState:
             return no_version
 
         return Versions(
-            schema_version=row[0], sqlglot_version=row[1], sqlmesh_version=seq_get(row, 2)
+            schema_version=row[0],
+            sqlglot_version=row[1],
+            sqlmesh_version=seq_get(row, 2),  # ty:ignore[invalid-argument-type]
         )

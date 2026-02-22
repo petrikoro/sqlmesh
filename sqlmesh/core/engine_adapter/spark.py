@@ -201,7 +201,7 @@ class SparkEngineAdapter(
                 if is_struct:
                     expressions.append(spark_types.StructField(col_name, type_func()))  # type: ignore
                 else:
-                    expressions.append(type_func())  # type: ignore
+                    expressions.append(type_func())
             klass = cls._sqlglot_to_spark_complex_mapping[complex_type.this]
             if is_struct:
                 return klass(expressions)
@@ -285,7 +285,7 @@ class SparkEngineAdapter(
 
         def query_factory() -> Query:
             temp_table = self._get_temp_table(target_table or "spark", table_only=True)
-            df.createOrReplaceGlobalTempView(temp_table.sql(dialect=self.dialect))  # type: ignore
+            df.createOrReplaceGlobalTempView(temp_table.sql(dialect=self.dialect))
             temp_table.set("db", "global_temp")
             return exp.select(*self._select_columns(target_columns_to_types)).from_(temp_table)
 
@@ -323,7 +323,7 @@ class SparkEngineAdapter(
             select_columns = self._casted_columns(
                 target_columns_to_types, source_columns=source_columns
             )
-            pyspark_df = pyspark_df.selectExpr(*[x.sql(self.dialect) for x in select_columns])  # type: ignore
+            pyspark_df = pyspark_df.selectExpr(*[x.sql(self.dialect) for x in select_columns])
         return pyspark_df
 
     def _get_temp_table(
@@ -370,7 +370,7 @@ class SparkEngineAdapter(
             return []
         data_objects = []
         catalog = self.get_current_catalog()
-        for row in results:  # type: ignore
+        for row in results:
             row_dict = row.asDict() if not isinstance(row, dict) else row
             if row_dict.get("isTemporary"):
                 continue
@@ -378,7 +378,7 @@ class SparkEngineAdapter(
             data_objects.append(
                 DataObject(
                     catalog=catalog,
-                    schema=schema,
+                    schema=schema,  # ty:ignore[invalid-argument-type]
                     name=row_dict["tableName"],
                     type=(
                         DataObjectType.VIEW
@@ -394,7 +394,7 @@ class SparkEngineAdapter(
             return self.connection.get_current_catalog()
         return super().get_current_catalog()
 
-    def set_current_catalog(self, catalog_name: str) -> None:
+    def set_current_catalog(self, catalog_name: str) -> None:  # ty:ignore[invalid-method-override]
         self.connection.set_current_catalog(catalog_name)
 
     def _get_current_schema(self) -> str:

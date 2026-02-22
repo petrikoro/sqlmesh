@@ -5,7 +5,7 @@ from sqlglot import exp
 from sqlmesh.utils.migration import index_text_type
 
 
-def migrate_schemas(engine_adapter, schema, **kwargs):  # type: ignore
+def migrate_schemas(engine_adapter, schema, **kwargs):
     auto_restatements_table = "_auto_restatements"
     intervals_table = "_intervals"
 
@@ -38,7 +38,7 @@ def migrate_schemas(engine_adapter, schema, **kwargs):  # type: ignore
     engine_adapter.execute(alter_table_exp)
 
 
-def migrate_rows(engine_adapter, schema, **kwargs):  # type: ignore
+def migrate_rows(engine_adapter, schema, **kwargs):
     intervals_table = "_intervals"
 
     if schema:

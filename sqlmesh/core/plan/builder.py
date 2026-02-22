@@ -347,10 +347,10 @@ class PlanBuilder:
             restate_all_snapshots=self._restate_all_snapshots,
             start_override_per_model=self._start_override_per_model,
             end_override_per_model=end_override_per_model,
-            selected_models_to_backfill=self._backfill_models,
+            selected_models_to_backfill=self._backfill_models,  # ty:ignore[invalid-argument-type]
             models_to_backfill=models_to_backfill,
             effective_from=self._effective_from,
-            execution_time=plan_execution_time,
+            execution_time=plan_execution_time,  # ty:ignore[unknown-argument]
             end_bounded=self._end_bounded,
             ensure_finalized_snapshots=self._ensure_finalized_snapshots,
             ignore_cron=self._ignore_cron,

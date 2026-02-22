@@ -156,8 +156,8 @@ class ClickhouseEngineAdapter(EngineAdapterWithIndexSupport, LogicalMergeMixin):
         return [
             DataObject(
                 catalog=None,
-                schema=row.schema_name,
-                name=row.name,
+                schema=row.schema_name,  # type: ignore
+                name=row.name,  # type: ignore
                 type=DataObjectType.from_str(row.type),  # type: ignore
             )
             for row in df.itertuples()
@@ -563,7 +563,7 @@ class ClickhouseEngineAdapter(EngineAdapterWithIndexSupport, LogicalMergeMixin):
         old_table_name: TableName,
         new_table_name: TableName,
     ) -> None:
-        from clickhouse_connect.driver.exceptions import DatabaseError  # type: ignore
+        from clickhouse_connect.driver.exceptions import DatabaseError
 
         old_table_sql = exp.to_table(old_table_name).sql(dialect=self.dialect, identify=True)
         new_table_sql = exp.to_table(new_table_name).sql(dialect=self.dialect, identify=True)
@@ -747,7 +747,7 @@ class ClickhouseEngineAdapter(EngineAdapterWithIndexSupport, LogicalMergeMixin):
         table_engine = self.DEFAULT_TABLE_ENGINE
         if storage_format:
             table_engine = (
-                storage_format.this if isinstance(storage_format, exp.Var) else storage_format  # type: ignore
+                storage_format.this if isinstance(storage_format, exp.Var) else storage_format
             )
         properties.append(exp.EngineProperty(this=table_engine))
 
@@ -800,7 +800,11 @@ class ClickhouseEngineAdapter(EngineAdapterWithIndexSupport, LogicalMergeMixin):
             properties.append(
                 exp.PrimaryKey(
                     expressions=[
-                        exp.to_column(k.name if isinstance(k, exp.Literal) else k)
+                        exp.to_column(
+                            k.name
+                            if isinstance(k, exp.Literal)
+                            else k  # ty:ignore[invalid-argument-type]
+                        )
                         for k in primary_key_vals
                     ]
                 )

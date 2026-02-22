@@ -165,7 +165,7 @@ class RedshiftEngineAdapter(
             )
 
         result = [tuple(row) for row in fetcheddata]
-        return pd.DataFrame(result, columns=columns)
+        return pd.DataFrame(result, columns=columns)  # type: ignore
 
     def _create_table_from_source_queries(
         self,
@@ -355,8 +355,8 @@ class RedshiftEngineAdapter(
         return [
             DataObject(
                 catalog=catalog,
-                schema=row.schema_name,
-                name=row.name,
+                schema=row.schema_name,  # type: ignore
+                name=row.name,  # type: ignore
                 type=DataObjectType.from_str(row.type),  # type: ignore
             )
             for row in df.itertuples()

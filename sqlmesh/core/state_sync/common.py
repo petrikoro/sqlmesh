@@ -107,7 +107,7 @@ class StateStream(abc.ABC):
         snapshots: t.Iterator[Snapshot],
         environments: t.Iterator[EnvironmentWithStatements],
     ) -> "StateStream":
-        class _StateStream(cls):  # type: ignore
+        class _StateStream(cls):
             def __iter__(self) -> t.Iterator[StateStreamContents]:
                 yield VersionsChunk(versions)
 

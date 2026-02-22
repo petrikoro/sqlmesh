@@ -13,10 +13,10 @@ install-doc:
 	$(PIP) install -r ./docs/requirements.txt
 
 install-pre-commit:
-	pre-commit install
+	prek install
 
 style:
-	pre-commit run --all-files
+	prek run --all-files
 
 doc-test:
 	python -m pytest --doctest-modules sqlmesh/core sqlmesh/utils

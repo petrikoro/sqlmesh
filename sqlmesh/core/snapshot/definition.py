@@ -576,9 +576,9 @@ class SnapshotTableInfo(PydanticModel, SnapshotInfoMixin, frozen=True):
         return SnapshotDataVersion(
             fingerprint=self.fingerprint,
             version=self.version,
-            dev_version=self.dev_version,
+            dev_version=self.dev_version,  # ty:ignore[unknown-argument]
             change_category=self.change_category,
-            physical_schema=self.physical_schema,
+            physical_schema=self.physical_schema,  # ty:ignore[unknown-argument]
             dev_table_suffix=self.dev_table_suffix,
             table_naming_convention=self.table_naming_convention,
             virtual_environment_mode=self.virtual_environment_mode,
@@ -606,7 +606,7 @@ class SnapshotTableInfo(PydanticModel, SnapshotInfoMixin, frozen=True):
     def id_and_version(self) -> SnapshotIdAndVersion:
         return SnapshotIdAndVersion(
             name=self.name,
-            kind_name=self.kind_name,
+            kind_name=self.kind_name,  # ty:ignore[unknown-argument]
             identifier=self.identifier,
             version=self.version,
             dev_version=self.dev_version,
@@ -1352,21 +1352,23 @@ class Snapshot(PydanticModel, SnapshotInfoMixin):
             else None
         )
 
+        version = self.version
+        assert version is not None
         return SnapshotTableInfo(
             physical_schema=self.physical_schema,
             name=self.name,
             fingerprint=self.fingerprint,
-            version=self.version,
-            dev_version=self.dev_version,
+            version=version,
+            dev_version=self.dev_version,  # ty:ignore[unknown-argument]
             parents=self.parents,
             previous_versions=self.previous_versions,
             change_category=self.change_category,
             kind_name=self.model_kind_name,
-            node_type=self.node_type,
+            node_type=self.node_type,  # ty:ignore[unknown-argument]
             custom_materialization=custom_materialization,
             dev_table_suffix=self.dev_table_suffix,
             model_gateway=self.model_gateway,
-            table_naming_convention=self.table_naming_convention,  # type: ignore
+            table_naming_convention=self.table_naming_convention,
             forward_only=self.forward_only,
             virtual_environment_mode=self.virtual_environment_mode,
         )
@@ -1374,12 +1376,14 @@ class Snapshot(PydanticModel, SnapshotInfoMixin):
     @property
     def data_version(self) -> SnapshotDataVersion:
         self._ensure_categorized()
+        version = self.version
+        assert version is not None
         return SnapshotDataVersion(
             fingerprint=self.fingerprint,
-            version=self.version,
-            dev_version=self.dev_version,
+            version=version,
+            dev_version=self.dev_version,  # ty:ignore[unknown-argument]
             change_category=self.change_category,
-            physical_schema=self.physical_schema,
+            physical_schema=self.physical_schema,  # ty:ignore[unknown-argument]
             dev_table_suffix=self.dev_table_suffix,
             table_naming_convention=self.table_naming_convention,
             virtual_environment_mode=self.virtual_environment_mode,
@@ -1388,10 +1392,12 @@ class Snapshot(PydanticModel, SnapshotInfoMixin):
     @property
     def snapshot_intervals(self) -> SnapshotIntervals:
         self._ensure_categorized()
+        version = self.version
+        assert version is not None
         return SnapshotIntervals(
             name=self.name,
             identifier=self.identifier,
-            version=self.version,
+            version=version,
             dev_version=self.dev_version,
             intervals=self.intervals.copy(),
             dev_intervals=self.dev_intervals.copy(),
@@ -1481,7 +1487,9 @@ class Snapshot(PydanticModel, SnapshotInfoMixin):
     @property
     def name_version(self) -> SnapshotNameVersion:
         """Returns the name and version of the snapshot."""
-        return SnapshotNameVersion(name=self.name, version=self.version)
+        version = self.version
+        assert version is not None
+        return SnapshotNameVersion(name=self.name, version=version)
 
     @property
     def id_and_version(self) -> SnapshotIdAndVersion:
@@ -1519,7 +1527,7 @@ class Snapshot(PydanticModel, SnapshotInfoMixin):
             or self.model.forward_only
             or bool(self.model.physical_version)
             or not self.virtual_environment_mode.is_full
-        )
+        )  # ty:ignore[invalid-return-type]
 
     @property
     def ttl_ms(self) -> int:
@@ -1585,13 +1593,13 @@ class DeployabilityIndex(PydanticModel, frozen=True):
         return frozenset(
             {
                 (
-                    cls._snapshot_id_key(snapshot_id)  # type: ignore
+                    cls._snapshot_id_key(snapshot_id)
                     if isinstance(snapshot_id, SnapshotId)
                     else snapshot_id
                 )
                 for snapshot_id in v
             }
-        )
+        )  # ty:ignore[invalid-return-type]
 
     def is_deployable(self, snapshot: SnapshotIdLike) -> bool:
         """Returns true if the output produced by the given snapshot in a development environment can be reused
@@ -1675,43 +1683,58 @@ class DeployabilityIndex(PydanticModel, frozen=True):
 
         start_date_cache: t.Optional[t.Dict[str, datetime]] = {}
 
-        dag = snapshots_to_dag(snapshots.values())
+        dag = snapshots_to_dag(list(snapshots.values()))  # ty:ignore[invalid-argument-type]
         for node in dag:
             if node not in snapshots:
                 continue
-            snapshot = snapshots[node]
+            snapshot = snapshots[node]  # ty:ignore[invalid-argument-type]
 
-            if not snapshot.virtual_environment_mode.is_full:
+            if not snapshot.virtual_environment_mode.is_full:  # ty:ignore[unresolved-attribute]
                 # If the virtual environment is not fully enabled, then the snapshot can never be deployable
                 this_deployable = False
             else:
                 # Make sure that the node is deployable according to all its parents
                 this_deployable = all(
                     children_deployability_mapping[p_id]
-                    for p_id in snapshots[node].parents
+                    for p_id in snapshots[  # ty:ignore[invalid-argument-type]
+                        node
+                    ].parents  # ty:ignore[unresolved-attribute]
                     if p_id in children_deployability_mapping
                 )
 
             if this_deployable:
                 is_forward_only_model = (
-                    snapshot.is_model and snapshot.model.forward_only and not snapshot.is_metadata
+                    snapshot.is_model  # ty:ignore[unresolved-attribute]
+                    and snapshot.model.forward_only  # ty:ignore[unresolved-attribute]
+                    and not snapshot.is_metadata  # ty:ignore[unresolved-attribute]
                 )
                 has_auto_restatement = (
-                    snapshot.is_model and snapshot.model.auto_restatement_cron is not None
+                    snapshot.is_model  # ty:ignore[unresolved-attribute]
+                    and snapshot.model.auto_restatement_cron  # ty:ignore[unresolved-attribute]
+                    is not None
                 )
 
                 snapshot_start = start_override_per_model.get(
-                    node.name, start_date(snapshot, snapshots.values(), cache=start_date_cache)
+                    node.name,
+                    start_date(
+                        snapshot,  # ty:ignore[invalid-argument-type]
+                        snapshots.values(),  # ty:ignore[invalid-argument-type]
+                        cache=start_date_cache,
+                    ),
                 )
 
                 is_valid_start = (
-                    snapshot.is_valid_start(start, snapshot_start) if start is not None else True
+                    snapshot.is_valid_start(  # ty:ignore[unresolved-attribute]
+                        start, snapshot_start
+                    )
+                    if start is not None
+                    else True
                 )
 
                 children_deployable = is_valid_start and not has_auto_restatement
                 if (
-                    snapshot.is_forward_only
-                    or snapshot.is_indirect_non_breaking
+                    snapshot.is_forward_only  # ty:ignore[unresolved-attribute]
+                    or snapshot.is_indirect_non_breaking  # ty:ignore[unresolved-attribute]
                     or is_forward_only_model
                     or has_auto_restatement
                     or not is_valid_start
@@ -1720,8 +1743,9 @@ class DeployabilityIndex(PydanticModel, frozen=True):
                     # Similarly, if the model depends on past and the start date is not aligned with the
                     # model's start, we should consider this snapshot non-deployable.
                     this_deployable = False
-                    if not snapshot.is_paused or (
-                        snapshot.is_indirect_non_breaking and snapshot.intervals
+                    if not snapshot.is_paused or (  # ty:ignore[unresolved-attribute]
+                        snapshot.is_indirect_non_breaking  # ty:ignore[unresolved-attribute]
+                        and snapshot.intervals  # ty:ignore[unresolved-attribute]
                     ):
                         # This snapshot represents what's currently deployed in prod.
                         representative_shared_version_ids.add(node)
@@ -1730,7 +1754,9 @@ class DeployabilityIndex(PydanticModel, frozen=True):
                         children_deployable = False
             else:
                 children_deployable = False
-                if not snapshots[node].is_paused:
+                if not snapshots[  # ty:ignore[invalid-argument-type]
+                    node
+                ].is_paused:  # ty:ignore[unresolved-attribute]
                     representative_shared_version_ids.add(node)
 
             deployability_mapping[node] = this_deployable
@@ -1744,13 +1770,13 @@ class DeployabilityIndex(PydanticModel, frozen=True):
         # Pick the smaller set to reduce the size of the serialized object.
         if len(deployable_ids) <= len(non_deployable_ids):
             return cls(
-                indexed_ids=deployable_ids,
-                representative_shared_version_ids=representative_shared_version_ids,
+                indexed_ids=deployable_ids,  # ty:ignore[invalid-argument-type]
+                representative_shared_version_ids=representative_shared_version_ids,  # ty:ignore[invalid-argument-type]
             )
         return cls(
-            indexed_ids=non_deployable_ids,
+            indexed_ids=non_deployable_ids,  # ty:ignore[invalid-argument-type]
             is_opposite_index=True,
-            representative_shared_version_ids=representative_shared_version_ids,
+            representative_shared_version_ids=representative_shared_version_ids,  # ty:ignore[invalid-argument-type]
         )
 
     @staticmethod
@@ -2060,20 +2086,27 @@ def missing_intervals(
     deployability_index = deployability_index or DeployabilityIndex.all_deployable()
 
     for snapshot in snapshots.values():
-        if not snapshot.evaluatable:
+        if not snapshot.evaluatable:  # ty:ignore[unresolved-attribute]
             continue
 
-        snapshot_start_date = start_override_per_model.get(snapshot.name, start_dt)
+        snapshot_start_date = start_override_per_model.get(
+            snapshot.name,  # ty:ignore[unresolved-attribute]
+            start_dt,
+        )
         snapshot_end_date: TimeLike = end_date
 
-        restated_interval = restatements.get(snapshot.snapshot_id)
+        restated_interval = restatements.get(
+            snapshot.snapshot_id  # ty:ignore[unresolved-attribute]
+        )
         if restated_interval:
             snapshot_start_date, snapshot_end_date = (to_datetime(i) for i in restated_interval)
-            snapshot = snapshot.copy()
+            snapshot = snapshot.copy()  # ty:ignore[unresolved-attribute]
             snapshot.intervals = snapshot.intervals.copy()
             snapshot.remove_interval(restated_interval)
 
-        existing_interval_end = end_override_per_model.get(snapshot.name)
+        existing_interval_end = end_override_per_model.get(
+            snapshot.name  # ty:ignore[unresolved-attribute]
+        )
         if existing_interval_end:
             if snapshot_start_date >= existing_interval_end:
                 # The start exceeds the provided interval end, so we can skip this snapshot
@@ -2083,17 +2116,24 @@ def missing_intervals(
 
         snapshot_start_date = max(
             to_datetime(snapshot_start_date),
-            to_datetime(start_date(snapshot, snapshots, cache, relative_to=snapshot_end_date)),
+            to_datetime(
+                start_date(
+                    snapshot,  # ty:ignore[invalid-argument-type]
+                    snapshots,
+                    cache,
+                    relative_to=snapshot_end_date,
+                )
+            ),
         )
         if snapshot_start_date > to_datetime(snapshot_end_date):
             continue
 
         missing_interval_end_date = snapshot_end_date
-        node_end_date = snapshot.node.end
+        node_end_date = snapshot.node.end  # ty:ignore[unresolved-attribute]
         if node_end_date and (to_datetime(node_end_date) < to_datetime(snapshot_end_date)):
             missing_interval_end_date = node_end_date
 
-        intervals = snapshot.missing_intervals(
+        intervals = snapshot.missing_intervals(  # ty:ignore[unresolved-attribute]
             snapshot_start_date,
             missing_interval_end_date,
             execution_time=execution_time,
@@ -2256,7 +2296,12 @@ def earliest_start_date(
             # Make sure that the mapping is only constructed once
             snapshots = {snapshot.snapshot_id: snapshot for snapshot in snapshots}
         return min(
-            start_date(snapshot, snapshots, cache=cache, relative_to=relative_to)
+            start_date(
+                snapshot,  # ty:ignore[invalid-argument-type]
+                snapshots,
+                cache=cache,
+                relative_to=relative_to,
+            )
             for snapshot in snapshots.values()
         )
 
@@ -2300,7 +2345,12 @@ def start_date(
         snapshots = {snapshot.snapshot_id: snapshot for snapshot in snapshots}
 
     parent_starts = [
-        start_date(snapshots[parent], snapshots, cache=cache, relative_to=relative_to)
+        start_date(
+            snapshots[parent],  # ty:ignore[invalid-argument-type]
+            snapshots,
+            cache=cache,
+            relative_to=relative_to,
+        )
         for parent in snapshot.parents
         if parent in snapshots
     ]
@@ -2409,7 +2459,7 @@ def apply_auto_restatements(
             SnapshotIntervals(
                 name=snapshots[s_id].name,
                 identifier=None,
-                version=snapshots[s_id].version,
+                version=snapshots[s_id].version or "",
                 dev_version=None,
                 intervals=[],
                 dev_intervals=[],

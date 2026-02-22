@@ -47,7 +47,7 @@ class Reference(PydanticModel, frozen=True):
                     f"Reference '{self.expression}' must have an inferrable name or explicit alias."
                 )
 
-            self._name = "__".join(keys)
+            self._name = "__".join(keys)  # ty:ignore[invalid-assignment]
         return self._name
 
 

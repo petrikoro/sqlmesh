@@ -168,7 +168,7 @@ class MSSQLEngineAdapter(
 
         return result[0] == 1 if result else False
 
-    def set_current_catalog(self, catalog_name: str) -> None:
+    def set_current_catalog(self, catalog_name: str) -> None:  # ty:ignore[invalid-method-override]
         self.execute(exp.Use(this=exp.to_identifier(catalog_name)))
 
     def drop_schema(
@@ -299,13 +299,13 @@ class MSSQLEngineAdapter(
 
     def _convert_df_datetime(self, df: DF, columns_to_types: t.Dict[str, exp.DataType]) -> None:
         import pandas as pd
-        from pandas.api.types import is_datetime64_any_dtype  # type: ignore
+        from pandas.api.types import is_datetime64_any_dtype
 
         # pymssql doesn't convert Pandas Timestamp (datetime64) types
         # - this code is based on snowflake adapter implementation
         for column, kind in columns_to_types.items():
             # pymssql errors if the column contains a datetime.date object
-            if kind.is_type("date"):  # type: ignore
+            if kind.is_type("date"):
                 df[column] = pd.to_datetime(df[column]).dt.strftime("%Y-%m-%d")  # type: ignore
             elif is_datetime64_any_dtype(df.dtypes[column]):  # type: ignore
                 if getattr(df.dtypes[column], "tz", None) is not None:  # type: ignore
@@ -352,13 +352,13 @@ class MSSQLEngineAdapter(
                 self._convert_df_datetime(ordered_df, source_columns_to_types)
                 self.create_table(temp_table, source_columns_to_types)
                 rows: t.List[t.Tuple[t.Any, ...]] = list(
-                    ordered_df.replace({np.nan: None}).itertuples(index=False, name=None)  # type: ignore
+                    ordered_df.replace({np.nan: None}).itertuples(index=False, name=None)
                 )
                 conn = self._connection_pool.get()
                 conn.bulk_copy(temp_table.sql(dialect=self.dialect), rows)
             return exp.select(
                 *self._casted_columns(target_columns_to_types, source_columns=source_columns)
-            ).from_(temp_table)  # type: ignore
+            ).from_(temp_table)
 
         return [
             SourceQuery(
@@ -393,7 +393,7 @@ class MSSQLEngineAdapter(
         dataframe: pd.DataFrame = self.fetchdf(query)
         return [
             DataObject(
-                catalog=catalog,  # type: ignore
+                catalog=catalog,
                 schema=row.schema_name,  # type: ignore
                 name=row.name,  # type: ignore
                 type=DataObjectType.from_str(row.type),  # type: ignore

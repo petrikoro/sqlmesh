@@ -327,8 +327,8 @@ class TableDiff:
 
     def schema_diff(self) -> SchemaDiff:
         return SchemaDiff(
-            source=self.source,
-            target=self.target,
+            source=self.source,  # ty:ignore[invalid-argument-type]
+            target=self.target,  # ty:ignore[invalid-argument-type]
             source_schema=self.source_schema,
             target_schema=self.target_schema,
             source_alias=self.source_alias,
@@ -659,8 +659,8 @@ class TableDiff:
                 )
 
                 self._row_diff = RowDiff(
-                    source=self.source,
-                    target=self.target,
+                    source=self.source,  # ty:ignore[invalid-argument-type]
+                    target=self.target,  # ty:ignore[invalid-argument-type]
                     stats=stats,
                     column_stats=column_stats,
                     sample=sample,

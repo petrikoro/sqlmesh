@@ -7,7 +7,7 @@ import pandas as pd  # noqa: TID253
 from sqlglot import exp, parse_one
 import sqlmesh.core.dialect as d
 from sqlmesh.core.engine_adapter import AthenaEngineAdapter
-from sqlmesh.core.engine_adapter.shared import DataObject
+from sqlmesh.core.engine_adapter.shared import DataObject, DataObjectType
 from sqlmesh.core.model import load_sql_based_model
 from sqlmesh.core.model.definition import SqlModel
 from sqlmesh.utils.errors import SQLMeshError
@@ -292,7 +292,7 @@ def test_replace_query(adapter: AthenaEngineAdapter, mocker: MockerFixture):
     mocker.patch.object(
         adapter,
         "_get_data_objects",
-        return_value=[DataObject(schema="", name="test", type="table")],
+        return_value=[DataObject(schema="", name="test", type=DataObjectType.TABLE)],
     )
 
     adapter.replace_query(
