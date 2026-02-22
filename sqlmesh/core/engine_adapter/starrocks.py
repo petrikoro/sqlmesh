@@ -131,19 +131,20 @@ class StarRocksEngineAdapter(
         )
         if object_names:
             query = query.where(exp.column("table_name").isin(*object_names))
+        rows = self.fetchdf(query).itertuples(index=False, name=None)
         return [
             DataObject(
                 catalog=catalog,
-                schema=row.table_schema,
-                name=row.table_name,
+                schema=table_schema,
+                name=table_name,
                 type=DataObjectType.from_str(
                     self._TABLE_TYPE_MAP.get(
-                        str(row.table_type),
-                        str(row.table_type),
+                        str(table_type),
+                        str(table_type),
                     )
                 ),
             )
-            for row in self.fetchdf(query).itertuples()
+            for table_name, table_schema, table_type in rows
         ]
 
     def _create_table_like(

@@ -2330,7 +2330,7 @@ class StarRocksConnectionConfig(ConnectionConfig):
 
     @property
     def _connection_factory(self) -> t.Callable:
-        from pymysql import connect
+        from pymysql import connect  # type: ignore
 
         return connect
 
