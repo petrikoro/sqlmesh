@@ -371,9 +371,7 @@ def interactive_init(
     return (project_template, engine_type, cli_mode)
 
 
-def _init_integer_prompt(
-    console: Console, err_msg_entity: str, num_options: int, retry_func: t.Callable[[t.Any], t.Any]
-) -> int:
+def _init_integer_prompt(console: Console, err_msg_entity: str, num_options: int) -> int:
     err_msg = "\nERROR: '{option_str}' is not a valid {err_msg_entity} number - please enter a number between 1 and {num_options} or exit with control+c\n"
     while True:
         option_str = Prompt.ask("Enter a number", console=console)
@@ -417,9 +415,7 @@ def _init_template_prompt(console: Console) -> ProjectTemplate:
 
     display_num_to_template = _init_display_choices(template_descriptions, console)
 
-    template_num = _init_integer_prompt(
-        console, "project type", len(template_descriptions), _init_template_prompt
-    )
+    template_num = _init_integer_prompt(console, "project type", len(template_descriptions))
 
     return ProjectTemplate(display_num_to_template[template_num].lower())
 
@@ -435,9 +431,7 @@ def _init_engine_prompt(console: Console) -> str:
     }
     display_num_to_display_name = _init_display_choices(ordered_engine_display_names, console)
 
-    engine_num = _init_integer_prompt(
-        console, "engine", len(ordered_engine_display_names), _init_engine_prompt
-    )
+    engine_num = _init_integer_prompt(console, "engine", len(ordered_engine_display_names))
 
     return DISPLAY_NAME_TO_TYPE[display_num_to_display_name[engine_num]]
 
@@ -453,8 +447,6 @@ def _init_cli_mode_prompt(console: Console) -> InitCliMode:
 
     display_num_to_cli_mode = _init_display_choices(cli_mode_descriptions, console)
 
-    cli_mode_num = _init_integer_prompt(
-        console, "config", len(cli_mode_descriptions), _init_cli_mode_prompt
-    )
+    cli_mode_num = _init_integer_prompt(console, "config", len(cli_mode_descriptions))
 
     return InitCliMode(display_num_to_cli_mode[cli_mode_num].lower())

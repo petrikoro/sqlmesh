@@ -2179,7 +2179,7 @@ def test_sushi(
                 if not x.name.endswith("__dev")
             }
 
-            for model_name, comment in comments.items():
+            for model_name, comment in expected_comments_dict.items():
                 if not model_name in layer_models:
                     continue
                 layer_table_name = layer_models[model_name]["table_name"]
@@ -2195,7 +2195,7 @@ def test_sushi(
                     and ctx.engine_adapter.COMMENT_CREATION_VIEW.is_unsupported
                 )
                 if is_physical_or_prod and not is_view_and_comments_unsupported:
-                    expected_tbl_comment = comments.get(model_name).get("table", None)
+                    expected_tbl_comment = expected_comments_dict.get(model_name).get("table", None)
                     if expected_tbl_comment:
                         actual_tbl_comment = ctx.get_table_comment(
                             schema_name,
@@ -2205,7 +2205,9 @@ def test_sushi(
                         )
                         assert expected_tbl_comment == actual_tbl_comment
 
-                    expected_col_comments = comments.get(model_name).get("column", None)
+                    expected_col_comments = expected_comments_dict.get(model_name).get(
+                        "column", None
+                    )
 
                     # Trino:
                     #   Trino on Hive COMMENT permissions are separate from standard SQL object permissions.
@@ -2262,7 +2264,7 @@ def test_sushi(
             if not check_temp_tables:
                 layer_models = {k: v for k, v in layer_models.items() if not k.endswith("__dev")}
 
-            for model_name, comment in comments.items():
+            for model_name, comment in expected_comments_dict.items():
                 layer_table_name = layer_models[model_name]["table_name"]
                 table_kind = "VIEW" if layer_models[model_name]["is_view"] else "BASE TABLE"
 

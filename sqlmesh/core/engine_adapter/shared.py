@@ -290,9 +290,9 @@ class SourceQuery:
 
     def __exit__(
         self,
-        exc_type: t.Optional[t.Type[BaseException]],
-        exc_val: t.Optional[BaseException],
-        exc_tb: t.Optional[types.TracebackType],
+        _exc_type: t.Optional[t.Type[BaseException]],
+        _exc_val: t.Optional[BaseException],
+        _exc_tb: t.Optional[types.TracebackType],
     ) -> t.Optional[bool]:
         if self.cleanup_func:
             self.cleanup_func()

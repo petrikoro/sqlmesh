@@ -91,6 +91,7 @@ def snowflake_oauth_access_token() -> str:
 
 
 def test_snowflake(make_config, snowflake_key_passphrase_bytes, snowflake_oauth_access_token):
+    assert snowflake_oauth_access_token
     # Authenticator and user/password is fine
     config = make_config(
         type="snowflake",

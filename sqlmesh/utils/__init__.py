@@ -236,7 +236,7 @@ def ttl_cache(ttl: int = 60, maxsize: int = 128000) -> t.Callable:
 
     def decorator(func: t.Callable) -> t.Any:
         @lru_cache(maxsize=maxsize)
-        def cache(tick: int, *args: t.Any, **kwargs: t.Any) -> t.Any:
+        def cache(_tick: int, *args: t.Any, **kwargs: t.Any) -> t.Any:
             return func(*args, **kwargs)
 
         @wraps(func)

@@ -3,10 +3,22 @@ import pytest
 
 from sqlmesh import Context
 from sqlmesh.core.model import schema
+from sqlmesh.utils.process import SynchronousPoolExecutor
 import concurrent.futures
 
 
 pytestmark = pytest.mark.isolated
+
+
+def test_synchronous_pool_executor_api_parity():
+    executor = SynchronousPoolExecutor(
+        max_workers=1,
+        mp_context=None,
+        initializer=lambda: None,
+        initargs=(),
+    )
+    assert list(executor.map(lambda x: x + 1, [1, 2], timeout=1, chunksize=2)) == [2, 3]
+    executor.shutdown(wait=True, cancel_futures=True)
 
 
 def test_parallel_load(assert_exp_eq, mocker):

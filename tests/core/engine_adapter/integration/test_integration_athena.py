@@ -43,7 +43,9 @@ def s3(engine_adapter: AthenaEngineAdapter) -> t.Any:
 def s3_list_objects(s3: t.Any, location: str, **list_objects_kwargs: t.Any) -> t.List[str]:
     bucket, prefix = parse_s3_uri(location)
     lst = []
-    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
+    for page in s3.get_paginator("list_objects_v2").paginate(
+        Bucket=bucket, Prefix=prefix, **list_objects_kwargs
+    ):
         lst.extend([o["Key"] for o in page.get("Contents", [])])
     return lst
 

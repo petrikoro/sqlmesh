@@ -14,6 +14,7 @@ class SynchronousPoolExecutor:
     """
 
     def __init__(self, max_workers=None, mp_context=None, initializer=None, initargs=()):
+        _ = (max_workers, mp_context)
         if initializer is not None:
             try:
                 initializer(*initargs)
@@ -33,6 +34,7 @@ class SynchronousPoolExecutor:
         Since this executor runs synchronously, there are no background processes
         or resources to shut down and all futures will have completed already.
         """
+        _ = (wait, cancel_futures)
         pass
 
     def submit(self, fn, *args, **kwargs):
@@ -51,6 +53,7 @@ class SynchronousPoolExecutor:
         This executes the function for each set of inputs from the iterables in the
         current process using Python's built-in map, rather than distributing work.
         """
+        _ = (timeout, chunksize)
         return map(fn, *iterables)
 
 

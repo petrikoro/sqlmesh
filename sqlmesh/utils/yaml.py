@@ -47,6 +47,7 @@ class SafeConstructorOverride(SafeConstructor):
         It is only used by the construct_mapping function. By always returning True,
         keys will always be updated and so the last value will be kept for mappings.
         """
+        _ = key_node
         return True
 
 

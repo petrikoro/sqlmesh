@@ -253,8 +253,6 @@ class _Node(PydanticModel):
                     f"{e}. IANA time zone data is not available on your system. `pip install tzdata` to leverage cron time zones or remove this field which will default to UTC."
                 )
 
-        return None
-
     @field_validator("start", "end", mode="before")
     @classmethod
     def _date_validator(cls, v: t.Any) -> t.Optional[TimeLike]:

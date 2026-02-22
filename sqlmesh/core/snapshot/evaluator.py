@@ -1940,7 +1940,7 @@ class SymbolicStrategy(EvaluationStrategy):
         *,
         ignore_destructive: bool,
         ignore_additive: bool,
-        **kwarg: t.Any,
+        **_kwargs: t.Any,
     ) -> None:
         pass
 

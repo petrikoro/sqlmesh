@@ -42,7 +42,6 @@ from sqlmesh.core.snapshot import (
     SnapshotDataVersion,
     SnapshotFingerprint,
 )
-from sqlmesh.utils import random_id
 from sqlmesh.utils.date import TimeLike, to_date
 from sqlmesh.utils.windows import IS_WINDOWS, fix_windows_path
 from sqlmesh.core.engine_adapter.shared import CatalogSupport
@@ -490,18 +489,8 @@ def make_snapshot_on_additive_change(make_snapshot: t.Callable) -> t.Callable:
 
 
 @pytest.fixture
-def random_name() -> t.Callable:
-    return lambda: f"generated_{random_id()}"
-
-
-@pytest.fixture
 def sushi_data_validator(sushi_context: Context) -> SushiDataValidator:
     return SushiDataValidator.from_context(sushi_context)
-
-
-@pytest.fixture
-def sushi_fixed_date_data_validator(sushi_context_fixed_date: Context) -> SushiDataValidator:
-    return SushiDataValidator.from_context(sushi_context_fixed_date)
 
 
 @pytest.fixture

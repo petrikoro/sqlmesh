@@ -114,6 +114,7 @@ def date_kwargs() -> t.Dict[str, str]:
 @pytest.fixture
 def adapter_mock(mocker: MockerFixture):
     def mock_exit(self, exc_type, exc_value, traceback):
+        _ = (exc_type, exc_value, traceback)
         pass
 
     transaction_mock = mocker.Mock()
@@ -1583,9 +1584,7 @@ def test_evaluate_creation_duckdb(
     # test that a clean run works
     evaluator.evaluate(
         snapshot,
-        start="2020-01-01",
-        end="2020-01-01",
-        execution_time="2020-01-01",
+        **date_kwargs,
         snapshots={},
     )
     assert_tables_exist()
@@ -1594,9 +1593,7 @@ def test_evaluate_creation_duckdb(
     # test that existing tables work
     evaluator.evaluate(
         snapshot,
-        start="2020-01-01",
-        end="2020-01-01",
-        execution_time="2020-01-01",
+        **date_kwargs,
         snapshots={},
     )
     assert_tables_exist()

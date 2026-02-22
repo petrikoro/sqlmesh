@@ -1,29 +1,14 @@
 import pytest
-from pytest_mock.plugin import MockerFixture
 from sqlglot import parse_one
 
 from sqlmesh.core.context import Context
 from sqlmesh.core.model import FullKind, SqlModel, ViewKind
 from sqlmesh.core.plan import (
     BuiltInPlanEvaluator,
-    Plan,
     PlanBuilder,
     stages as plan_stages,
 )
 from sqlmesh.core.snapshot import SnapshotChangeCategory
-
-
-@pytest.fixture
-def sushi_plan(sushi_context: Context, mocker: MockerFixture) -> Plan:
-    mock_prompt = mocker.Mock()
-    mock_prompt.ask.return_value = "2022-01-01"
-    mocker.patch("sqlmesh.core.console.Prompt", mock_prompt)
-
-    return PlanBuilder(
-        sushi_context._context_diff("dev"),
-        is_dev=True,
-        include_unmodified=True,
-    ).build()
 
 
 @pytest.mark.slow

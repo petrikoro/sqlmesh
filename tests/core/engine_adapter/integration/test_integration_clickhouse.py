@@ -1,8 +1,6 @@
 import typing as t
 import pytest
 from pytest import FixtureRequest
-from tests.core.engine_adapter.integration import TestContext
-from sqlmesh.core.engine_adapter.clickhouse import ClickhouseEngineAdapter
 import pandas as pd  # noqa: TID253
 from sqlglot import exp, parse_one
 from sqlmesh.core.snapshot import SnapshotChangeCategory
@@ -25,12 +23,6 @@ def ctx(
     create_test_context: t.Callable[[IntegrationTestEngine, str, str], t.Iterable[TestContext]],
 ) -> t.Iterable[TestContext]:
     yield from create_test_context(*request.param)
-
-
-@pytest.fixture
-def engine_adapter(ctx: TestContext) -> ClickhouseEngineAdapter:
-    assert isinstance(ctx.engine_adapter, ClickhouseEngineAdapter)
-    return ctx.engine_adapter
 
 
 def _get_source_queries_and_columns_to_types(

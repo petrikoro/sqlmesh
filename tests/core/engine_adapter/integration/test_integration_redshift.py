@@ -2,7 +2,6 @@ import typing as t
 import pytest
 from pytest import FixtureRequest
 from tests.core.engine_adapter.integration import TestContext
-from sqlmesh.core.engine_adapter.redshift import RedshiftEngineAdapter
 from sqlglot import exp
 
 from tests.core.engine_adapter.integration import (
@@ -19,12 +18,6 @@ def ctx(
     create_test_context: t.Callable[[IntegrationTestEngine, str, str], t.Iterable[TestContext]],
 ) -> t.Iterable[TestContext]:
     yield from create_test_context(*request.param)
-
-
-@pytest.fixture
-def engine_adapter(ctx: TestContext) -> RedshiftEngineAdapter:
-    assert isinstance(ctx.engine_adapter, RedshiftEngineAdapter)
-    return ctx.engine_adapter
 
 
 def test_columns(ctx: TestContext):

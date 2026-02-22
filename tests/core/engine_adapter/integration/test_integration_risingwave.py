@@ -20,12 +20,6 @@ def ctx(
 
 
 @pytest.fixture
-def engine_adapter(ctx: TestContext) -> RisingwaveEngineAdapter:
-    assert isinstance(ctx.engine_adapter, RisingwaveEngineAdapter)
-    return ctx.engine_adapter
-
-
-@pytest.fixture
 def risingwave_columns_with_datatypes(ctx: TestContext) -> t.Dict[str, exp.DataType]:
     base_types = {
         "smallint_col": exp.DataType.build(exp.DataType.Type.SMALLINT, nested=False),

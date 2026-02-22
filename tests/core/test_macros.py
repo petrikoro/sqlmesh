@@ -82,6 +82,7 @@ def macro_evaluator() -> MacroEvaluator:
 
     @macro()
     def test_arg_resolution(evaluator, pos_only, /, a1, *, a2=1, **rest):
+        _ = (pos_only, rest)
         return 1
 
     @macro()
