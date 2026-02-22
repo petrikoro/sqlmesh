@@ -499,6 +499,10 @@ class GithubController:
             with open(output_file, "a", encoding="utf-8") as fh:
                 print(f"{key}={value}", file=fh)
 
+    @staticmethod
+    def _strip_trailing_whitespace(value: str) -> str:
+        return "\n".join(line.rstrip() for line in value.split("\n"))
+
     def get_forward_only_plan_post_deployment_tip(self, plan: Plan) -> str:
         if not plan.forward_only:
             return ""
@@ -513,7 +517,7 @@ class GithubController:
         return (
             "> [!TIP]\n"
             "> In order to see this forward-only plan retroactively apply to historical intervals on the production model, run the below for date ranges in scope:\n"
-            "> \n"
+            ">\n"
             f"> `$ sqlmesh plan --restate-model {example_model_name} --start YYYY-MM-DD --end YYYY-MM-DD`\n"
             ">\n"
             "> Learn more: https://sqlmesh.readthedocs.io/en/stable/concepts/plans/?h=restate#restatement-plans"
@@ -543,9 +547,11 @@ class GithubController:
                     default_catalog=self._context.default_catalog,
                     no_diff=False,
                 )
-            difference_summary = self._console.consume_captured_output()
+            difference_summary = self._strip_trailing_whitespace(
+                self._console.consume_captured_output()
+            )
             self._console._show_missing_dates(plan, self._context.default_catalog)
-            missing_dates = self._console.consume_captured_output()
+            missing_dates = self._strip_trailing_whitespace(self._console.consume_captured_output())
 
             plan_flags_section = (
                 f"\n\n{self._generate_plan_flags_section(plan.user_provided_flags)}"
@@ -553,13 +559,19 @@ class GithubController:
                 else ""
             )
 
+            warnings_block = self._strip_trailing_whitespace(
+                self._console.consume_captured_warnings()
+            )
+            errors_block = self._strip_trailing_whitespace(self._console.consume_captured_errors())
+
             if not difference_summary and not missing_dates:
-                return f"No changes to apply.{plan_flags_section}"
+                return self._strip_trailing_whitespace(
+                    f"{warnings_block}{errors_block}No changes to apply.{plan_flags_section}"
+                )
 
-            warnings_block = self._console.consume_captured_warnings()
-            errors_block = self._console.consume_captured_errors()
-
-            return f"{warnings_block}{errors_block}{difference_summary}\n{missing_dates}{plan_flags_section}"
+            return self._strip_trailing_whitespace(
+                f"{warnings_block}{errors_block}{difference_summary}\n{missing_dates}{plan_flags_section}"
+            )
         except PlanError as e:
             logger.exception("Plan failed to generate")
             return f"Plan failed to generate. Check for pending or unresolved changes. Error: {e}"
@@ -1229,7 +1241,7 @@ class GithubController:
                 f"> This PR environment may only contain a subset of data because:\n"
                 + "\n".join(f"> - {r}" for r in subset_reasons)
                 + "\n"
-                "> \n"
+                ">\n"
                 "> This means that deploying to `prod` may not be a simple virtual update if there is still some data to load.\n"
                 "> See `Dates not loaded in PR` below or the `Prod Plan Preview` check for more information.\n\n"
             )

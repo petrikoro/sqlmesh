@@ -302,6 +302,7 @@ def test_plan_with_run(
             '"memory"."sushi"."customer_revenue_by_day"': to_timestamp("2023-01-09"),
             '"memory"."sushi"."latest_order"': to_timestamp("2023-01-09"),
             '"memory"."sushi"."waiter_names"': to_timestamp("2023-01-08"),
+            '"memory"."sushi"."yaml_documented_orders"': to_timestamp("2023-01-09"),
             '"memory"."sushi"."raw_marketing"': to_timestamp("2023-01-09"),
             '"memory"."sushi"."marketing"': to_timestamp("2023-01-09"),
             '"memory"."sushi"."waiter_as_customer_by_day"': to_timestamp("2023-01-09"),

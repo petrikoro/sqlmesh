@@ -133,7 +133,7 @@ def test_environment_suffix_target_table(init_and_plan_context: t.Callable):
     assert set(metadata.schemas) - starting_schemas == {"raw"}
     prod_views = {x for x in metadata.qualified_views if x.db in environments_schemas}
     # Make sure that all models are present
-    assert len(prod_views) == 16
+    assert len(prod_views) == 17
     apply_to_environment(context, "dev")
     # Make sure no new schemas are created
     assert set(metadata.schemas) - starting_schemas == {"raw"}
@@ -301,9 +301,9 @@ def test_environment_catalog_mapping(init_and_plan_context: t.Callable):
         user_default_tables,
         non_default_tables,
     ) = get_default_catalog_and_non_tables(metadata, context.default_catalog)
-    assert len(prod_views) == 16
+    assert len(prod_views) == 17
     assert len(dev_views) == 0
-    assert len(user_default_tables) == 15
+    assert len(user_default_tables) == 16
     assert state_metadata.schemas == ["sqlmesh"]
     assert {x.sql() for x in state_metadata.qualified_tables}.issuperset(
         {
@@ -319,9 +319,9 @@ def test_environment_catalog_mapping(init_and_plan_context: t.Callable):
         user_default_tables,
         non_default_tables,
     ) = get_default_catalog_and_non_tables(metadata, context.default_catalog)
-    assert len(prod_views) == 16
-    assert len(dev_views) == 16
-    assert len(user_default_tables) == 16
+    assert len(prod_views) == 17
+    assert len(dev_views) == 17
+    assert len(user_default_tables) == 17
     assert len(non_default_tables) == 0
     assert state_metadata.schemas == ["sqlmesh"]
     assert {x.sql() for x in state_metadata.qualified_tables}.issuperset(
@@ -338,9 +338,9 @@ def test_environment_catalog_mapping(init_and_plan_context: t.Callable):
         user_default_tables,
         non_default_tables,
     ) = get_default_catalog_and_non_tables(metadata, context.default_catalog)
-    assert len(prod_views) == 16
-    assert len(dev_views) == 32
-    assert len(user_default_tables) == 16
+    assert len(prod_views) == 17
+    assert len(dev_views) == 34
+    assert len(user_default_tables) == 17
     assert len(non_default_tables) == 0
     assert state_metadata.schemas == ["sqlmesh"]
     assert {x.sql() for x in state_metadata.qualified_tables}.issuperset(
@@ -358,9 +358,9 @@ def test_environment_catalog_mapping(init_and_plan_context: t.Callable):
         user_default_tables,
         non_default_tables,
     ) = get_default_catalog_and_non_tables(metadata, context.default_catalog)
-    assert len(prod_views) == 16
-    assert len(dev_views) == 16
-    assert len(user_default_tables) == 16
+    assert len(prod_views) == 17
+    assert len(dev_views) == 17
+    assert len(user_default_tables) == 17
     assert len(non_default_tables) == 0
     assert state_metadata.schemas == ["sqlmesh"]
     assert {x.sql() for x in state_metadata.qualified_tables}.issuperset(

@@ -42,6 +42,7 @@ def test_run_with_select_models(
             '"memory"."sushi"."customer_revenue_by_day"': to_timestamp("2023-01-08"),
             '"memory"."sushi"."latest_order"': to_timestamp("2023-01-08"),
             '"memory"."sushi"."waiter_names"': to_timestamp("2023-01-08"),
+            '"memory"."sushi"."yaml_documented_orders"': to_timestamp("2023-01-08"),
             '"memory"."sushi"."raw_marketing"': to_timestamp("2023-01-08"),
             '"memory"."sushi"."marketing"': to_timestamp("2023-01-08"),
             '"memory"."sushi"."waiter_as_customer_by_day"': to_timestamp("2023-01-08"),
@@ -81,6 +82,7 @@ def test_run_with_select_models_no_auto_upstream(
             '"memory"."sushi"."customer_revenue_by_day"': to_timestamp("2023-01-08"),
             '"memory"."sushi"."latest_order"': to_timestamp("2023-01-08"),
             '"memory"."sushi"."waiter_names"': to_timestamp("2023-01-08"),
+            '"memory"."sushi"."yaml_documented_orders"': to_timestamp("2023-01-08"),
             '"memory"."sushi"."raw_marketing"': to_timestamp("2023-01-08"),
             '"memory"."sushi"."marketing"': to_timestamp("2023-01-08"),
             '"memory"."sushi"."waiter_as_customer_by_day"': to_timestamp("2023-01-08"),
@@ -230,7 +232,7 @@ def test_snapshot_triggers(init_and_plan_context: t.Callable, mocker: MockerFixt
 
     actual_triggers = spy.call_args.kwargs["auto_restatement_triggers"]
     actual_triggers = {k: v for k, v in actual_triggers.items() if v}
-    assert len(actual_triggers) == 12
+    assert len(actual_triggers) == 13
 
     for id, trigger in actual_triggers.items():
         model_name = id.name.replace('"memory"."sushi".', "").replace('"', "")

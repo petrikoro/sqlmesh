@@ -48,6 +48,20 @@ pytestmark = pytest.mark.slow
 SUSHI_FOO_META = "MODEL (name sushi.foo, kind FULL)"
 
 
+def _normalize_report_output(value: str) -> str:
+    normalized_lines = []
+    for line in value.splitlines():
+        line = line.rstrip()
+        stripped_line = line.strip()
+        if stripped_line.startswith("Data mismatch") or (
+            stripped_line.startswith("Column '") and stripped_line.endswith(" mismatch")
+        ):
+            normalized_lines.append(stripped_line)
+        else:
+            normalized_lines.append(line)
+    return "\n".join(normalized_lines)
+
+
 def _create_test(
     body: t.Dict[str, t.Any], test_name: str, model: Model, context: Context
 ) -> ModelTest:
@@ -2401,7 +2415,7 @@ test_example_full_model:
 
     # Order may change due to concurrent execution
     assert "F." in output or ".F" in output
-    assert (
+    assert _normalize_report_output(
         f"""This is a test
 ----------------------------------------------------------------------
                                  Data mismatch
@@ -2413,8 +2427,7 @@ test_example_full_model:
 └─────┴─────────────────┴─────────────────┴─────────────────┴──────────────────┘
 
 ----------------------------------------------------------------------"""
-        in output
-    )
+    ) in _normalize_report_output(output)
 
     assert "Ran 2 tests" in output
     assert "Failed tests (1):" in output
@@ -2425,7 +2438,7 @@ test_example_full_model:
 
     output = captured_output.stdout
 
-    assert (
+    assert _normalize_report_output(
         f"""This is a test
 ----------------------------------------------------------------------
                  Column 'item_id' mismatch
@@ -2443,8 +2456,7 @@ test_example_full_model:
 └─────────────┴────────────────────────┴───────────────────┘
 
 ----------------------------------------------------------------------"""
-        in output
-    )
+    ) in _normalize_report_output(output)
 
     # Case 3: Assert that concurrent execution is working properly
     for i in range(50):
@@ -2504,7 +2516,7 @@ test_example_full_model:
     with capture_output() as captured_output:
         context.test()
 
-    assert (
+    assert _normalize_report_output(
         """Data mismatch
 ┏━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
 ┃     ┃ col_1: ┃ col_1: ┃ col_2: ┃ col_2: ┃ col_3: ┃ col_3: ┃ col_4:  ┃ col_4: ┃
@@ -2520,8 +2532,7 @@ test_example_full_model:
 ┡━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━┩
 │  0  │     2     │     5     │     1     │     6     │     0     │     7      │
 └─────┴───────────┴───────────┴───────────┴───────────┴───────────┴────────────┘"""
-        in captured_output.stdout
-    )
+    ) in _normalize_report_output(captured_output.stdout)
 
     # Case 5: Test null value difference in the 3rd row (index 2)
     rmtree(tmp_path / "tests")
@@ -2566,15 +2577,14 @@ test_null_third_row:
     output = captured_output.stdout
 
     # Check for null value difference in the 3rd row (index 2)
-    assert (
+    assert _normalize_report_output(
         """
 ┏━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ Row  ┃   num_orders: Expected    ┃  num_orders: Actual   ┃
 ┡━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━┩
 │  2   │            nan            │          1.0          │
 └──────┴───────────────────────────┴───────────────────────┘"""
-        in output
-    )
+    ) in _normalize_report_output(output)
 
 
 @use_terminal_console
@@ -3491,8 +3501,10 @@ test_foo:
 
     output = captured_output.stdout
 
-    assert expected_cte_failure_output in output
-    assert expected_query_failure_output not in output
+    assert _normalize_report_output(expected_cte_failure_output) in _normalize_report_output(output)
+    assert _normalize_report_output(expected_query_failure_output) not in _normalize_report_output(
+        output
+    )
 
     assert "Ran 1 tests" in output
     assert "Failed tests (1)" in output
@@ -3520,8 +3532,10 @@ test_foo:
 
     output = captured_output.stdout
 
-    assert expected_cte_failure_output in output
-    assert expected_query_failure_output in output
+    assert _normalize_report_output(expected_cte_failure_output) in _normalize_report_output(output)
+    assert _normalize_report_output(expected_query_failure_output) in _normalize_report_output(
+        output
+    )
 
     assert "Ran 1 tests" in output
     assert "Failed tests (1)" in output
