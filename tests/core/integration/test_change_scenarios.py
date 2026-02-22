@@ -150,7 +150,7 @@ def test_breaking_only_impacts_immediate_children(init_and_plan_context: t.Calla
 
 @pytest.mark.parametrize(
     "context_fixture",
-    ["sushi_context", "sushi_dbt_context", "sushi_test_dbt_context", "sushi_no_default_catalog"],
+    ["sushi_context", "sushi_no_default_catalog"],
 )
 def test_model_add(context_fixture: Context, request):
     initial_add(request.getfixturevalue(context_fixture), "dev")

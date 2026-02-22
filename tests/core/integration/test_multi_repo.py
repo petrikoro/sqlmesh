@@ -360,67 +360,6 @@ def test_multi_virtual_layer(copy_to_temp_path):
         context.apply(plan)
 
 
-def test_multi_dbt(mocker):
-    context = Context(paths=["examples/multi_dbt/bronze", "examples/multi_dbt/silver"])
-    context._new_state_sync().reset(default_catalog=context.default_catalog)
-    plan = context.plan_builder().build()
-    assert len(plan.new_snapshots) == 4
-    context.apply(plan)
-    validate_apply_basics(context, c.PROD, plan.snapshots.values())
-
-    environment_statements = context.state_sync.get_environment_statements(c.PROD)
-    assert len(environment_statements) == 2
-    bronze_statements = environment_statements[0]
-    assert bronze_statements.before_all == [
-        "JINJA_STATEMENT_BEGIN;\nCREATE TABLE IF NOT EXISTS analytic_stats (physical_table VARCHAR, evaluation_time VARCHAR);\nJINJA_END;"
-    ]
-    assert not bronze_statements.after_all
-    silver_statements = environment_statements[1]
-    assert not silver_statements.before_all
-    assert silver_statements.after_all == [
-        "JINJA_STATEMENT_BEGIN;\n{{ store_schemas(schemas) }}\nJINJA_END;"
-    ]
-    assert "store_schemas" in silver_statements.jinja_macros.root_macros
-    analytics_table = context.fetchdf("select * from analytic_stats;")
-    assert sorted(analytics_table.columns) == sorted(["physical_table", "evaluation_time"])
-    schema_table = context.fetchdf("select * from schema_table;")
-    assert sorted(schema_table.all_schemas[0]) == sorted(["bronze", "silver"])
-
-
-def test_multi_hybrid(mocker):
-    context = Context(
-        paths=["examples/multi_hybrid/dbt_repo", "examples/multi_hybrid/sqlmesh_repo"]
-    )
-    context._new_state_sync().reset(default_catalog=context.default_catalog)
-    plan = context.plan_builder().build()
-
-    assert len(plan.new_snapshots) == 5
-    assert context.dag.roots == {'"memory"."dbt_repo"."e"'}
-    assert context.dag.graph['"memory"."dbt_repo"."c"'] == {'"memory"."sqlmesh_repo"."b"'}
-    assert context.dag.graph['"memory"."sqlmesh_repo"."b"'] == {'"memory"."sqlmesh_repo"."a"'}
-    assert context.dag.graph['"memory"."sqlmesh_repo"."a"'] == {'"memory"."dbt_repo"."e"'}
-    assert context.dag.downstream('"memory"."dbt_repo"."e"') == [
-        '"memory"."sqlmesh_repo"."a"',
-        '"memory"."sqlmesh_repo"."b"',
-        '"memory"."dbt_repo"."c"',
-        '"memory"."dbt_repo"."d"',
-    ]
-
-    sqlmesh_model_a = context.get_model("sqlmesh_repo.a")
-    dbt_model_c = context.get_model("dbt_repo.c")
-    assert sqlmesh_model_a.project == "sqlmesh_repo"
-
-    sqlmesh_rendered = (
-        'SELECT "e"."col_a" AS "col_a", "e"."col_b" AS "col_b" FROM "memory"."dbt_repo"."e" AS "e"'
-    )
-    dbt_rendered = 'SELECT DISTINCT ROUND(CAST(("b"."col_a" / NULLIF(100, 0)) AS DECIMAL(16, 2)), 2) AS "rounded_col_a" FROM "memory"."sqlmesh_repo"."b" AS "b"'
-    assert sqlmesh_model_a.render_query().sql() == sqlmesh_rendered
-    assert dbt_model_c.render_query().sql() == dbt_rendered
-
-    context.apply(plan)
-    validate_apply_basics(context, c.PROD, plan.snapshots.values())
-
-
 def test_engine_adapters_multi_repo_all_gateways_gathered(copy_to_temp_path):
     paths = copy_to_temp_path("examples/multi")
     repo_1_path = paths[0] / "repo_1"

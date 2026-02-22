@@ -1110,7 +1110,7 @@ FROM "raw_data" AS "raw_data"
 
 ### @DATE_SPINE
 
-`@DATE_SPINE` returns the SQL required to build a date spine. The spine will include the start_date (if it is aligned to the datepart), AND it will include the end_date. This is different from the [`date_spine`](https://github.com/dbt-labs/dbt-utils?tab=readme-ov-file#date_spine-source) macro in `dbt-utils` which will NOT include the end_date. It's typically used to join in unique, hard-coded, date ranges to with other tables/views, so people don't have to constantly adjust date ranges in `where` clauses across many SQL models.
+`@DATE_SPINE` returns the SQL required to build a date spine. The spine will include the start_date (if it is aligned to the datepart), AND it will include the end_date. It's typically used to join in unique, hard-coded, date ranges with other tables/views, so people don't have to constantly adjust date ranges in `where` clauses across many SQL models.
 
 It supports the following arguments, in this order:
 

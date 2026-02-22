@@ -655,8 +655,6 @@ MODEL (
 
 Similar to `when_matched`, the `source` and `target` aliases are used to distinguish between the source and target tables.
 
-If an existing dbt project uses the [incremental_predicates](https://docs.getdbt.com/docs/build/incremental-strategy#about-incremental_predicates) functionality, SQLMesh will automatically convert them into the equivalent `merge_filter` specification.
-
 ### Materialization strategy
 Depending on the target engine, models of the `INCREMENTAL_BY_UNIQUE_KEY` kind are materialized using the following strategies:
 

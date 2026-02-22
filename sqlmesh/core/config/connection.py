@@ -244,7 +244,7 @@ class DuckDBAttachOptions(BaseConfig):
     def to_sql(self, alias: str) -> str:
         options = []
         # 'duckdb' is actually not a supported type, but we'd like to allow it for
-        # fully qualified attach options or integration testing, similar to duckdb-dbt
+        # fully qualified attach options or integration testing.
         if self.type not in ("duckdb", "ducklake", "motherduck"):
             options.append(f"TYPE {self.type.upper()}")
         if self.read_only:
@@ -648,8 +648,6 @@ class SnowflakeConnectionConfig(ConnectionConfig):
     @classmethod
     def _get_private_key(cls, values: t.Dict[str, t.Optional[str]], auth: str) -> t.Optional[bytes]:
         """
-        source: https://github.com/dbt-labs/dbt-snowflake/blob/0374b4ec948982f2ac8ec0c95d53d672ad19e09c/dbt/adapters/snowflake/connections.py#L247C5-L285C1
-
         Overall code change: Use local variables instead of class attributes + Validation
         """
         # Start custom code
@@ -2174,8 +2172,7 @@ class ClickhouseConnectionConfig(ConnectionConfig):
 
         # Clickhouse system settings passed to connection
         # https://clickhouse.com/docs/en/operations/settings/settings
-        # - below are set to align with dbt-clickhouse
-        # - https://github.com/ClickHouse/dbt-clickhouse/blob/44d26308ea6a3c8ead25c280164aa88191f05f47/dbt/adapters/clickhouse/dbclient.py#L77
+        # - below are set to align with common replicated ClickHouse usage.
         settings = self.connection_settings or {}
         #  mutations_sync = 2: "The query waits for all mutations [ALTER statements] to complete on all replicas (if they exist)"
         settings["mutations_sync"] = "2"

@@ -19,9 +19,9 @@ Environments are a common technique in both software and data to allow developer
 Data teams have some of these benefits but lack key innovations to work at the level of efficiency and reliability that software engineers enjoy. **Virtual Data Environments** fill this gap.
 
 ### Current Landscape
-Environments are routinely used by data practitioners. For example, **dbt** allows its users to configure different *targets* — connections to different schemas within a Data Warehouse or even separate Data Warehouses instances altogether.
+Environments are routinely used by data practitioners. Many tools allow users to configure different *targets* — connections to different schemas within a Data Warehouse or even separate Data Warehouse instances altogether.
 
-**dbt**’s approach is sufficient for deploying data pipelines into separate environments for development / testing, staging, and production, while ensuring that changes are only applied to the target environment and leave datasets in other environments unaffected.
+This approach is sufficient for deploying data pipelines into separate environments for development / testing, staging, and production, while ensuring that changes are only applied to the target environment and leave datasets in other environments unaffected.
 
 ![Figure 1: Isolated but rigid Data Warehouse environments](virtual_data_environments/isolated_rigid_envs.png)
 *Figure 1: Isolated but rigid Data Warehouse environments*
@@ -47,7 +47,7 @@ Some tools go one step further and allow their users to create snapshots of the 
 
 This approach helps determine which pipelines have been modified in the new environment and allows users to reuse the unmodified portion of production datasets as part of their development environment.
 
-Variations of this approach can be seen in dbt’s [state](https://docs.getdbt.com/docs/deploy/project-state) + [defer](https://docs.getdbt.com/reference/node-selection/defer) method and Fivetran’s [“smart runs”](https://www.fivetran.com/blog/how-we-execute-dbt-runs-faster-and-cheaper).
+Variations of this approach can be seen in state-aware execution methods and Fivetran’s “smart runs”.
 
 ![Figure 2: Detecting changes by comparing the raw contents of source files](virtual_data_environments/stateful_envs.png)
 *Figure 2: Detecting changes by comparing the raw contents of source files*

@@ -1086,7 +1086,7 @@ def test_janitor(sushi_context, mocker: MockerFixture) -> None:
     )
     # Assert that the views are dropped for each snapshot just once and make sure that the name used is the
     # view name with the environment as a suffix
-    assert adapter_mock.drop_view.call_count == 16
+    assert adapter_mock.drop_view.call_count == 17
     adapter_mock.drop_view.assert_has_calls(
         [
             call(
@@ -1614,64 +1614,8 @@ def test_rendered_diff():
     )
 
 
-def test_plan_enable_preview_default(sushi_context: Context, sushi_dbt_context: Context):
+def test_plan_enable_preview_default(sushi_context: Context):
     assert sushi_context._plan_preview_enabled
-    assert not sushi_dbt_context._plan_preview_enabled
-
-    sushi_dbt_context.engine_adapter.SUPPORTS_CLONING = True
-    assert sushi_dbt_context._plan_preview_enabled
-
-
-@pytest.mark.slow
-def test_raw_code_handling(sushi_test_dbt_context: Context):
-    model = sushi_test_dbt_context.models['"memory"."sushi"."model_with_raw_code"']
-    assert "raw_code" not in model.jinja_macros.global_objs["model"]  # type: ignore
-
-    # logging "pre-hook" (in dbt_projects.yml) + the actual pre-hook in the model file
-    assert len(model.pre_statements) == 2
-
-    original_file_path = model.jinja_macros.global_objs["model"]["original_file_path"]  # type: ignore
-    model_file_path = sushi_test_dbt_context.path / original_file_path
-
-    raw_code_length = len(model_file_path.read_text()) - 1
-
-    hook = model.render_pre_statements()[0]
-    assert (
-        hook.sql()
-        == f'''CREATE TABLE IF NOT EXISTS "t" AS SELECT 'Length is {raw_code_length}' AS "length_col"'''
-    )
-
-
-@pytest.mark.slow
-def test_dbt_models_are_not_validated(sushi_test_dbt_context: Context):
-    model = sushi_test_dbt_context.models['"memory"."sushi"."non_validated_model"']
-
-    assert model.render_query_or_raise().sql(comments=False) == 'SELECT 1 AS "c", 2 AS "c"'
-    assert sushi_test_dbt_context.fetchdf(
-        'SELECT * FROM "memory"."sushi"."non_validated_model"'
-    ).to_dict() == {"c": {0: 1}, "c_1": {0: 2}}
-
-    # Write a new incremental model file that should fail validation
-    models_dir = sushi_test_dbt_context.path / "models"
-    incremental_model_path = models_dir / "invalid_incremental.sql"
-    incremental_model_content = """{{
-  config(
-    materialized='incremental',
-    incremental_strategy='delete+insert',
-  )
-}}
-
-SELECT
-  1 AS c"""
-
-    incremental_model_path.write_text(incremental_model_content)
-
-    # Reload the context - this should raise a validation error for the incremental model
-    with pytest.raises(
-        ConfigError,
-        match="Unmanaged incremental models with insert / overwrite enabled must specify the partitioned_by field",
-    ):
-        Context(paths=sushi_test_dbt_context.path, config="test_config")
 
 
 def test_catalog_name_needs_to_be_quoted():
@@ -2836,12 +2780,12 @@ def test_plan_min_intervals_adjusted_for_downstream(tmp_path: Path):
         return [(to_datetime(s), to_datetime(e)) for s, e in snapshot_intervals.merged_intervals]
 
     # We only operate on completed intervals, so given the current_time this is the range of the last completed week
-    _get_missing_intervals("sqlmesh_example.weekly_model") == [
+    assert _get_missing_intervals("sqlmesh_example.weekly_model") == [
         (to_datetime("2020-01-19 00:00:00"), to_datetime("2020-01-26 00:00:00"))
     ]
 
     # The daily model needs to cover the week, so it gets its start date moved back to line up
-    _get_missing_intervals("sqlmesh_example.daily_model") == [
+    assert _get_missing_intervals("sqlmesh_example.daily_model") == [
         (to_datetime("2020-01-19 00:00:00"), to_datetime("2020-02-01 00:00:00"))
     ]
 
@@ -2858,7 +2802,7 @@ def test_plan_min_intervals_adjusted_for_downstream(tmp_path: Path):
 
     # The unrelated model has no upstream constraints, so its start date doesnt get moved to line up with the weekly model
     # However it still gets backfilled for 24 hours because the plan start is 1 day and this satisfies min_intervals: 1
-    _get_missing_intervals("sqlmesh_example.unrelated_monthly_model") == [
+    assert _get_missing_intervals("sqlmesh_example.unrelated_monthly_model") == [
         (to_datetime("2020-01-01 00:00:00"), to_datetime("2020-02-01 00:00:00"))
     ]
 
@@ -3254,7 +3198,7 @@ def test_grants_through_plan_apply(sushi_context, mocker):
 
     sync_grants_mock.reset_mock()
 
-    new_grants = ({"select": ["analyst", "reporter", "manager"], "insert": ["etl_user"]},)
+    new_grants = {"select": ["analyst", "reporter", "manager"], "insert": ["etl_user"]}
     model_updated = model_with_grants.copy(
         update={
             "query": parse_one(model.query.sql() + " LIMIT 1000"),

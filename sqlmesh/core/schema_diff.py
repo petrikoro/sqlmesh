@@ -352,8 +352,7 @@ class SchemaDiffer(PydanticModel):
             parameterized type can ALTER to its unlimited length version, along with different types in some engines.
         treat_alter_data_type_as_destructive: The SchemaDiffer will only output change data type operations if it
             concludes the change is compatible and won't result in data loss. If this flag is set to True, it will
-            flag these data type changes as destructive. This was added for dbt adapter support and likely shouldn't
-            be set outside of that context.
+            flag these data type changes as destructive.
     """
 
     support_positional_add: bool = False

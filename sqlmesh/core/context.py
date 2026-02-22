@@ -415,7 +415,7 @@ class GenericContext(BaseContext, t.Generic[C]):
         self._loaded: bool = False
         self._selector_cls = selector or NativeSelector
 
-        self.path, self.config = t.cast(t.Tuple[Path, C], next(iter(self.configs.items())))
+        self.path, self.config = next(iter(self.configs.items()))
 
         self._all_dialects: t.Set[str] = {self.config.dialect or ""}
 
@@ -531,7 +531,7 @@ class GenericContext(BaseContext, t.Generic[C]):
         path = model._path
 
         model = model.copy(update=kwargs)
-        model._path = path
+        model._path = path  # ty:ignore[invalid-assignment]
 
         self.dag.add(model.fqn, model.depends_on)
 
@@ -614,7 +614,7 @@ class GenericContext(BaseContext, t.Generic[C]):
                 self.console.log_status_update("Initializing new project state...")
                 self._state_sync.migrate()
             self._state_sync.get_versions()
-            self._state_sync = CachingStateSync(self._state_sync)  # type: ignore
+            self._state_sync = CachingStateSync(self._state_sync)
         return self._state_sync
 
     @property
@@ -700,7 +700,7 @@ class GenericContext(BaseContext, t.Generic[C]):
 
         if update_schemas:
             for fqn in self.dag:
-                model = self._models.get(fqn)  # type: ignore
+                model = self._models.get(fqn)
 
                 if not model or fqn in uncached:
                     continue
@@ -1052,7 +1052,7 @@ class GenericContext(BaseContext, t.Generic[C]):
         path = node._path
         if path is None:
             return self.config
-        return self.config_for_path(path)[0]  # type: ignore
+        return self.config_for_path(path)[0]
 
     @property
     def models(self) -> MappingProxyType[str, Model]:
@@ -1665,7 +1665,6 @@ class GenericContext(BaseContext, t.Generic[C]):
         max_interval_end_per_model = None
         default_start, default_end = None, None
         if not run:
-            ignore_cron = False
             max_interval_end_per_model = self._get_max_interval_end_per_model(
                 snapshots, backfill_models
             )
@@ -2174,6 +2173,26 @@ class GenericContext(BaseContext, t.Generic[C]):
 
         with open(path, "w", encoding="utf-8") as file:
             file.write(str(self.get_dag(select_models)))
+
+    @python_api_analytics
+    def generate_manifest(
+        self,
+        output_path: t.Optional[t.Union[str, Path]] = None,
+        select_models: t.Optional[t.Collection[str]] = None,
+    ) -> Path:
+        """Generate a dbt-compatible ``manifest.json`` for the project.
+
+        Args:
+            output_path: Directory where the manifest will be written.
+            select_models: Optional collection of model name patterns to include.
+        """
+        from sqlmesh.core.manifest import ManifestGenerator
+
+        generator = ManifestGenerator(self)  # ty:ignore[invalid-argument-type]
+        return generator.generate(
+            output_path=output_path,
+            select_models=select_models,
+        )
 
     @python_api_analytics
     def create_test(

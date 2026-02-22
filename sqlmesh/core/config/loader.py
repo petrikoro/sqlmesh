@@ -188,7 +188,7 @@ def load_config_from_paths(
             if type(dbt_python_config) != config_type:
                 dbt_python_config = convert_config_type(dbt_python_config, config_type)
 
-            python_config = dbt_python_config
+            python_config = dbt_python_config  # ty:ignore[invalid-assignment]
 
     if python_config:
         model_defaults = python_config.model_defaults

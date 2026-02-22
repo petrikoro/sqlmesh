@@ -332,25 +332,6 @@ def sushi_context(init_and_plan_context: t.Callable) -> Context:
 
 
 @pytest.fixture()
-def sushi_dbt_context(init_and_plan_context: t.Callable) -> Context:
-    context, plan = init_and_plan_context("examples/sushi_dbt")
-
-    context.apply(plan)
-    return context
-
-
-@pytest.fixture()
-def sushi_test_dbt_context(init_and_plan_context) -> Context:
-    from tests.fixtures.dbt.sushi_test.seed_sources import init_raw_schema
-
-    context, plan = init_and_plan_context("tests/fixtures/dbt/sushi_test")
-    init_raw_schema(context.engine_adapter)
-
-    context.apply(plan)
-    return context
-
-
-@pytest.fixture()
 def sushi_no_default_catalog(mocker: MockerFixture, init_and_plan_context: t.Callable) -> Context:
     mocker.patch(
         "sqlmesh.core.engine_adapter.base.EngineAdapter.default_catalog",

@@ -3,7 +3,6 @@ from __future__ import annotations
 import fnmatch
 import typing as t
 from pathlib import Path
-from itertools import zip_longest
 import abc
 
 from sqlglot import exp
@@ -284,83 +283,6 @@ class NativeSelector(Selector):
             return isinstance(model, StandaloneAudit)
 
         raise SQLMeshError(f"Unsupported resource type: {resource_type}")
-
-
-class DbtSelector(Selector):
-    """Implementation of selectors that matches objects based on the DBT names instead of the SQLMesh native names"""
-
-    def _model_name(self, model: Node) -> str:
-        if dbt_fqn := model.dbt_fqn:
-            return dbt_fqn
-        raise SQLMeshError("dbt node information must be populated to use dbt selectors")
-
-    def _pattern_to_model_fqns(self, pattern: str, all_models: t.Dict[str, Node]) -> t.Set[str]:
-        # a pattern like "staging.customers" should match a model called "jaffle_shop.staging.customers"
-        # but not a model called "jaffle_shop.customers.staging"
-        # also a pattern like "aging" should not match "staging" so we need to consider components; not substrings
-        pattern_components = pattern.split(".")
-        first_pattern_component = pattern_components[0]
-        matches = set()
-        for fqn, model in all_models.items():
-            if not model.dbt_fqn:
-                continue
-
-            dbt_fqn_components = model.dbt_fqn.split(".")
-            try:
-                starting_idx = dbt_fqn_components.index(first_pattern_component)
-            except ValueError:
-                continue
-            for pattern_component, fqn_component in zip_longest(
-                pattern_components, dbt_fqn_components[starting_idx:]
-            ):
-                if pattern_component and not fqn_component:
-                    # the pattern still goes but we have run out of fqn components to match; no match
-                    break
-                if fqn_component and not pattern_component:
-                    # all elements of the pattern have matched elements of the fqn; match
-                    matches.add(fqn)
-                    break
-                if pattern_component != fqn_component:
-                    # the pattern explicitly doesnt match a component; no match
-                    break
-            else:
-                # called if no explicit break, indicating all components of the pattern matched all components of the fqn
-                matches.add(fqn)
-        return matches
-
-    def _matches_resource_type(self, resource_type: str, model: Node) -> bool:
-        """
-        ref: https://docs.getdbt.com/reference/node-selection/methods#resource_type
-
-        # supported by SQLMesh
-        "model"
-        "seed"
-        "source" # external model
-        "test" # standalone audit
-
-        # not supported by SQLMesh yet, commented out to throw an error if someone tries to use them
-        "analysis"
-        "exposure"
-        "metric"
-        "saved_query"
-        "semantic_model"
-        "snapshot"
-        "unit_test"
-        """
-        if resource_type not in ("model", "seed", "source", "test"):
-            raise SQLMeshError(f"Unsupported resource type: {resource_type}")
-
-        if isinstance(model, StandaloneAudit):
-            return resource_type == "test"
-
-        if resource_type == "model":
-            return model.is_model and not model.kind.is_external and not model.kind.is_seed
-        if resource_type == "source":
-            return model.kind.is_external
-        if resource_type == "seed":
-            return model.kind.is_seed
-
-        return False
 
 
 class SelectorDialect(Dialect):

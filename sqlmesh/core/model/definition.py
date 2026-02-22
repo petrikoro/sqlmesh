@@ -1221,9 +1221,6 @@ class _Model(ModelMeta, frozen=True):
                 for k, v in sorted(args.items()):
                     metadata.append(f"{k}:{gen(v)}")
 
-            if self.dbt_node_info:
-                metadata.append(self.dbt_node_info.json(sort_keys=True))
-
             metadata.extend(self._additional_metadata)
 
             self._metadata_hash = hash_data(metadata)
@@ -3079,7 +3076,6 @@ META_FIELD_CONVERTER: t.Dict[str, t.Callable] = {
     "formatting": str,
     "optimize_query": str,
     "virtual_environment_mode": lambda value: exp.Literal.string(value.value),
-    "dbt_node_info_": lambda value: value.to_expression(),
     "grants_": lambda value: value,
     "grants_target_layer": lambda value: exp.Literal.string(value.value),
 }

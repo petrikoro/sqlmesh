@@ -23,7 +23,7 @@ from sqlmesh.core.console import configure_console, get_console
 from sqlmesh.core.context import Context
 from sqlmesh.utils import Verbosity
 from sqlmesh.utils.date import TimeLike
-from sqlmesh.utils.errors import MissingDependencyError, SQLMeshError
+from sqlmesh.utils.errors import SQLMeshError
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ SKIP_LOAD_COMMANDS = (
     "run",
     "table_name",
 )
-SKIP_CONTEXT_COMMANDS = ("init", "ui")
+SKIP_CONTEXT_COMMANDS = ("init",)
 
 
 def _sqlmesh_version() -> str:
@@ -530,7 +530,7 @@ def diff(ctx: click.Context, environment: t.Optional[str] = None) -> None:
 @click.option(
     "--ignore-cron",
     is_flag=True,
-    help="Run all missing intervals, ignoring individual cron schedules. Only applies if --run is set.",
+    help="Ignore individual cron schedules when computing missing intervals. When used with models that have allow_partials, this includes partial (incomplete) intervals in the backfill range.",
     default=None,
 )
 @click.option(
@@ -875,62 +875,6 @@ def info(obj: Context, skip_connection: bool, verbose: int) -> None:
     obj.print_info(skip_connection=skip_connection, verbosity=Verbosity(verbose))
 
 
-@cli.command("ui")
-@click.option(
-    "--host",
-    type=str,
-    default="127.0.0.1",
-    help="Bind socket to this host. Default: 127.0.0.1",
-)
-@click.option(
-    "--port",
-    type=int,
-    default=8000,
-    help="Bind socket to this port. Default: 8000",
-)
-@click.option(
-    "--mode",
-    type=click.Choice(["ide", "catalog", "docs", "plan"], case_sensitive=False),
-    default="ide",
-    help="Mode to start the UI in. Default: ide",
-)
-@click.pass_context
-@error_handler
-@cli_analytics
-def ui(ctx: click.Context, host: str, port: int, mode: str) -> None:
-    """Start a browser-based SQLMesh UI."""
-    from sqlmesh.core.console import get_console
-
-    get_console().log_warning(
-        "The UI is deprecated and will be removed in a future version. Please use the SQLMesh VSCode extension instead. "
-        "Learn more at https://sqlmesh.readthedocs.io/en/stable/guides/vscode/"
-    )
-
-    try:
-        import uvicorn
-    except ModuleNotFoundError as e:
-        raise MissingDependencyError(
-            "Missing UI dependencies. Run `pip install 'sqlmesh[web]'` to install them."
-        ) from e
-
-    os.environ["PROJECT_PATH"] = ctx.obj
-    os.environ["UI_MODE"] = mode
-    if ctx.parent:
-        config = ctx.parent.params.get("config")
-        gateway = ctx.parent.params.get("gateway")
-        if config:
-            os.environ["CONFIG"] = config
-        if gateway:
-            os.environ["GATEWAY"] = gateway
-    uvicorn.run(
-        "web.server.app:app",
-        host=host,
-        port=port,
-        log_level="info",
-        timeout_keep_alive=300,
-    )
-
-
 @cli.command("migrate")
 @click.pass_context
 @error_handler
@@ -1262,3 +1206,22 @@ def state_import(obj: Context, input_file: Path, replace: bool, no_confirm: bool
     """Import a state export file back into the state database"""
     confirm = not no_confirm
     obj.import_state(input_file=input_file, clear=replace, confirm=confirm)
+
+
+@cli.command("parse")
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Output directory for the generated manifest.json.",
+)
+@click.pass_obj
+@error_handler
+@cli_analytics
+def parse(obj: Context, output: t.Optional[Path]) -> None:
+    """Parse project files and generate manifest.json/catalog.json artifacts."""
+    from sqlmesh.core.manifest import MANIFEST_FILENAME
+
+    manifest_output_path = output / MANIFEST_FILENAME if output else None
+    obj.generate_manifest(output_path=manifest_output_path)

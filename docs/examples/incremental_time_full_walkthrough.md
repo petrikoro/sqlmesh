@@ -599,19 +599,7 @@ sqlmesh create_external_models
     currency: STRING
 ```
 
-Now, when I run the command below in my terminal and click on the link it will open up my browser to show the column level lineage I know and love.
-
-```bash
-sqlmesh ui
-```
-
-```bash
-(venv) ✗ sqlmesh ui
-INFO:     Started server process [89705]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-```
+Now, I can inspect the column-level lineage.
 
 ![image.png](./incremental_time/node_level_audit_trail.png)
 
@@ -1416,7 +1404,7 @@ Run finished for environment 'prod'
 
 ## Summary
 
-I went through a full workflow for an intimidating problem, and it feels really good knowing what goes on behind the scenes when I run these SQLMesh commands. For those coming from other transformation frameworks like dbt, this is a new way to work.
+I went through a full workflow for an intimidating problem, and it feels really good knowing what goes on behind the scenes when I run these SQLMesh commands.
 
 It respects data as infrastructure vs. things to rebuild many times over each time you change something. I hope you feel equipped AND confident to start using SQLMesh and especially incremental models today!
 
@@ -1452,5 +1440,3 @@ I’ll make it convenient for you in making sure we answered all the pertinent q
 - How do I know SQLMesh is behaving how I want it to behave?
     - See the queries run by SQLMesh above. They’re listed out exactly as listed in the query history.
     - I skip listing out basic metadata queries and test connection queries like `SELECT 1` as those are more background tasks than core logic tasks.
-- Bonus question: How does this compare to dbt’s way of handling incrementals?
-    - [See here for a complete comparison](https://tobikodata.com/dbt-incremental-but-incomplete.html)

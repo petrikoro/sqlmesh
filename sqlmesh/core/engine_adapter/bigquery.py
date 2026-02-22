@@ -1440,8 +1440,6 @@ class _ErrorCounter:
     A class that counts errors and determines whether or not to retry based on the number of errors and the error
     type.
 
-    Reference implementation: https://github.com/dbt-labs/dbt-bigquery/blob/8339a034929b12e027f0a143abf46582f3f6ffbc/dbt/adapters/bigquery/connections.py#L672
-
     TODO: Implement a retry configuration that works across all engines
     """
 

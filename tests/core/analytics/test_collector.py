@@ -5,7 +5,6 @@ from unittest.mock import call
 import pytest
 from pytest_mock.plugin import MockerFixture
 
-from sqlmesh.core import constants as c
 from sqlmesh.core.analytics.collector import AnalyticsCollector
 from sqlmesh.core.snapshot import SnapshotChangeCategory
 from sqlmesh.integrations.github.cicd.config import GithubCICDBotConfig
@@ -22,7 +21,6 @@ def collector(mocker: MockerFixture) -> AnalyticsCollector:
     "project_type",
     [
         "native",
-        "dbt",
         "hybrid",
     ],
 )
@@ -41,9 +39,6 @@ def test_on_project_loaded(collector: AnalyticsCollector, mocker: MockerFixture,
 
     collector.flush()
 
-    from dbt.version import __version__ as dbt_version
-
-    version = ', "dbt_version": "' + dbt_version + '"' if project_type != c.NATIVE else ""
     collector._dispatcher.add_event.assert_has_calls(  # type: ignore
         [
             call(
@@ -55,9 +50,7 @@ def test_on_project_loaded(collector: AnalyticsCollector, mocker: MockerFixture,
                     "client_ts": mocker.ANY,
                     "event": '{"project_type": "'
                     + project_type
-                    + '", "models_count": 1, "audits_count": 2, "standalone_audits_count": 3, "macros_count": 4, "jinja_macros_count": 5, "load_time_ms": 1123, "state_sync_fingerprint": "test_fingerprint", "project_name_hash": "6e72a69d5c5cca8f0400338441c022e4"'
-                    + version
-                    + "}",
+                    + '", "models_count": 1, "audits_count": 2, "standalone_audits_count": 3, "macros_count": 4, "jinja_macros_count": 5, "load_time_ms": 1123, "state_sync_fingerprint": "test_fingerprint", "project_name_hash": "6e72a69d5c5cca8f0400338441c022e4"}',
                 }
             ),
         ]
@@ -183,7 +176,7 @@ def test_on_plan_apply(
                 {
                     "seq_num": 0,
                     "event_type": "PLAN_APPLY_START",
-                    "event": f'{{"plan_id": "{plan_id}", "engine_type": "bigquery", "state_sync_type": "mysql", "scheduler_type": "builtin", "is_dev": false, "skip_backfill": false, "no_gaps": false, "forward_only": false, "ensure_finalized_snapshots": false, "has_restatements": false, "directly_modified_count": 21, "indirectly_modified_count": 0, "environment_name_hash": "d6e4a9b6646c62fc48baa6dd6150d1f7"}}',
+                    "event": f'{{"plan_id": "{plan_id}", "engine_type": "bigquery", "state_sync_type": "mysql", "scheduler_type": "builtin", "is_dev": false, "skip_backfill": false, "no_gaps": false, "forward_only": false, "ensure_finalized_snapshots": false, "has_restatements": false, "directly_modified_count": 22, "indirectly_modified_count": 0, "environment_name_hash": "d6e4a9b6646c62fc48baa6dd6150d1f7"}}',
                     **common_fields,
                 }
             ),

@@ -173,8 +173,8 @@ class DbtNodeInfo(PydanticModel):
     """
 
     name: str
-    """Name of this object in the dbt global namespace, used by things like {{ ref() }} calls.    
-    
+    """Name of this object in the dbt global namespace, used by things like {{ ref() }} calls.
+
     Examples:
         - unique_stg_orders_order_id
         - raw_payments
@@ -184,7 +184,7 @@ class DbtNodeInfo(PydanticModel):
     fqn: str
     """Used for selectors in --select/--exclude.
     Takes the filesystem into account so may be structured differently to :unique_id.
-    
+
     Examples:
         - jaffle_shop.staging.unique_stg_orders_order_id
         - jaffle_shop.raw_payments
@@ -334,6 +334,8 @@ class _Node(DbtInfoMixin, PydanticModel):
             return None
 
         v = str_or_exp_to_str(v)
+        if not v:
+            return None
 
         try:
             return zoneinfo.ZoneInfo(v)

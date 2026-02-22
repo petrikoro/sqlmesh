@@ -286,7 +286,7 @@ def test_find_call_names():
     ]
 
 
-def test_dbt_adapter_macro_scope():
+def test_adapter_prefixed_macro_scope():
     package_a = """
 {% macro spark__macro_a() %}
 macro_a

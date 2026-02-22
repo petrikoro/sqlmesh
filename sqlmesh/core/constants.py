@@ -91,7 +91,6 @@ SQLMESH_METADATA = "__sqlmesh__metadata__"
 
 
 BUILTIN = "builtin"
-DBT = "dbt"
 NATIVE = "native"
 HYBRID = "hybrid"
 

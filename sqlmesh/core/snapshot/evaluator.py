@@ -51,7 +51,7 @@ from sqlmesh.core.model import (
     ViewKind,
     CustomKind,
 )
-from sqlmesh.core.model.kind import _Incremental, DbtCustomKind
+from sqlmesh.core.model.kind import _Incremental
 from sqlmesh.utils import CompletionStatus, columns_to_types_all_known
 from sqlmesh.core.schema_diff import (
     has_drop_alteration,
@@ -89,7 +89,7 @@ from sqlmesh.utils.jinja import MacroReturnVal
 if sys.version_info >= (3, 12):
     from importlib import metadata
 else:
-    import importlib_metadata as metadata  # type: ignore
+    import importlib_metadata as metadata
 
 if t.TYPE_CHECKING:
     from sqlmesh.core.engine_adapter._typing import DF, QueryOrDF
@@ -136,7 +136,9 @@ class SnapshotEvaluator:
         )
         self.execution_tracker = QueryExecutionTracker()
         self.adapters = {
-            gateway: adapter.with_settings(query_execution_tracker=self.execution_tracker)
+            gateway: adapter.with_settings(  # ty:ignore[unresolved-attribute]
+                query_execution_tracker=self.execution_tracker
+            )
             for gateway, adapter in self.adapters.items()
         }
         self.adapter = (
@@ -323,7 +325,7 @@ class SnapshotEvaluator:
                     snapshots=snapshots,
                     table_mapping=table_mapping,
                     environment_naming_info=environment_naming_info,
-                    deployability_index=deployability_index,  # type: ignore
+                    deployability_index=deployability_index,
                     on_complete=on_complete,
                 ),
                 self.ddl_concurrent_tasks,
@@ -554,6 +556,7 @@ class SnapshotEvaluator:
         execution_time: t.Optional[TimeLike] = None,
         deployability_index: t.Optional[DeployabilityIndex] = None,
         wap_id: t.Optional[str] = None,
+        is_run: bool = False,
         **kwargs: t.Any,
     ) -> t.List[AuditResult]:
         """Execute a snapshot's node's audit queries.
@@ -566,6 +569,7 @@ class SnapshotEvaluator:
             execution_time: The date/time time reference to use for execution time.
             deployability_index: Determines snapshots that are deployable in the context of this evaluation.
             wap_id: The WAP ID if applicable, None otherwise.
+            is_run: Whether this audit is being executed as part of `sqlmesh run` (as opposed to `plan/apply`).
             kwargs: Additional kwargs to pass to the renderer.
         """
         deployability_index = deployability_index or DeployabilityIndex.all_deployable()
@@ -625,6 +629,7 @@ class SnapshotEvaluator:
                     end=end,
                     execution_time=execution_time,
                     deployability_index=deployability_index,
+                    is_run=is_run,
                     **kwargs,
                 )
             )
@@ -651,7 +656,7 @@ class SnapshotEvaluator:
         except the calling one."""
         try:
             for adapter in self.adapters.values():
-                adapter.recycle()
+                adapter.recycle()  # ty:ignore[unresolved-attribute]
 
         except Exception:
             logger.exception("Failed to recycle Snapshot Evaluator")
@@ -660,16 +665,18 @@ class SnapshotEvaluator:
         """Closes all open connections and releases all allocated resources."""
         try:
             for adapter in self.adapters.values():
-                adapter.close()
+                adapter.close()  # ty:ignore[unresolved-attribute]
         except Exception:
             logger.exception("Failed to close Snapshot Evaluator")
 
     def set_correlation_id(self, correlation_id: CorrelationId) -> SnapshotEvaluator:
         return SnapshotEvaluator(
             {
-                gateway: adapter.with_settings(correlation_id=correlation_id)
+                gateway: adapter.with_settings(  # ty:ignore[unresolved-attribute]
+                    correlation_id=correlation_id
+                )
                 for gateway, adapter in self.adapters.items()
-            },
+            },  # ty:ignore[invalid-argument-type]
             self.ddl_concurrent_tasks,
             self.selected_gateway,
         )
@@ -1028,10 +1035,10 @@ class SnapshotEvaluator:
 
             query_or_df = reduce(
                 lambda a, b: (
-                    pd.concat([a, b], ignore_index=True)  # type: ignore
+                    pd.concat([a, b], ignore_index=True)
                     if isinstance(a, pd.DataFrame)
-                    else a.union_all(b)  # type: ignore
-                ),  # type: ignore
+                    else a.union_all(b)
+                ),
                 queries_or_dfs,
                 first_query_or_df,
             )
@@ -1370,9 +1377,22 @@ class SnapshotEvaluator:
         end: t.Optional[TimeLike],
         execution_time: t.Optional[TimeLike],
         deployability_index: t.Optional[DeployabilityIndex],
+        is_run: bool = False,
         **kwargs: t.Any,
     ) -> AuditResult:
         if audit.skip:
+            return AuditResult(
+                audit=audit,
+                audit_args=audit_args,
+                model=snapshot.model_or_none,
+                skipped=True,
+            )
+
+        # Model's "run_only" argument takes precedence over the audit's default setting
+        run_only = audit_args.pop("run_only", None)
+        run_only = run_only == exp.true() if run_only is not None else audit.run_only
+
+        if run_only and not is_run:
             return AuditResult(
                 audit=audit,
                 audit_args=audit_args,
@@ -1460,7 +1480,7 @@ class SnapshotEvaluator:
     def get_adapter(self, gateway: t.Optional[str] = None) -> EngineAdapter:
         """Returns the adapter for the specified gateway or the default adapter if none is provided."""
         if gateway:
-            if adapter := self.adapters.get(gateway):
+            if adapter := self.adapters.get(gateway):  # ty:ignore[invalid-argument-type]
                 return adapter
             raise SQLMeshError(f"Gateway '{gateway}' not found in the available engine adapters.")
         return self.adapter
@@ -1662,19 +1682,6 @@ def _evaluation_strategy(snapshot: SnapshotInfoLike, adapter: EngineAdapter) -> 
         klass = ViewStrategy
     elif snapshot.is_scd_type_2:
         klass = SCDType2Strategy
-    elif snapshot.is_dbt_custom:
-        if hasattr(snapshot, "model") and isinstance(
-            (model_kind := snapshot.model.kind), DbtCustomKind
-        ):
-            return DbtCustomMaterializationStrategy(
-                adapter=adapter,
-                materialization_name=model_kind.materialization,
-                materialization_template=model_kind.definition,
-            )
-
-        raise SQLMeshError(
-            f"Expected DbtCustomKind for dbt custom materialization in model '{snapshot.name}'"
-        )
     elif snapshot.is_custom:
         if snapshot.custom_materialization is None:
             raise SQLMeshError(
@@ -2183,7 +2190,7 @@ class MaterializableStrategy(PromotableStrategy, abc.ABC):
             target_column_to_types = self.adapter.columns(table_name)
         else:
             target_column_to_types = (
-                model.columns_to_types  # type: ignore
+                model.columns_to_types
                 if model.annotated
                 and not model.on_destructive_change.is_ignore
                 and not model.on_additive_change.is_ignore
@@ -2761,16 +2768,20 @@ class ViewStrategy(PromotableStrategy):
     ) -> None:
         logger.info("Migrating view '%s'", target_table_name)
         model = snapshot.model
-        render_kwargs = dict(
-            execution_time=now(), snapshots=kwargs["snapshots"], engine_adapter=self.adapter
-        )
+        _execution_time = now()
+        _snapshots = kwargs["snapshots"]
+        _engine_adapter = self.adapter
 
         self.adapter.create_view(
             target_table_name,
-            model.render_query_or_raise(**render_kwargs),
+            model.render_query_or_raise(
+                execution_time=_execution_time, snapshots=_snapshots, engine_adapter=_engine_adapter
+            ),
             model.columns_to_types,
             materialized=self._is_materialized_view(model),
-            view_properties=model.render_physical_properties(**render_kwargs),
+            view_properties=model.render_physical_properties(
+                execution_time=_execution_time, snapshots=_snapshots, engine_adapter=_engine_adapter
+            ),
             table_description=model.description,
             column_descriptions=model.column_descriptions,
         )
@@ -2849,7 +2860,7 @@ def get_custom_materialization_kind_type(st: t.Type[CustomMaterialization]) -> t
     # >>>> class MyCustomMaterialization(CustomMaterialization[MyCustomKind])
     # and fall back to base CustomKind if there is no generic type declared
     if hasattr(st, "__orig_bases__"):
-        for base in st.__orig_bases__:
+        for base in st.__orig_bases__:  # ty:ignore[not-iterable]
             if hasattr(base, "__origin__") and base.__origin__ == CustomMaterialization:
                 for generic_arg in t.get_args(base):
                     if not issubclass(generic_arg, CustomKind):

@@ -4,17 +4,15 @@
 
 SQLMesh is a next-generation data transformation framework designed to ship data quickly, efficiently, and without error. Data teams can run and deploy data transformations written in SQL or Python with visibility and control at any size.
 
-It is more than just a [dbt alternative](https://tobikodata.com/reduce_costs_with_cron_and_partitions.html).
-
 <p align="center">
   <img src="docs/readme/architecture_diagram.png" alt="Architecture Diagram" width="100%" height="100%">
 </p>
 
 ## Core Features
 
-<img src="https://github.com/TobikoData/sqlmesh-public-assets/blob/main/vscode.gif?raw=true" alt="SQLMesh Plan Mode">
+<img src="https://github.com/TobikoData/sqlmesh-public-assets/blob/main/sqlmesh_plan_mode.gif?raw=true" alt="SQLMesh Plan Mode">
 
-> Get instant SQL impact and context of your changes, both in the CLI and in the [SQLMesh VSCode Extension](https://sqlmesh.readthedocs.io/en/latest/guides/vscode/?h=vs+cod)
+> Get instant SQL impact analysis of your changes in the CLI
 
   <details>
   <summary><b>Virtual Data Environments</b></summary>
@@ -118,7 +116,7 @@ outputs:
 ```
 </details>
 
-* Never build a table [more than once](https://tobikodata.com/simplicity-or-efficiency-how-dbt-makes-you-choose.html)
+* Never build a table more than once
 * Track what data’s been modified and run only the necessary transformations for [incremental models](https://tobikodata.com/correctly-loading-incremental-data-at-scale.html)
 * Run [unit tests](https://tobikodata.com/we-need-even-greater-expectations.html) for free and configure automated audits
 * Run [table diffs](https://sqlmesh.readthedocs.io/en/stable/examples/sqlmesh_cli_crash_course/?h=crash#run-data-diff-against-prod) between prod and dev based on tables/views impacted by a change 
@@ -143,7 +141,7 @@ mkdir sqlmesh-example
 cd sqlmesh-example
 python -m venv .venv
 source .venv/bin/activate
-pip install 'sqlmesh[lsp]' # install the sqlmesh package with extensions to work with VSCode
+pip install sqlmesh
 source .venv/bin/activate # reactivate the venv to ensure you're using the right installation
 sqlmesh init # follow the prompts to get started (choose DuckDB)
 ```
@@ -160,7 +158,7 @@ mkdir sqlmesh-example
 cd sqlmesh-example
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install 'sqlmesh[lsp]' # install the sqlmesh package with extensions to work with VSCode
+pip install sqlmesh
 .\.venv\Scripts\Activate.ps1 # reactivate the venv to ensure you're using the right installation
 sqlmesh init # follow the prompts to get started (choose DuckDB)
 ```

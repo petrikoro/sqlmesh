@@ -35,7 +35,6 @@ from sqlmesh.core.notification_target import ConsoleNotificationTarget
 from sqlmesh.core.user import User
 from sqlmesh.utils.errors import ConfigError
 from sqlmesh.utils import yaml
-from sqlmesh.dbt.loader import DbtLoader
 from tests.utils.test_filesystem import create_temp_file
 
 
@@ -1459,58 +1458,3 @@ def test_load_configs_without_main_connection(tmp_path: Path):
     state_connection_config = config.get_state_connection()
     assert isinstance(state_connection_config, DuckDBConnectionConfig)
     assert state_connection_config.database == "state.db"
-
-
-def test_load_configs_in_dbt_project_without_config_py(tmp_path: Path):
-    # this is when someone either:
-    # - inits a dbt project for sqlmesh, which creates a sqlmesh.yaml file
-    # - uses the sqlmesh_dbt cli for the first time, which runs init if the config doesnt exist, which creates a config
-    # when in pure yaml mode, sqlmesh should be able to auto-detect the presence of DBT and select the DbtLoader instead
-    # of the main loader
-    (tmp_path / "dbt_project.yml").write_text("""
-name: jaffle_shop
-    """)
-
-    (tmp_path / "profiles.yml").write_text("""
-jaffle_shop:
-
-  target: dev
-  outputs:
-    dev:
-      type: duckdb
-      path: 'jaffle_shop.duckdb'
-    """)
-
-    (tmp_path / "sqlmesh.yaml").write_text("""
-gateways:
-  dev:
-    state_connection:
-      type: duckdb
-      database: state.db
-model_defaults:
-  start: '2020-01-01'
-""")
-
-    configs = list(load_configs(config=None, config_type=Config, paths=[tmp_path]).values())
-    assert len(configs) == 1
-
-    config = configs[0]
-    assert config.loader == DbtLoader
-
-    assert list(config.gateways) == ["dev"]
-
-    # main connection
-    connection_config = config.get_connection()
-    assert connection_config
-    assert isinstance(connection_config, DuckDBConnectionConfig)
-    assert connection_config.database == "jaffle_shop.duckdb"  # from dbt profiles.yml
-
-    # state connection
-    state_connection_config = config.get_state_connection()
-    assert state_connection_config
-    assert isinstance(state_connection_config, DuckDBConnectionConfig)
-    assert state_connection_config.database == "state.db"  # from sqlmesh.yaml
-
-    # model_defaults
-    assert config.model_defaults.dialect == "duckdb"  # from dbt profiles.yml
-    assert config.model_defaults.start == "2020-01-01"  # from sqlmesh.yaml

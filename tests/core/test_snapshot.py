@@ -985,7 +985,7 @@ def test_fingerprint(model: Model, parent_model: Model):
 
     original_fingerprint = SnapshotFingerprint(
         data_hash="2406542604",
-        metadata_hash="1056339358",
+        metadata_hash="230745321",
     )
 
     assert fingerprint == original_fingerprint
@@ -1046,7 +1046,7 @@ def test_fingerprint_seed_model():
 
     expected_fingerprint = SnapshotFingerprint(
         data_hash="2112858704",
-        metadata_hash="2674364560",
+        metadata_hash="2120623978",
     )
 
     model = load_sql_based_model(expressions, path=Path("./examples/sushi/models/test_model.sql"))
@@ -1085,7 +1085,7 @@ def test_fingerprint_jinja_macros(model: Model):
     )
     original_fingerprint = SnapshotFingerprint(
         data_hash="93332825",
-        metadata_hash="1056339358",
+        metadata_hash="230745321",
     )
 
     fingerprint = fingerprint_from_node(model, nodes={})
@@ -3017,7 +3017,7 @@ def test_check_ready_intervals(mocker: MockerFixture):
     ):
         mock = mocker.Mock()
         mock.side_effect = [to_intervals(r) for r in ready]
-        check_ready_intervals(mock, intervals, mocker.Mock(), mocker.Mock()) == expected
+        assert check_ready_intervals(mock, intervals, mocker.Mock(), mocker.Mock()) == expected
 
     assert_check_intervals([], [], [])
     assert_check_intervals([(0, 1)], [[]], [])

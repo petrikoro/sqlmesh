@@ -1478,15 +1478,15 @@ def replace_merge_table_aliases(
     expression: exp.Expression, dialect: t.Optional[str] = None
 ) -> exp.Expression:
     """
-    Resolves references from the "source" and "target" tables (or their DBT equivalents)
+    Resolves references from the "source" and "target" tables
     with the corresponding SQLMesh merge aliases (MERGE_SOURCE_ALIAS and MERGE_TARGET_ALIAS)
     """
     from sqlmesh.core.engine_adapter.base import MERGE_SOURCE_ALIAS, MERGE_TARGET_ALIAS
 
     if isinstance(expression, exp.Column) and (first_part := expression.parts[0]):
-        if first_part.this.lower() in ("target", "dbt_internal_dest", "__merge_target__"):
+        if first_part.this.lower() in ("target", "__merge_target__"):
             first_part.replace(exp.to_identifier(MERGE_TARGET_ALIAS, quoted=True))
-        elif first_part.this.lower() in ("source", "dbt_internal_source", "__merge_source__"):
+        elif first_part.this.lower() in ("source", "__merge_source__"):
             first_part.replace(exp.to_identifier(MERGE_SOURCE_ALIAS, quoted=True))
 
     return expression

@@ -5,7 +5,6 @@ from sqlglot import exp, parse_one
 from sqlmesh.core import constants as c
 from sqlmesh.core.config.model import ModelDefaultsConfig
 from sqlmesh.core.context import Context
-from sqlmesh.core.node import DbtNodeInfo
 from sqlmesh.core.audit import (
     ModelAudit,
     StandaloneAudit,
@@ -13,7 +12,7 @@ from sqlmesh.core.audit import (
     load_audit,
     load_multiple_audits,
 )
-from sqlmesh.core.dialect import parse, jinja_query
+from sqlmesh.core.dialect import parse
 from sqlmesh.core.model import (
     FullKind,
     IncrementalByTimeRangeKind,
@@ -731,27 +730,6 @@ def test_render_definition():
     assert "def test_macro(evaluator, v):" in format_model_expressions(audit.render_definition())
 
 
-def test_render_definition_dbt_node_info():
-    node_info = DbtNodeInfo(
-        unique_id="test.project.my_audit", name="my_audit", fqn="project.my_audit"
-    )
-
-    audit = StandaloneAudit(name="my_audit", dbt_node_info=node_info, query=jinja_query("select 1"))
-
-    assert (
-        audit.render_definition()[0].sql(pretty=True)
-        == """AUDIT (
-  name my_audit,
-  dbt_node_info (
-    fqn := 'project.my_audit',
-    name := 'my_audit',
-    unique_id := 'test.project.my_audit'
-  ),
-  standalone TRUE
-)"""
-    )
-
-
 def test_text_diff():
     expressions = parse(
         """
@@ -907,13 +885,18 @@ def test_load_inline_audits(assert_exp_eq):
 
 def test_model_inline_audits(sushi_context: Context):
     model_name = "sushi.waiter_names"
-    expected_query = 'SELECT * FROM (SELECT * FROM "memory"."sushi"."waiter_names" AS "waiter_names") AS "_0" WHERE "id" < 0'
+    expected_query = (
+        'SELECT * FROM "memory"."sushi"."waiter_names" AS "waiter_names" WHERE "id" < 0'
+    )
     model = sushi_context.get_snapshot(model_name, raise_if_missing=True).node
 
     assert isinstance(model, SeedModel)
     assert len(model.audit_definitions) == 3
     assert isinstance(model.audit_definitions["assert_valid_name"], ModelAudit)
-    model.render_audit_query(model.audit_definitions["assert_positive_id"]).sql() == expected_query
+    assert (
+        model.render_audit_query(model.audit_definitions["assert_positive_id"]).sql()
+        == expected_query
+    )
 
 
 def test_audit_query_normalization():

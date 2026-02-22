@@ -113,7 +113,7 @@ class AnalyticsCollector:
         """Called when a project is loaded.
 
         Args:
-            project_type: The type of the project. Eg. "dbt" or "native".
+            project_type: The type of the project.
             models_count: The number of models in the project.
             audits_count: The number of audits in the project.
             standalone_audits_count: The number of standalone audits in the project.
@@ -135,11 +135,6 @@ class AnalyticsCollector:
             "state_sync_fingerprint": state_sync_fingerprint,
             "project_name_hash": _anonymize(project_name),
         }
-
-        if project_type in {c.DBT, c.HYBRID}:
-            from dbt.version import __version__ as dbt_version
-
-            event_data["dbt_version"] = dbt_version
 
         self._add_event("PROJECT_LOADED", event_data)
 

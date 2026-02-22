@@ -255,3 +255,47 @@ class GetModelsResponse(CustomMethodResponseBaseClass):
     """
 
     models: t.List[ModelInfo]
+
+
+GET_API_MODELS_FEATURE = "sqlmesh/get_api_models"
+
+
+class GetApiModelsRequest(CustomMethodRequestBaseClass):
+    """Request to get all models with full details for the lineage webview."""
+
+    pass
+
+
+GET_MODEL_LINEAGE_FEATURE = "sqlmesh/get_model_lineage"
+
+
+class GetModelLineageRequest(CustomMethodRequestBaseClass):
+    """Request to get a model's lineage graph."""
+
+    modelName: str
+
+
+GET_COLUMN_LINEAGE_FEATURE = "sqlmesh/get_column_lineage"
+
+
+class GetColumnLineageRequest(CustomMethodRequestBaseClass):
+    """Request to get a column's lineage graph."""
+
+    modelName: str
+    columnName: str
+    modelsOnly: bool = False
+
+
+GET_TABLE_DIFF_FEATURE = "sqlmesh/get_table_diff"
+
+
+class GetTableDiffRequest(CustomMethodRequestBaseClass):
+    """Request to get a table diff between two environments."""
+
+    source: str
+    target: str
+    on: t.Optional[str] = None
+    model_or_snapshot: t.Optional[str] = None
+    where: t.Optional[str] = None
+    temp_schema: t.Optional[str] = None
+    limit: int = 20

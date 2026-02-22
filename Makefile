@@ -6,15 +6,8 @@ else
     PIP := pip3
 endif
 
-UNAME_S := $(shell uname -s)
-ifeq ($(UNAME_S),Darwin)
-    SED_INPLACE = sed -i ''
-else
-    SED_INPLACE = sed -i
-endif
-
 install-dev:
-	$(PIP) install -e ".[dev,web,slack,dlt,lsp]" ./examples/custom_materializations
+	$(PIP) install -e ".[dev,slack,dlt,lsp]" ./examples/custom_materializations
 
 install-doc:
 	$(PIP) install -r ./docs/requirements.txt
@@ -22,54 +15,8 @@ install-doc:
 install-pre-commit:
 	pre-commit install
 
-install-dev-dbt-%:
-	@version="$*"; \
-	period_count=$$(echo "$$version" | tr -cd '.' | wc -c); \
-	if [ "$$period_count" -eq 0 ]; then \
-		version="$${version:0:1}.$${version:1}"; \
-	elif [ "$$period_count" -eq 1 ]; then \
-		version="$$version.0"; \
-	fi; \
-	echo "Installing dbt version: $$version"; \
-	cp pyproject.toml pyproject.toml.backup; \
-	$(SED_INPLACE) 's/"pydantic>=2.0.0"/"pydantic"/g' pyproject.toml; \
-	if [ "$$version" = "1.10.0" ]; then \
-		echo "Applying special handling for dbt 1.10.0"; \
-		$(SED_INPLACE) -E 's/"(dbt-core)[^"]*"/"\1~='"$$version"'"/g' pyproject.toml; \
-		$(SED_INPLACE) -E 's/"(dbt-(bigquery|duckdb|snowflake|athena-community|clickhouse|redshift|trino))[^"]*"/"\1"/g' pyproject.toml; \
-		$(SED_INPLACE) -E 's/"(dbt-databricks)[^"]*"/"\1~='"$$version"'"/g' pyproject.toml; \
-	else \
-		echo "Applying version $$version to all dbt packages"; \
-		$(SED_INPLACE) -E 's/"(dbt-[^"><=~!]+)[^"]*"/"\1~='"$$version"'"/g' pyproject.toml; \
-	fi; \
-	if printf '%s\n' "$$version" | awk -F. '{ if ($$1 == 1 && (($$2 >= 3 && $$2 <= 5) || $$2 == 10)) exit 0; exit 1 }'; then \
-		echo "Applying numpy<2 constraint for dbt $$version"; \
-		$(SED_INPLACE) 's/"numpy"/"numpy<2"/g' pyproject.toml; \
-	fi; \
-	$(MAKE) install-dev; \
-	if [ "$$version" = "1.6.0" ]; then \
-		echo "Applying overrides for dbt 1.6.0"; \
-		$(PIP) install 'pydantic>=2.0.0' 'google-cloud-bigquery==3.30.0' 'databricks-sdk==0.28.0' --reinstall; \
-	fi; \
-	if [ "$$version" = "1.7.0" ]; then \
-		echo "Applying overrides for dbt 1.7.0"; \
-		$(PIP) install 'databricks-sdk==0.28.0' --reinstall; \
-	fi; \
-	if [ "$$version" = "1.5.0" ]; then \
-		echo "Applying overrides for dbt 1.5.0"; \
-		$(PIP) install 'dbt-databricks==1.5.6' 'numpy<2' --reinstall; \
-	fi; \
-	mv pyproject.toml.backup pyproject.toml; \
-	echo "Restored original pyproject.toml"
-
 style:
 	pre-commit run --all-files
-
-py-style:
-	SKIP=prettier,eslint pre-commit run --all-files
-
-ui-style:
-	pnpm run lint
 
 doc-test:
 	python -m pytest --doctest-modules sqlmesh/core sqlmesh/utils
@@ -95,22 +42,13 @@ api-docs:
 api-docs-serve:
 	python pdoc/cli.py
 
-ui-up:
-	docker compose -f ./web/docker-compose.yml up --build -d && $(if $(shell which open), open http://localhost:8001, echo "Open http://localhost:8001 in your browser.")
-
-ui-down:
-	docker compose -f ./web/docker-compose.yml down
-
-ui-build:
-	docker compose -f ./web/docker-compose.yml -f ./web/docker-compose.build.yml run app
-
 clean-build:
 	rm -rf build/ && rm -rf dist/ && rm -rf *.egg-info
 
 clear-caches:
 	find . -type d -name ".cache" -exec rm -rf {} + 2>/dev/null && echo "Successfully removed all .cache directories"
 
-dev-publish: ui-build clean-build publish
+dev-publish: clean-build publish
 
 jupyter-example:
 	jupyter lab tests/slows/jupyter/example_outputs.ipynb
@@ -129,10 +67,10 @@ cicd-test:
 	pytest -n auto -m "fast or slow" --junitxml=test-results/junit-cicd.xml && pytest -m "isolated" && pytest -m "registry_isolation" && pytest -m "dialect_isolated"
 
 core-fast-test:
-	pytest -n auto -m "fast and not web and not github and not dbt and not jupyter"
+	pytest -n auto -m "fast and not web and not github and not jupyter"
 
 core-slow-test:
-	pytest -n auto -m "(fast or slow) and not web and not github and not dbt and not jupyter"
+	pytest -n auto -m "(fast or slow) and not web and not github and not jupyter"
 
 engine-slow-test:
 	pytest -n auto -m "(fast or slow) and engine"
@@ -145,12 +83,6 @@ engine-remote-test:
 
 engine-test:
 	pytest -n auto -m "engine"
-
-dbt-test:
-	pytest -n auto -m "dbt and not cicdonly"
-
-dbt-fast-test:
-	pytest -n auto -m "dbt and fast" --reruns 3
 
 github-test:
 	pytest -n auto -m "github"
@@ -168,7 +100,7 @@ guard-%:
 	fi
 
 engine-%-install:
-	$(PIP) install -e ".[dev,web,slack,lsp,${*}]" ./examples/custom_materializations
+	$(PIP) install -e ".[dev,slack,lsp,${*}]" ./examples/custom_materializations
 
 engine-docker-%-up:
 	docker compose -f ./tests/core/engine_adapter/integration/docker/compose.${*}.yaml up -d
@@ -237,15 +169,6 @@ fabric-test: guard-FABRIC_HOST guard-FABRIC_CLIENT_ID guard-FABRIC_CLIENT_SECRET
 
 gcp-postgres-test: guard-GCP_POSTGRES_INSTANCE_CONNECTION_STRING guard-GCP_POSTGRES_USER guard-GCP_POSTGRES_PASSWORD guard-GCP_POSTGRES_KEYFILE_JSON engine-gcppostgres-install
 	pytest -n auto -m "gcp_postgres" --reruns 3 --junitxml=test-results/junit-gcp-postgres.xml
-
-vscode_settings:
-	mkdir -p .vscode
-	cp -r ./tooling/vscode/*.json .vscode/
-
-vscode-generate-openapi:
-	python3 web/server/openapi.py --output vscode/openapi.json
-	pnpm run fmt
-	cd vscode/react && pnpm run generate:api
 
 benchmark-ci:
 	python benchmarks/lsp_render_model_bench.py --debug-single-value

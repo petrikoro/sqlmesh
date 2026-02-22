@@ -99,18 +99,6 @@ make bigquery-test   # Needs GOOGLE_APPLICATION_CREDENTIALS
 make databricks-test # Needs DATABRICKS_* env vars
 ```
 
-### UI Development
-```bash
-# In web/client directory
-pnpm run dev   # Start development server
-pnpm run build # Production build
-pnpm run test  # Run tests
-
-# Docker-based UI
-make ui-up     # Start UI in Docker
-make ui-down   # Stop UI
-```
-
 ## Architecture Overview
 
 ### Core Components
@@ -139,9 +127,7 @@ make ui-down   # Stop UI
 
 - `sqlmesh/core/context.py`: Main orchestration class
 - `examples/sushi/`: Reference implementation used in tests
-- `web/server/main.py`: Web UI backend entry point
-- `web/client/src/App.tsx`: Web UI frontend entry point
-- `vscode/extension/src/extension.ts`: VSCode extension entry point
+- `sqlmesh/api/handlers.py`: API handler functions (models, lineage, table diff) used by LSP and other integration surfaces
 
 ## GitHub CI/CD Bot Architecture
 
@@ -287,68 +273,3 @@ engine_adapter.drop_table(table_name)
 3. Sequential migration execution (numerical order)
 4. Snapshot fingerprint recalculation if needed
 5. Environment updates with new snapshot references
-
-## dbt Integration
-
-SQLMesh provides native support for dbt projects, allowing users to run existing dbt projects while gaining access to SQLMesh's advanced features like virtual environments and plan/apply workflows.
-
-### Core dbt Integration
-
-**Location**: `sqlmesh/dbt/` - Complete dbt integration architecture
-
-**Key Components**:
-- `sqlmesh/dbt/loader.py`: Main dbt project loader extending SQLMesh's base loader
-- `sqlmesh/dbt/manifest.py`: dbt manifest parsing and project discovery
-- `sqlmesh/dbt/adapter.py`: dbt adapter system for SQL execution and schema operations
-- `sqlmesh/dbt/model.py`: dbt model configurations and materialization mapping
-- `sqlmesh/dbt/context.py`: dbt project context and environment management
-
-### Project Conversion
-
-**dbt Converter**: `sqlmesh/dbt/converter/` - Tools for migrating dbt projects to SQLMesh
-
-**Key Features**:
-- `convert.py`: Main conversion orchestration
-- `jinja.py` & `jinja_transforms.py`: Jinja template and macro conversion
-- Full support for dbt assets (models, seeds, sources, tests, snapshots, macros)
-
-**CLI Commands**:
-```bash
-# Initialize SQLMesh in existing dbt project
-sqlmesh init -t dbt
-
-# Convert dbt project to SQLMesh format
-sqlmesh dbt convert
-```
-
-### Supported dbt Features
-
-**Project Structure**:
-- Full dbt project support (models, seeds, sources, tests, snapshots, macros)
-- dbt package dependencies and version management
-- Profile integration using existing `profiles.yml` for connections
-
-**Materializations**:
-- All standard dbt materializations (table, view, incremental, ephemeral)
-- Incremental model strategies (delete+insert, merge, insert_overwrite)
-- SCD Type 2 support and snapshot strategies
-
-**Advanced Features**:
-- Jinja templating with full macro support
-- Runtime variable passing and configuration
-- dbt test integration and execution
-- Cross-database compatibility with SQLMesh's multi-dialect support
-
-### Example Projects
-
-**sushi_dbt**: `examples/sushi_dbt/` - Complete dbt project running with SQLMesh
-**Test Fixtures**: `tests/fixtures/dbt/sushi_test/` - Comprehensive test dbt project with all asset types
-
-### Integration Benefits
-
-When using dbt with SQLMesh, you gain:
-- **Virtual Environments**: Isolated development without warehouse costs
-- **Plan/Apply Workflow**: Safe deployments with change previews
-- **Multi-Dialect Support**: Run the same dbt project across different SQL engines
-- **Advanced Testing**: Enhanced testing capabilities beyond standard dbt tests
-- **State Management**: Sophisticated metadata and versioning system

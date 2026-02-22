@@ -36,7 +36,6 @@ from sqlmesh.core.config.naming import NameInferenceConfig as NameInferenceConfi
 from sqlmesh.core.config.linter import LinterConfig as LinterConfig
 from sqlmesh.core.config.plan import PlanConfig
 from sqlmesh.core.config.run import RunConfig
-from sqlmesh.core.config.dbt import DbtConfig
 from sqlmesh.core.config.scheduler import (
     BuiltInSchedulerConfig,
     SchedulerConfig,
@@ -174,7 +173,6 @@ class Config(BaseConfig):
     linter: LinterConfig = LinterConfig()
     janitor: JanitorConfig = JanitorConfig()
     cache_dir: t.Optional[str] = None
-    dbt: t.Optional[DbtConfig] = None
 
     _FIELD_UPDATE_STRATEGY: t.ClassVar[t.Dict[str, UpdateStrategy]] = {
         "gateways": UpdateStrategy.NESTED_UPDATE,
@@ -193,7 +191,6 @@ class Config(BaseConfig):
         "before_all": UpdateStrategy.EXTEND,
         "after_all": UpdateStrategy.EXTEND,
         "linter": UpdateStrategy.NESTED_UPDATE,
-        "dbt": UpdateStrategy.NESTED_UPDATE,
     }
 
     _connection_config_validator = connection_config_validator

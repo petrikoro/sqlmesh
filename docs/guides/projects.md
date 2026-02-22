@@ -67,13 +67,3 @@ sqlmesh -p <your-project-path>
 ```
 
 For more details, refer to [CLI](../reference/cli.md) and [Notebook](../reference/notebook.md).
-
-## Importing a project
-
-### dbt
-
-To import a dbt project, use the `sqlmesh init` command with the `dbt` flag as follows:
-
-```bash
-sqlmesh init -t dbt
-```

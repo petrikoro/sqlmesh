@@ -83,8 +83,7 @@ Welcome to SQLMesh!
 What type of project do you want to set up?
 
     [1] DEFAULT - Create SQLMesh example project models and files
-    [2] dbt     - You have an existing dbt project and want to run it with SQLMesh
-    [3] EMPTY   - Create a SQLMesh configuration file and project directories only
+    [2] EMPTY   - Create a SQLMesh configuration file and project directories only
 
 Enter a number: 1
 ```

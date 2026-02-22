@@ -156,6 +156,78 @@ def test_version(runner, tmp_path):
     assert SQLMESH_VERSION in result.output
 
 
+def test_parse_generates_manifest_and_catalog_with_output(runner, tmp_path):
+    create_example_project(tmp_path)
+    output_path = tmp_path / "artifacts"
+
+    result = runner.invoke(
+        cli,
+        ["--log-file-dir", tmp_path, "--paths", tmp_path, "parse", "--output", output_path],
+    )
+
+    assert result.exit_code == 0
+    assert (output_path / "manifest.json").exists()
+    assert (output_path / "catalog.json").exists()
+    assert json.loads((output_path / "manifest.json").read_text(encoding="utf-8"))
+    assert json.loads((output_path / "catalog.json").read_text(encoding="utf-8"))
+
+
+def test_parse_generates_manifest_and_catalog_in_default_cache_dir(runner, tmp_path):
+    create_example_project(tmp_path)
+
+    result = runner.invoke(cli, ["--log-file-dir", tmp_path, "--paths", tmp_path, "parse"])
+
+    assert result.exit_code == 0
+    artifact_dir = tmp_path / ".cache" / "dbt_artifacts"
+    assert (artifact_dir / "manifest.json").exists()
+    assert (artifact_dir / "catalog.json").exists()
+
+
+def test_parse_output_path_with_suffix_is_treated_as_directory(runner, tmp_path):
+    create_example_project(tmp_path)
+    output_path = tmp_path / "artifacts.v1"
+
+    result = runner.invoke(
+        cli,
+        ["--log-file-dir", tmp_path, "--paths", tmp_path, "parse", "--output", output_path],
+    )
+
+    assert result.exit_code == 0
+    assert output_path.is_dir()
+    assert (output_path / "manifest.json").exists()
+    assert (output_path / "catalog.json").exists()
+
+
+@pytest.mark.parametrize("output_name", ["manifest.json", "catalog.json"])
+def test_parse_reserved_filename_output_is_treated_as_directory(runner, tmp_path, output_name):
+    create_example_project(tmp_path)
+    output_path = tmp_path / output_name
+
+    result = runner.invoke(
+        cli,
+        ["--log-file-dir", tmp_path, "--paths", tmp_path, "parse", "--output", output_path],
+    )
+
+    assert result.exit_code == 0
+    assert output_path.is_dir()
+    assert (output_path / "manifest.json").exists()
+    assert (output_path / "catalog.json").exists()
+
+
+def test_parse_output_existing_file_errors(runner, tmp_path):
+    create_example_project(tmp_path)
+    output_path = tmp_path / "artifact_file"
+    output_path.write_text("existing", encoding="utf-8")
+
+    result = runner.invoke(
+        cli,
+        ["--log-file-dir", tmp_path, "--paths", tmp_path, "parse", "--output", output_path],
+    )
+
+    assert result.exit_code == 2
+    assert "is a file" in result.output
+
+
 def test_plan_no_config(runner, tmp_path):
     # Error if no SQLMesh project config is found
     result = runner.invoke(cli, ["--log-file-dir", tmp_path, "--paths", tmp_path, "plan"])
@@ -1800,7 +1872,7 @@ def test_init_empty_template(runner: CliRunner, tmp_path: Path):
     assert not (tmp_path / "seeds" / "seed_data.csv").exists()
 
 
-# interactive init begins when no engine_type is provided and template is not dbt
+# interactive init begins when no engine_type is provided
 def test_init_interactive_start(runner: CliRunner, tmp_path: Path):
     # Input: 1 (DEFAULT template), 1 (duckdb engine), 1 (DEFAULT CLI mode)
     result = runner.invoke(
@@ -1810,13 +1882,6 @@ def test_init_interactive_start(runner: CliRunner, tmp_path: Path):
     )
     assert result.exit_code == 0
     assert "Choose your SQL engine" in result.output
-
-    # dbt template passed, so no interactive
-    result = runner.invoke(
-        cli,
-        ["--paths", str(tmp_path), "init", "-t", "dbt"],
-    )
-    assert "Choose your SQL engine" not in result.output
 
 
 # passing an invalid integer response displays error
@@ -1900,51 +1965,6 @@ def test_init_interactive_engine_install_msg(runner: CliRunner, tmp_path: Path, 
         'Run command in CLI to install your SQL engine\'s Python dependencies: pip \ninstall "sqlmesh[gcppostgres]"'
         in result.output
     )
-
-
-# dbt template without dbt_project.yml in directory should error
-def test_init_dbt_template_no_dbt_project(runner: CliRunner, tmp_path: Path):
-    # template passed to init
-    result = runner.invoke(
-        cli,
-        ["--paths", str(tmp_path), "init", "-t", "dbt"],
-    )
-    assert result.exit_code == 1
-    assert (
-        "Required dbt project file 'dbt_project.yml' not found in the current directory."
-        in result.output
-    )
-
-    # interactive init
-    # Input: 2 (dbt template)
-    result = runner.invoke(
-        cli,
-        ["--paths", str(tmp_path), "init"],
-        input="2\n",
-    )
-    assert result.exit_code == 1
-    assert (
-        "Required dbt project file 'dbt_project.yml' not found in the current directory."
-        in result.output
-    )
-
-
-def test_init_dbt_template(runner: CliRunner, tmp_path: Path):
-    Path(tmp_path / "dbt_project.yml").touch()
-    result = runner.invoke(
-        cli,
-        ["--paths", str(tmp_path), "init"],
-        input="2\n",
-    )
-    assert result.exit_code == 0
-
-    config_path = tmp_path / "sqlmesh.yaml"
-    assert config_path.exists()
-
-    config = config_path.read_text()
-
-    assert "model_defaults" in config
-    assert "start:" in config
 
 
 @time_machine.travel(FREEZE_TIME)

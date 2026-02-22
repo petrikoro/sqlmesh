@@ -214,7 +214,7 @@ class SQLMeshMagics(Magics):
         "--template",
         "-t",
         type=str,
-        help="Project template. Supported values: dbt, default, empty.",
+        help="Project template. Supported values: default, empty.",
     )
     @argument(
         "--dlt-pipeline",
