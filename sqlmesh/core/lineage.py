@@ -27,9 +27,10 @@ def lineage(
 ) -> Node:
     query = None
     scope = None
+    cache_key = model.fqn or model.name
 
-    if model.name in CACHE:
-        obj_id, query, scope = CACHE[model.name]
+    if cache_key in CACHE:
+        obj_id, query, scope = CACHE[cache_key]
 
         if obj_id != id(model):
             query = None
@@ -62,7 +63,7 @@ def lineage(
         scope = build_scope(query)
 
         if scope:
-            CACHE[model.name] = (id(model), query, scope)
+            CACHE[cache_key] = (id(model), query, scope)
 
     return sqlglot_lineage(
         column,
@@ -74,10 +75,12 @@ def lineage(
     )
 
 
-def column_dependencies(
-    context: Context, model_name: str, column: str | exp.Column
+def _column_dependencies_from_model(
+    model: Model,
+    column: str | exp.Column,
+    default_catalog: t.Optional[str],
 ) -> t.Dict[str, t.Set[str]]:
-    model = context.get_model(model_name)
+    """Return upstream model/column dependencies for a model column."""
     parents = defaultdict(set)
 
     for node in lineage(column, model, trim_selects=False).walk():
@@ -87,10 +90,18 @@ def column_dependencies(
         table = node.expression.find(exp.Table)
         if table:
             name = normalize_model_name(
-                table, default_catalog=context.default_catalog, dialect=model.dialect
+                table, default_catalog=default_catalog, dialect=model.dialect
             )
             parents[name].add(exp.to_column(node.name).name)
     return dict(parents)
+
+
+def column_dependencies(
+    context: Context, model_name: str, column: str | exp.Column
+) -> t.Dict[str, t.Set[str]]:
+    """Return upstream model/column dependencies for a context model column."""
+    model = context.get_model(model_name)
+    return _column_dependencies_from_model(model, column, context.default_catalog)
 
 
 def column_description(

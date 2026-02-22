@@ -37,6 +37,7 @@ def test_find_references_for_model_usages():
     # Verify expected files are present
     reference_files = {str(ref.path) for ref in references}
     expected_patterns = [
+        "yaml_documented_orders",
         "orders",
         "customers",
         "customer_revenue_by_day",
@@ -52,6 +53,7 @@ def test_find_references_for_model_usages():
     # Verify exact ranges for each reference pattern
     # Note: customers file has multiple references due to column prefix support
     expected_ranges = {
+        "yaml_documented_orders": [(11, 5, 11, 17)],
         "orders": [(0, 0, 0, 0)],  # the start for the model itself
         "customers": [(30, 7, 30, 19)],  # FROM clause
         "waiter_revenue_by_day": [(19, 5, 19, 17)],

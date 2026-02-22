@@ -1,0 +1,30 @@
+version: 2
+models:
+  - name: sushi.yaml_documented_orders
+    description: Example model documented entirely through YAML metadata.
+    tags:
+      - example
+      - yaml-docs
+    meta:
+      owner_team: finance
+      contains_pii: true
+    columns:
+      - name: order_id
+        description: Unique order identifier.
+        tags:
+          - primary_key
+          - pii
+        meta:
+          classification: sensitive
+      - name: customer_id
+        description: Customer identifier for the order.
+        tags:
+          - foreign_key
+        meta:
+          relation: sushi.customers.customer_id
+      - name: event_date
+        description: Date when the order event was recorded.
+        tags:
+          - event_time
+        meta:
+          grain: day

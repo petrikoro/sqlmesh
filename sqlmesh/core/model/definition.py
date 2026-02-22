@@ -1193,6 +1193,9 @@ class _Model(ModelMeta, frozen=True):
                 self.owner,
                 self.description,
                 json.dumps(self.column_descriptions, sort_keys=True),
+                json.dumps(self.meta, sort_keys=True, default=str),
+                json.dumps(self.column_tags, sort_keys=True, default=str),
+                json.dumps(self.column_meta, sort_keys=True, default=str),
                 self.cron,
                 self.cron_tz.key if self.cron_tz else None,
                 str(self.start) if self.start else None,
@@ -3063,6 +3066,27 @@ META_FIELD_CONVERTER: t.Dict[str, t.Callable] = {
     ),
     "column_descriptions_": lambda value: exp.Schema(
         expressions=[exp.to_column(c).eq(d) for c, d in value.items()]
+    ),
+    "meta_": lambda value: exp.Tuple(
+        expressions=[exp.Literal.string(str(k)).eq(exp.convert(v)) for k, v in value.items()]
+    ),
+    "column_tags_": lambda value: exp.Schema(
+        expressions=[
+            exp.to_column(c).eq(exp.Array(expressions=[exp.convert(tag) for tag in tags]))
+            for c, tags in value.items()
+        ]
+    ),
+    "column_meta_": lambda value: exp.Schema(
+        expressions=[
+            exp.to_column(c).eq(
+                exp.Tuple(
+                    expressions=[
+                        exp.Literal.string(str(k)).eq(exp.convert(v)) for k, v in metadata.items()
+                    ]
+                )
+            )
+            for c, metadata in value.items()
+        ]
     ),
     "tags": single_value_or_tuple,
     "grains": _refs_to_sql,

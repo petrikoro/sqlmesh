@@ -184,6 +184,27 @@ LEFT JOIN `db`.`table` AS `t2`
     ]
 
 
+def test_string_literal_and_empty_references_are_normalized() -> None:
+    expressions = d.parse(
+        """
+        MODEL (
+            name db.table,
+            dialect duckdb,
+            references (
+                '',
+                'id'
+            ),
+        );
+
+        SELECT 1 AS id;
+    """
+    )
+
+    model = load_sql_based_model(expressions)
+    assert [reference.name for reference in model.all_references] == ["id"]
+    assert model.on == ["id"]
+
+
 def test_model_multiple_select_statements():
     # Make sure the load_model raises an exception for model with multiple select statements.
     expressions = d.parse(

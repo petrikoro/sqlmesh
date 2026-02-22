@@ -91,7 +91,7 @@ Configuration for the `sqlmesh plan` command.
 | `include_unmodified`      | Indicates whether to create views for all models in the target development environment or only for modified ones (Default: False)                                                                                                                       | boolean              | N        |
 | `auto_apply`              | Indicates whether to automatically apply a new plan after creation (Default: False)                                                                                                                                                                     | boolean              | N        |
 | `forward_only`            | Indicates whether the plan should be [forward-only](../concepts/plans.md#forward-only-plans) (Default: False)                                                                                                                                           | boolean              | N        |
-| `enable_preview`          | Indicates whether to enable [data preview](../concepts/plans.md#data-preview) for forward-only models when targeting a development environment (Default: True)                | Boolean              | N        |
+| `enable_preview`          | Indicates whether to enable [data preview](../concepts/plans.md#data-preview) for forward-only models when targeting a development environment (Default: True, except for dbt projects where the target engine does not support cloning)                | Boolean              | N        |
 | `no_diff`                 | Don't show diffs for changed models (Default: False)                                                                                                                                                                                                    | boolean              | N        |
 | `no_prompts`              | Disables interactive prompts in CLI (Default: True)                                                                                                                                                                                                     | boolean              | N        |
 | `always_recreate_environment`              | Always recreates the target environment from the environment specified in `create_from` (by default `prod`) (Default: False)                                                                                                                                                                                                     | boolean              | N        |
@@ -138,6 +138,27 @@ SQLMesh UI settings.
 | Option           | Description                                                                                   |  Type   | Required |
 | ---------------- | --------------------------------------------------------------------------------------------- | :-----: | :------: |
 | `format_on_save` | Whether to automatically format model definitions upon saving them to a file (Default: False) | boolean |    N     |
+
+## Docs
+
+Configuration for generated SQLMesh documentation artifacts.
+
+For dbt-compatible YAML model documentation, refer to the models guide section [Define model docs in dbt-compatible YAML](../guides/models.md#define-model-docs-in-dbt-compatible-yaml).
+
+| Option           | Description                                                                                                                                                                                                                     | Type                         | Required |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------: | :------: |
+| `external_links` | List of external links shown in each model's properties panel in generated docs. Each item defines a `label` and a URL template. URL templates support placeholders: `{fqn}`, `{name}`, `{schema}`, `{catalog}`, `{project}`. | list[`ExternalLinkConfig`] |    N     |
+
+### ExternalLinkConfig
+
+Configuration for one external link entry used by `docs.external_links`.
+
+| Option  | Description                                                                                                                     | Type   | Required |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------- | :----: | :------: |
+| `label` | Display name in docs UI (for example, `Airflow`, `Looker`, `BI`).                                                              | string |    Y     |
+| `url`   | URL template for the link. Allowed placeholders are `{fqn}`, `{name}`, `{schema}`, `{catalog}`, `{project}`.                 | string |    Y     |
+
+Using unsupported placeholders in `url` causes SQLMesh configuration validation to fail.
 
 ## Gateways
 
