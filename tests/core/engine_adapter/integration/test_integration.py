@@ -264,7 +264,10 @@ def test_ctas(ctx_query_and_df: TestContext):
         column_comments = ctx.get_column_comments(table.db, table.name)
 
         assert table_description == "test table description"
-        assert column_comments == {"id": "test id column description"}
+        # StarRocks doesn't support adding column comments via post-creation commands,
+        # so column comments won't be present for CTAS tables
+        if ctx.dialect != "starrocks":
+            assert column_comments == {"id": "test id column description"}
 
     # ensure we don't hit clickhouse INSERT with LIMIT 0 bug on CTAS
     if ctx.dialect == "clickhouse":
@@ -311,7 +314,10 @@ def test_ctas_source_columns(ctx_query_and_df: TestContext):
         column_comments = ctx.get_column_comments(table.db, table.name)
 
         assert table_description == "test table description"
-        assert column_comments == {"id": "test id column description"}
+        # StarRocks doesn't support adding column comments via post-creation commands,
+        # so column comments won't be present for CTAS tables
+        if ctx.dialect != "starrocks":
+            assert column_comments == {"id": "test id column description"}
 
     # ensure we don't hit clickhouse INSERT with LIMIT 0 bug on CTAS
     if ctx.dialect == "clickhouse":
@@ -413,12 +419,6 @@ def test_materialized_view(ctx_query_and_df: TestContext):
         )
     if ctx.engine_adapter.dialect == "snowflake":
         pytest.skip("Snowflake requires enterprise edition which we do not have setup")
-    if ctx.engine_adapter.dialect == "starrocks":
-        pytest.skip(
-            "StarRocks materialized views require a REFRESH clause (refresh_moment/refresh_scheme), "
-            "which this generic test does not provide; StarRocks MVs are covered by "
-            "test_integration_starrocks.py"
-        )
     input_data = pd.DataFrame(
         [
             {"id": 1, "ds": "2022-01-01"},
@@ -1962,13 +1962,6 @@ def test_sushi(
         pytest.skip(
             "Sushi end-to-end tests only need to run once for Athena because sushi needs a hybrid of both Hive and Iceberg"
         )
-    if ctx.dialect == "starrocks":
-        pytest.skip(
-            "StarRocks requires incremental models to use a PRIMARY KEY table; the shared sushi "
-            "example uses cross-engine incremental/SCD models without a StarRocks primary_key, so "
-            "this end-to-end test does not apply to StarRocks"
-        )
-
     sushi_test_schema = ctx.add_test_suffix("sushi")
     sushi_state_schema = ctx.add_test_suffix("sushi_state")
     raw_test_schema = ctx.add_test_suffix("raw")
@@ -2367,13 +2360,6 @@ def test_sushi(
 
 
 def test_init_project(ctx: TestContext, tmp_path: pathlib.Path):
-    if ctx.dialect == "starrocks":
-        pytest.skip(
-            "StarRocks requires incremental models to use a PRIMARY KEY table; the default example "
-            "project's incremental_model has no StarRocks primary_key, so this cross-engine test "
-            "does not apply to StarRocks"
-        )
-
     schema_name = ctx.add_test_suffix(TEST_SCHEMA)
     state_schema = ctx.add_test_suffix("sqlmesh_state")
 
@@ -3142,6 +3128,8 @@ def test_value_normalization(
             pytest.skip("Trino on Hive doesn't support TIMESTAMP WITH TIME ZONE fields")
         if ctx.dialect == "fabric":
             pytest.skip("Fabric doesn't support TIMESTAMP WITH TIME ZONE fields")
+        if ctx.dialect == "starrocks":
+            pytest.skip("StarRocks doesn't support TIMESTAMP WITH TIME ZONE fields")
 
     if not isinstance(ctx.engine_adapter, RowDiffMixin):
         pytest.skip(
@@ -3163,6 +3151,10 @@ def test_value_normalization(
                     )
                 ],
             )
+        if ctx.dialect == "starrocks":
+            # StarRocks DATETIME natively supports microsecond precision without explicit (6) syntax
+            # and doesn't accept the precision specifier
+            pytest.skip("StarRocks DATETIME doesn't support precision syntax like DATETIME(6)")
     if ctx.dialect == "tsql" and column_type == exp.DataType.Type.DATETIME:
         full_column_type = exp.DataType.build("DATETIME2", dialect="tsql")
 
@@ -3233,7 +3225,7 @@ def test_table_diff_grain_check_single_key(ctx: TestContext):
 
     columns_to_types = {
         "key1": exp.DataType.build("int"),
-        "value": exp.DataType.build("varchar"),
+        "value": exp.DataType.build("varchar(255)"),
     }
 
     ctx.engine_adapter.create_table(src_table, columns_to_types)
@@ -3357,13 +3349,13 @@ def test_table_diff_arbitrary_condition(ctx: TestContext):
 
     columns_to_types_src = {
         "id": exp.DataType.build("int"),
-        "value": exp.DataType.build("varchar"),
+        "value": exp.DataType.build("varchar(255)"),
         "ts": exp.DataType.build("timestamp"),
     }
 
     columns_to_types_target = {
         "item_id": exp.DataType.build("int"),
-        "value": exp.DataType.build("varchar"),
+        "value": exp.DataType.build("varchar(255)"),
         "ts": exp.DataType.build("timestamp"),
     }
 
@@ -3671,13 +3663,6 @@ def test_janitor(
         and not ctx.engine_adapter.SUPPORTS_CREATE_DROP_CATALOG
     ):
         pytest.skip("Engine does not support catalog-based virtual environments")
-    if ctx.dialect == "starrocks":
-        pytest.skip(
-            "StarRocks requires incremental models to use a PRIMARY KEY table; the example project "
-            "used here has an incremental_model without a StarRocks primary_key, so this "
-            "cross-engine test does not apply to StarRocks"
-        )
-
     schema = ctx.schema()  # catalog.schema
     parsed_schema = d.to_schema(schema)
 
@@ -3815,13 +3800,6 @@ def test_materialized_view_evaluation(ctx: TestContext):
         pytest.skip(f"Skipping engine {dialect} as it does not support materialized views")
     elif dialect in ("snowflake", "databricks"):
         pytest.skip(f"Skipping {dialect} as they're not enabled on standard accounts")
-    elif dialect == "starrocks":
-        pytest.skip(
-            "StarRocks materialized views require a REFRESH clause (refresh_moment/refresh_scheme), "
-            "which this generic test does not provide; StarRocks MVs are covered by "
-            "test_integration_starrocks.py"
-        )
-
     model_name = ctx.table("test_tbl")
     mview_name = ctx.table("test_mview")
 
@@ -3984,6 +3962,11 @@ def test_grants_case_insensitive_grantees(ctx: TestContext):
             f"Skipping Test since engine adapter {ctx.engine_adapter.dialect} doesn't support grants"
         )
 
+    if ctx.engine_adapter.CASE_SENSITIVE_GRANTEES is True:
+        pytest.skip(
+            f"Skipping Test since engine adapter {ctx.engine_adapter.dialect} has case-sensitive grantees"
+        )
+
     with ctx.create_users_or_roles("reader", "writer") as roles:
         table = ctx.table("grants_quoted_test")
         ctx.engine_adapter.create_table(table, {"id": exp.DataType.build("INT")})
@@ -4100,6 +4083,7 @@ def test_grants_plan(ctx: TestContext, tmp_path: Path):
             select_privilege: [roles["analyst"], roles["etl_user"]],
             insert_privilege: [roles["etl_user"]],
         }
+
         assert set(final_grants.get(select_privilege, [])) == set(
             expected_final_grants[select_privilege]
         )
@@ -4112,6 +4096,12 @@ def test_grants_plan(ctx: TestContext, tmp_path: Path):
         assert set(updated_virtual_grants.get(select_privilege, [])) == set(
             expected_final_grants[select_privilege]
         )
+
+        if ctx.dialect == "starrocks":
+            # StarRocks doesn't support INSERT on views,
+            # so INSERT grants should be empty for the view
+            expected_final_grants[insert_privilege] = []
+
         assert (
             updated_virtual_grants.get(insert_privilege, [])
             == expected_final_grants[insert_privilege]
