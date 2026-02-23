@@ -127,6 +127,7 @@ class EngineAdapter:
     """Physical property keys whose values may contain logical model references that
     should be resolved to physical table names during property rendering.  Engines that
     need such resolution (e.g. StarRocks' excluded_trigger_tables) override this set."""
+    CASE_SENSITIVE_GRANTEES = False
 
     def __init__(
         self,
