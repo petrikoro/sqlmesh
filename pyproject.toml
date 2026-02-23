@@ -116,6 +116,7 @@ mssql = ["pymssql"]
 mssql-odbc = ["pyodbc>=5.0.0"]
 mysql = ["pymysql"]
 mwaa = ["boto3"]
+starrocks = ["pymysql"]
 postgres = ["psycopg2"]
 redshift = ["redshift_connector"]
 slack = ["slack_sdk"]
@@ -269,6 +270,7 @@ markers = [
     "snowflake: test for Snowflake",
     "spark: test for Spark",
     "pyspark: test for PySpark that need to run separately from the other spark tests",
+    "starrocks: test for StarRocks",
     "trino: test for Trino (all connectors)",
     "risingwave: test for Risingwave",
 

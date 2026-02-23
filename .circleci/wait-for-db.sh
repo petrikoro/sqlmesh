@@ -59,6 +59,10 @@ risingwave_ready() {
     probe_port 4566
 }
 
+starrocks_ready() {
+    curl -sf "http://${DOCKER_HOSTNAME:-localhost}:8030/api/health" > /dev/null
+}
+
 echo "Waiting for $ENGINE to be ready..."
 
 READINESS_FUNC="${ENGINE}_ready"
