@@ -1149,6 +1149,7 @@ def extend_sqlglot() -> None:
                 *generator.WITH_SEPARATED_COMMENTS,
                 Model,
                 MacroDef,
+                Audit,
             )
 
         generator.UNWRAPPED_INTERVAL_VALUES = (
