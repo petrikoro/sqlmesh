@@ -522,6 +522,66 @@ def test_apply_table_grants(make_mocked_engine_adapter: t.Callable):
     )
 
 
+def test_get_timescaledb_hypertable_config(
+    make_mocked_engine_adapter: t.Callable, mocker: MockerFixture
+):
+    """Test that _get_timescaledb_hypertable_config generates correct SQL and returns config dict."""
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+    mocker.patch.object(adapter, "_get_current_schema", return_value="public")
+    adapter.cursor.fetchone.return_value = ("event_created_at", "7 days")
+
+    result = adapter._get_timescaledb_hypertable_config("public.test_table")
+
+    assert result == {
+        "time_column_name": "event_created_at",
+        "chunk_time_interval": "7 days",
+    }
+    sql_calls = to_sql_calls(adapter)
+    assert len(sql_calls) == 1
+    sql = sql_calls[0].lower()
+    assert "timescaledb_information" in sql
+    assert "dimensions" in sql
+    assert "hypertable_schema" in sql
+    assert "hypertable_name" in sql
+    assert "dimension_type" in sql
+    assert "time" in sql
+
+
+def test_get_timescaledb_hypertable_config_returns_none_on_error(
+    make_mocked_engine_adapter: t.Callable, mocker: MockerFixture
+):
+    """Test that _get_timescaledb_hypertable_config returns None when execute raises."""
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+    mocker.patch.object(adapter, "_get_current_schema", return_value="public")
+    mocker.patch.object(adapter, "execute", side_effect=Exception("TimescaleDB not installed"))
+
+    result = adapter._get_timescaledb_hypertable_config("public.test_table")
+
+    assert result is None
+
+
+def test_recreate_timescaledb_hypertable(make_mocked_engine_adapter: t.Callable):
+    """Test that _recreate_timescaledb_hypertable generates correct create_hypertable SQL."""
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+    config = {
+        "time_column_name": "event_created_at",
+        "chunk_time_interval": "7 days",
+    }
+    table = exp.to_table("public.test_table")
+
+    adapter._recreate_timescaledb_hypertable(table, config)
+
+    sql_calls = to_sql_calls(adapter)
+    assert len(sql_calls) == 1
+    sql = sql_calls[0]
+    assert "create_hypertable" in sql.lower()
+    assert "by_range" in sql.lower()
+    assert "event_created_at" in sql
+    assert "7 days" in sql
+    assert "public" in sql
+    assert "test_table" in sql
+
+
 def test_replace_query_table_not_exists(
     make_mocked_engine_adapter: t.Callable, mocker: MockerFixture
 ):
@@ -745,6 +805,97 @@ def test_replace_query_with_indexes_and_grants(
     assert any("GRANT SELECT, UPDATE ON" in sql for sql in sql_calls)
 
 
+def test_replace_query_with_timescaledb_config(
+    make_mocked_engine_adapter: t.Callable,
+    make_temp_table_name: t.Callable,
+    mocker: MockerFixture,
+):
+    """Test replace_query calls _recreate_timescaledb_hypertable on temp table before swap."""
+    from sqlmesh.core.engine_adapter.shared import DataObject, DataObjectType
+
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+    config = {
+        "time_column_name": "event_created_at",
+        "chunk_time_interval": "7 days",
+    }
+
+    temp_table = make_temp_table_name("test_table", "temp1")
+    old_table = make_temp_table_name("test_table", "old1")
+    mocker.patch.object(
+        adapter,
+        "get_data_object",
+        return_value=DataObject(
+            catalog="db", schema="test_schema", name="test_table", type=DataObjectType.TABLE
+        ),
+    )
+    mocker.patch.object(adapter, "_get_temp_table")
+    adapter._get_temp_table.side_effect = [temp_table, old_table]
+    mocker.patch.object(adapter, "_get_dependent_views", return_value=[])
+    mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
+    mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(
+        adapter,
+        "_get_timescaledb_hypertable_config",
+        return_value=config,
+    )
+    recreate_mock = mocker.patch.object(adapter, "_recreate_timescaledb_hypertable")
+    mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
+
+    adapter.replace_query(
+        "test_schema.test_table",
+        parse_one("SELECT 1 as id"),
+    )
+
+    recreate_mock.assert_called_once_with(temp_table, config)
+    # Swap renames must happen after (replace_query does renames after hypertable step)
+    rename_calls = [s for s in to_sql_calls(adapter) if "RENAME" in s and "ALTER TABLE" in s]
+    assert len(rename_calls) == 2
+
+
+def test_replace_query_timescaledb_unavailable_no_failure(
+    make_mocked_engine_adapter: t.Callable,
+    make_temp_table_name: t.Callable,
+    mocker: MockerFixture,
+):
+    """Test replace_query succeeds when TimescaleDB is not available (config returns None)."""
+    from sqlmesh.core.engine_adapter.shared import DataObject, DataObjectType
+
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+
+    mocker.patch.object(
+        adapter,
+        "get_data_object",
+        return_value=DataObject(
+            catalog="db", schema="test_schema", name="test_table", type=DataObjectType.TABLE
+        ),
+    )
+
+    temp_table = make_temp_table_name("test_table", "temp1")
+    old_table = make_temp_table_name("test_table", "old1")
+    mocker.patch.object(adapter, "_get_temp_table")
+    adapter._get_temp_table.side_effect = [temp_table, old_table]
+
+    mocker.patch.object(adapter, "_get_dependent_views", return_value=[])
+    mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
+    mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(
+        adapter,
+        "_get_timescaledb_hypertable_config",
+        return_value=None,
+    )
+    mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
+
+    adapter.replace_query(
+        "test_schema.test_table",
+        parse_one("SELECT 1 as id"),
+    )
+
+    sql_calls = to_sql_calls(adapter)
+    assert any("CREATE TABLE" in sql and "AS SELECT" in sql for sql in sql_calls)
+    assert any("ALTER TABLE" in sql and "RENAME" in sql for sql in sql_calls)
+    assert any("DROP TABLE" in sql for sql in sql_calls)
+
+
 def test_replace_query_error_during_view_recreation_restores_original_state(
     make_mocked_engine_adapter: t.Callable,
     make_temp_table_name: t.Callable,
@@ -837,6 +988,7 @@ def _setup_replace_query_mocks(
     mocker.patch.object(adapter, "_get_dependent_views", return_value=[])
     mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
     mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(adapter, "_get_timescaledb_hypertable_config", return_value=None)
     mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
 
 
