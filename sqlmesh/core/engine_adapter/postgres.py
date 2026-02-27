@@ -412,6 +412,99 @@ class PostgresEngineAdapter(
             except Exception as e:
                 logger.warning("Failed to apply grant: %s", e)
 
+    def _get_timescaledb_hypertable_config(
+        self, table_name: TableName
+    ) -> t.Optional[t.Dict[str, str]]:
+        """Reads time column and chunk interval from TimescaleDB dimensions.
+
+        Returns None if the table is not a hypertable, dimensions are missing,
+        or on error (e.g. TimescaleDB not installed).
+
+        Args:
+            table_name: The name of the table to get hypertable config for.
+
+        Returns:
+            Dict with keys time_column_name and chunk_time_interval, or None.
+        """
+        table = exp.to_table(table_name)
+        schema_name = table.db or self._get_current_schema()
+
+        logger.info("Fetching TimescaleDB hypertable config for %s", table_name)
+
+        query = (
+            exp.select(exp.column("column_name"), exp.column("time_interval"))
+            .from_(exp.table_("dimensions", "timescaledb_information"))
+            .where(
+                exp.column("hypertable_schema").eq(exp.Literal.string(schema_name)),
+                exp.column("hypertable_name").eq(exp.Literal.string(table.name)),
+                exp.column("dimension_type").eq(exp.Literal.string("Time")),
+            )
+            .order_by(exp.column("dimension_number"))
+            .limit(1)
+        )
+
+        try:
+            self.execute(query)
+            row = self.cursor.fetchone()
+        except Exception as e:
+            logger.warning(
+                "Could not read TimescaleDB hypertable config (TimescaleDB may not be installed): %s",
+                e,
+            )
+            return None
+
+        if not row or not row[0] or row[1] is None:
+            return None
+
+        return {
+            "time_column_name": str(row[0]),
+            "chunk_time_interval": str(row[1]),
+        }
+
+    def _recreate_timescaledb_hypertable(
+        self, table_name: TableName, config: t.Dict[str, str]
+    ) -> None:
+        """Turns the table into a TimescaleDB hypertable.
+
+        On error (e.g. TimescaleDB not installed) only logs a warning and does not raise.
+
+        Args:
+            table_name: The table to convert to a hypertable.
+            config: Dict with time_column_name and chunk_time_interval.
+        """
+        time_col = config.get("time_column_name")
+        interval = config.get("chunk_time_interval")
+        if not time_col or not interval:
+            return
+        table = exp.to_table(table_name)
+        schema_name = table.db or self._get_current_schema()
+        full_table_name = f"{schema_name}.{table.name}"
+        interval_escaped = interval.replace("'", "''")
+
+        query = exp.select(
+            exp.func(
+                "create_hypertable",
+                exp.Cast(
+                    this=exp.Literal.string(full_table_name),
+                    to="regclass",
+                ),
+                exp.func(
+                    "by_range",
+                    exp.Literal.string(time_col),
+                    exp.Interval(this=exp.Literal.string(interval_escaped)),
+                ),
+                exp.Kwarg(this=exp.var("create_default_indexes"), expression=exp.false()),
+                exp.Kwarg(this=exp.var("migrate_data"), expression=exp.true()),
+            )
+        )
+        try:
+            self.execute(query)
+        except Exception as e:
+            logger.warning(
+                "Could not create TimescaleDB hypertable: %s",
+                e,
+            )
+
     def replace_query(
         self,
         table_name: TableName,
@@ -425,9 +518,10 @@ class PostgresEngineAdapter(
     ) -> None:
         """Replaces table contents using atomic swap.
 
-        Uses RENAME to swap tables atomically, then recreates dependent views (bound by OID),
-        restores indexes and grants. Falls back to _insert_overwrite_by_condition for
-        self-referencing queries.
+        Uses RENAME to swap tables atomically. Before swap, restores TimescaleDB
+        hypertable config on the temp table when the original was a hypertable.
+        Then recreates dependent views (bound by OID), restores indexes and grants.
+        Falls back to _insert_overwrite_by_condition for self-referencing queries.
         """
         target_data_object = self.get_data_object(table_name)
         table_exists = target_data_object is not None
@@ -493,6 +587,7 @@ class PostgresEngineAdapter(
         dependent_views = self._get_dependent_views(table_name)
         indexes = self._get_table_indexes(table_name)
         grants = self._get_table_grants(table_name)
+        hypertable_config = self._get_timescaledb_hypertable_config(table_name)
 
         temp_table = self._get_temp_table(target_table)
         old_table = self._get_temp_table(target_table)
@@ -512,6 +607,8 @@ class PostgresEngineAdapter(
                 self._recreate_indexes(indexes, temp_table)
             if grants:
                 self._apply_table_grants(temp_table, grants)
+            if hypertable_config:
+                self._recreate_timescaledb_hypertable(temp_table, hypertable_config)
 
             self.execute(
                 exp.Command(this="ANALYZE", expression=temp_table.sql(dialect=self.dialect))
