@@ -437,8 +437,6 @@ class PostgresEngineAdapter(
         table = exp.to_table(table_name)
         schema_name = table.db or self._get_current_schema()
 
-        logger.info("Fetching TimescaleDB hypertable config for %s", table_name)
-
         query = (
             exp.select(exp.column("column_name"), exp.column("time_interval"))
             .from_(exp.table_("dimensions", "timescaledb_information"))
@@ -451,14 +449,29 @@ class PostgresEngineAdapter(
             .limit(1)
         )
 
+        savepoint = (
+            f"_tsdb_{random_id(short=True)}"
+            if self._connection_pool.is_transaction_active
+            else None
+        )
+
         try:
+            logger.info("Fetching TimescaleDB hypertable config for %s", table_name)
+            if savepoint:
+                self.cursor.execute(f"SAVEPOINT {savepoint}")
             self.execute(query)
             row = self.cursor.fetchone()
+            if savepoint:
+                self.cursor.execute(f"RELEASE SAVEPOINT {savepoint}")
         except Exception as e:
             logger.warning(
-                "Could not read TimescaleDB hypertable config (TimescaleDB may not be installed): %s",
+                "Could not read TimescaleDB hypertable config: %s",
                 e,
             )
+            if savepoint:
+                self.cursor.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            else:
+                self._connection_pool.rollback()
             return None
 
         if not row or not row[0] or row[1] is None:
@@ -505,9 +518,24 @@ class PostgresEngineAdapter(
                 exp.Kwarg(this=exp.var("migrate_data"), expression=exp.true()),
             )
         )
+
+        savepoint = (
+            f"_tsdb_{random_id(short=True)}"
+            if self._connection_pool.is_transaction_active
+            else None
+        )
+
         try:
+            if savepoint:
+                self.cursor.execute(f"SAVEPOINT {savepoint}")
             self.execute(query)
+            if savepoint:
+                self.cursor.execute(f"RELEASE SAVEPOINT {savepoint}")
         except Exception as e:
+            if savepoint:
+                self.cursor.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            else:
+                self._connection_pool.rollback()
             logger.warning(
                 "Could not create TimescaleDB hypertable: %s",
                 e,
