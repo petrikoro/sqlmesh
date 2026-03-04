@@ -225,6 +225,14 @@ class PostgresEngineAdapter(
             full_view_name = f"{schema_name}.{view_name}"
             view_query: exp.Expression = exp.maybe_parse(definition, dialect=self.dialect)
 
+            # We need to lock the view first so concurrent SELECTs don't cause deadlocks.
+            self.execute(
+                exp.Command(
+                    this="LOCK TABLE",
+                    expression=view_table.sql(dialect=self.dialect) + " IN ACCESS EXCLUSIVE MODE",
+                )
+            )
+
             logger.info("Recreating dependent view '%s'", view_table.sql(dialect=self.dialect))
 
             if is_materialized:
@@ -516,13 +524,7 @@ class PostgresEngineAdapter(
         supports_replace_table_override: t.Optional[bool] = None,
         **kwargs: t.Any,
     ) -> None:
-        """Replaces table contents using atomic swap.
-
-        Uses RENAME to swap tables atomically. Before swap, restores TimescaleDB
-        hypertable config on the temp table when the original was a hypertable.
-        Then recreates dependent views (bound by OID), restores indexes and grants.
-        Falls back to _insert_overwrite_by_condition for self-referencing queries.
-        """
+        """Replaces table contents via atomic rename swap, then recreates dependent views, indexes, and grants."""
         target_data_object = self.get_data_object(table_name)
         table_exists = target_data_object is not None
         if self.drop_data_object_on_type_mismatch(target_data_object, DataObjectType.TABLE):
@@ -617,34 +619,29 @@ class PostgresEngineAdapter(
             self.drop_table(temp_table, exists=True)
             raise
 
-        # Atomic swap: rename target_table -> old_table, then temp_table -> target_table
-        # This makes the new table visible atomically.
-        # If this fails, the transaction automatically rolls back, so all renames are undone.
-        # Only temp_table (created before the transaction) still exists and needs cleanup.
         try:
             with self.transaction():
                 self.rename_table(target_table, old_table)
                 self.rename_table(temp_table, target_table)
         except Exception:
-            # Transaction rolled back automatically - no need to rename back.
-            # Only cleanup: drop temp_table which was created before the transaction.
             self.drop_table(temp_table, exists=True)
             raise
 
-        # Views must be recreated because PostgreSQL views store OIDs that reference the old table.
-        # If this fails, rollback by restoring old_table to target_table.
+        # Recreate dependent views (PostgreSQL views store OIDs referencing the table).
         try:
             if dependent_views:
                 with self.transaction():
                     self._recreate_dependent_views(dependent_views)
         except Exception:
-            # Rollback: restore original table state.
-            # Since target_table currently has the new table, we need to:
-            # 1. Drop the new table (target_table) to free the name
-            # 2. Rename old_table back to target_table to restore original state
-            # This ensures views point to the correct table and system is consistent.
-            self.drop_table(target_table, exists=True)
-            self.rename_table(old_table, target_table)
+            # Restore state after failed view recreation: rollback failed txn, then
+            # drop new table and rename old table back to target so views stay consistent.
+            self._connection_pool.rollback()
+            try:
+                with self.transaction():
+                    self.drop_table(target_table, exists=True)
+                    self.rename_table(old_table, target_table)
+            except Exception as recovery_err:
+                logger.warning("Recovery after view recreation failure failed: %s", recovery_err)
             raise
 
         try:
