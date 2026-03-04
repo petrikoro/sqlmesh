@@ -1,4 +1,5 @@
 import typing as t
+from unittest.mock import PropertyMock
 
 import pytest
 from pytest_mock import MockFixture
@@ -553,14 +554,46 @@ def test_get_timescaledb_hypertable_config(
 def test_get_timescaledb_hypertable_config_returns_none_on_error(
     make_mocked_engine_adapter: t.Callable, mocker: MockerFixture
 ):
-    """Test that _get_timescaledb_hypertable_config returns None when execute raises."""
+    """Test that _get_timescaledb_hypertable_config returns None and rolls back when execute raises (no outer txn)."""
     adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
     mocker.patch.object(adapter, "_get_current_schema", return_value="public")
+    mocker.patch.object(
+        type(adapter._connection_pool),
+        "is_transaction_active",
+        PropertyMock(return_value=False),
+    )
     mocker.patch.object(adapter, "execute", side_effect=Exception("TimescaleDB not installed"))
+    rollback = mocker.patch.object(adapter._connection_pool, "rollback")
 
     result = adapter._get_timescaledb_hypertable_config("public.test_table")
 
     assert result is None
+    rollback.assert_called_once()
+
+
+def test_get_timescaledb_hypertable_config_uses_savepoint_rollback_when_in_transaction(
+    make_mocked_engine_adapter: t.Callable, mocker: MockerFixture
+):
+    """Test that _get_timescaledb_hypertable_config uses ROLLBACK TO SAVEPOINT when in transaction and query fails."""
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+    mocker.patch.object(adapter, "_get_current_schema", return_value="public")
+    mocker.patch.object(
+        type(adapter._connection_pool),
+        "is_transaction_active",
+        PropertyMock(return_value=True),
+    )
+    mocker.patch.object(adapter, "execute", side_effect=Exception("TimescaleDB not installed"))
+    cursor_execute = mocker.patch.object(adapter.cursor, "execute")
+    rollback = mocker.patch.object(adapter._connection_pool, "rollback")
+
+    result = adapter._get_timescaledb_hypertable_config("public.test_table")
+
+    assert result is None
+    # Should have used savepoint: SAVEPOINT, then on error ROLLBACK TO SAVEPOINT
+    assert cursor_execute.call_count >= 2
+    sql_calls = [str(c[0][0]) for c in cursor_execute.call_args_list if c[0]]
+    assert any("ROLLBACK TO SAVEPOINT" in s for s in sql_calls)
+    rollback.assert_not_called()
 
 
 def test_recreate_timescaledb_hypertable(make_mocked_engine_adapter: t.Callable):
@@ -583,6 +616,29 @@ def test_recreate_timescaledb_hypertable(make_mocked_engine_adapter: t.Callable)
     assert "7 days" in sql
     assert "public" in sql
     assert "test_table" in sql
+
+
+def test_recreate_timescaledb_hypertable_rollback_on_error(
+    make_mocked_engine_adapter: t.Callable, mocker: MockerFixture
+):
+    """Test that _recreate_timescaledb_hypertable calls rollback when execute raises (no outer txn)."""
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+    config = {
+        "time_column_name": "event_created_at",
+        "chunk_time_interval": "7 days",
+    }
+    table = exp.to_table("public.test_table")
+    mocker.patch.object(
+        type(adapter._connection_pool),
+        "is_transaction_active",
+        PropertyMock(return_value=False),
+    )
+    mocker.patch.object(adapter, "execute", side_effect=Exception("TimescaleDB not installed"))
+    rollback = mocker.patch.object(adapter._connection_pool, "rollback")
+
+    adapter._recreate_timescaledb_hypertable(table, config)
+
+    rollback.assert_called_once()
 
 
 def test_replace_query_table_not_exists(
