@@ -353,6 +353,7 @@ def test_recreate_dependent_views_regular(
 ):
     """Test that regular views are recreated with CREATE OR REPLACE (preserves grants)."""
     adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+    mocker.patch.object(adapter, "_get_current_schema", return_value="public")
 
     dependent_views = [
         ("public", "view1", "SELECT * FROM test_table", False),
@@ -361,9 +362,9 @@ def test_recreate_dependent_views_regular(
     adapter._recreate_dependent_views(dependent_views)
 
     sql_calls = to_sql_calls(adapter)
-    assert len(sql_calls) == 1
-    assert "CREATE OR REPLACE VIEW" in sql_calls[0]
-    assert '"public"."view1"' in sql_calls[0]
+    # Lock view first to avoid deadlock with concurrent SELECT, then CREATE OR REPLACE VIEW
+    assert any("LOCK TABLE" in sql and "ACCESS EXCLUSIVE" in sql for sql in sql_calls)
+    assert any("CREATE OR REPLACE VIEW" in sql and '"public"."view1"' in sql for sql in sql_calls)
 
 
 def test_recreate_dependent_views_materialized(
@@ -371,6 +372,7 @@ def test_recreate_dependent_views_materialized(
 ):
     """Test that materialized views are recreated with DROP + CREATE and grants are restored."""
     adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+    mocker.patch.object(adapter, "_get_current_schema", return_value="public")
 
     # Mock _get_table_grants to return aggregated grants
     adapter.cursor.fetchall.return_value = [("analyst", "SELECT, UPDATE", None)]
@@ -382,7 +384,8 @@ def test_recreate_dependent_views_materialized(
     adapter._recreate_dependent_views(dependent_views)
 
     sql_calls = to_sql_calls(adapter)
-    # Should have: fetchall (grants query), DROP, CREATE, GRANT
+    # Lock view first then DROP, CREATE, GRANT
+    assert any("LOCK TABLE" in sql and "ACCESS EXCLUSIVE" in sql for sql in sql_calls)
     assert any("DROP MATERIALIZED VIEW" in sql for sql in sql_calls)
     assert any("CREATE MATERIALIZED VIEW" in sql for sql in sql_calls)
     assert any("GRANT SELECT, UPDATE ON" in sql for sql in sql_calls)
@@ -634,6 +637,7 @@ def test_replace_query_with_swap(
     mocker.patch.object(adapter, "_get_dependent_views", return_value=[])
     mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
     mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(adapter, "_get_timescaledb_hypertable_config", return_value=None)
     mocker.patch.object(
         adapter,
         "columns",
@@ -741,6 +745,8 @@ def test_replace_query_with_dependent_views(
     )
     mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
     mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(adapter, "_get_timescaledb_hypertable_config", return_value=None)
+    mocker.patch.object(adapter, "_get_current_schema", return_value="test_schema")
     mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
 
     adapter.replace_query(
@@ -790,6 +796,7 @@ def test_replace_query_with_indexes_and_grants(
         "_get_table_grants",
         return_value=[("analyst", "SELECT, UPDATE", None)],
     )
+    mocker.patch.object(adapter, "_get_timescaledb_hypertable_config", return_value=None)
     mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
 
     adapter.replace_query(
@@ -932,6 +939,7 @@ def test_replace_query_error_during_view_recreation_restores_original_state(
     )
     mocker.patch.object(adapter, "_get_table_indexes", return_value=[])
     mocker.patch.object(adapter, "_get_table_grants", return_value=[])
+    mocker.patch.object(adapter, "_get_timescaledb_hypertable_config", return_value=None)
     mocker.patch.object(adapter, "columns", return_value={"id": exp.DataType.build("INT")})
 
     # Simulate error during view recreation
