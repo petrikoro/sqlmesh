@@ -363,8 +363,9 @@ def test_recreate_dependent_views_regular(
     adapter._recreate_dependent_views(dependent_views)
 
     sql_calls = to_sql_calls(adapter)
-    # Lock view first to avoid deadlock with concurrent SELECT, then CREATE OR REPLACE VIEW
-    assert any("LOCK TABLE" in sql and "ACCESS EXCLUSIVE" in sql for sql in sql_calls)
+    # Regular views use EXCLUSIVE (not ACCESS EXCLUSIVE) so readers don't deadlock with us
+    assert any("LOCK TABLE" in sql and "EXCLUSIVE MODE" in sql for sql in sql_calls)
+    assert not any("ACCESS EXCLUSIVE" in sql for sql in sql_calls)
     assert any("CREATE OR REPLACE VIEW" in sql and '"public"."view1"' in sql for sql in sql_calls)
 
 
