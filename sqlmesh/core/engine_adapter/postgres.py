@@ -217,21 +217,29 @@ class PostgresEngineAdapter(
         For regular views, uses CREATE OR REPLACE which preserves grants.
         For materialized views, saves grants before DROP and restores after CREATE.
 
+        Locks all views in (schema, name) order before recreating any, to avoid deadlocks
+        with concurrent readers that touch multiple dependent views (e.g. a query reading
+        view A then view B while we hold A and wait for B).
+
         Args:
             dependent_views: List of tuples (schema_name, view_name, definition, is_materialized).
         """
+        # Lock all views in to avoid deadlocks with concurrent readers
+        for schema_name, view_name, _definition, is_materialized in dependent_views:
+            view_table = exp.table_(view_name, db=schema_name)
+            lock_mode = "ACCESS EXCLUSIVE MODE" if is_materialized else "EXCLUSIVE MODE"
+            self.execute(
+                exp.Command(
+                    this="LOCK TABLE",
+                    expression=view_table.sql(dialect=self.dialect) + " IN " + lock_mode,
+                )
+            )
+
+        # Recreate each view
         for schema_name, view_name, definition, is_materialized in dependent_views:
             view_table = exp.table_(view_name, db=schema_name)
             full_view_name = f"{schema_name}.{view_name}"
             view_query: exp.Expression = exp.maybe_parse(definition, dialect=self.dialect)
-
-            # We need to lock the view first so concurrent SELECTs don't cause deadlocks.
-            self.execute(
-                exp.Command(
-                    this="LOCK TABLE",
-                    expression=view_table.sql(dialect=self.dialect) + " IN ACCESS EXCLUSIVE MODE",
-                )
-            )
 
             logger.info("Recreating dependent view '%s'", view_table.sql(dialect=self.dialect))
 
