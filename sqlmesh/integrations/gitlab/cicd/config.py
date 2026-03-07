@@ -12,7 +12,6 @@ class GitLabCICDBotConfig(BaseCICDBotConfig):
 
     api_v4_url: t.Optional[str] = None
     server_url: t.Optional[str] = None
-    note_header: str = "**SQLMesh GitLab Bot**"
 
     FIELDS_FOR_ANALYTICS: t.ClassVar[t.Set[str]] = BaseCICDBotConfig.FIELDS_FOR_ANALYTICS | {
         "api_v4_url",

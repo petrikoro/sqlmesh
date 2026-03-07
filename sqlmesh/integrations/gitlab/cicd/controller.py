@@ -368,17 +368,13 @@ class GitLabController:
     RUN_TESTS_NOTE = "run-tests"
     UPDATE_MR_ENVIRONMENT_NOTE = "update-mr-environment"
     GEN_PROD_PLAN_NOTE = "gen-prod-plan"
-    LEGACY_NOTE_TYPES = frozenset({"linter-tests", "mr-environment", "plan-preview"})
-    SUPPORTED_NOTE_TYPES = (
-        frozenset(
-            {
-                RUN_LINTER_NOTE,
-                RUN_TESTS_NOTE,
-                UPDATE_MR_ENVIRONMENT_NOTE,
-                GEN_PROD_PLAN_NOTE,
-            }
-        )
-        | LEGACY_NOTE_TYPES
+    SUPPORTED_NOTE_TYPES = frozenset(
+        {
+            RUN_LINTER_NOTE,
+            RUN_TESTS_NOTE,
+            UPDATE_MR_ENVIRONMENT_NOTE,
+            GEN_PROD_PLAN_NOTE,
+        }
     )
     NOTE_TYPE_TO_TITLE = {
         RUN_LINTER_NOTE: "Run Linter",
@@ -1104,14 +1100,6 @@ class GitLabController:
             return None
         return body.split(start_marker, 1)[1].split(end_marker, 1)[0].strip()
 
-    def _strip_section_heading(self, content: str, heading: str) -> str:
-        lines = content.splitlines()
-        if lines and lines[0].strip() == heading:
-            lines = lines[1:]
-            while lines and not lines[0].strip():
-                lines = lines[1:]
-        return "\n".join(lines).strip()
-
     def _decode_note_detail_marker(self, line: str, prefix: str) -> t.Optional[str]:
         stripped_line = line.strip()
         if not stripped_line.startswith(prefix) or not stripped_line.endswith(
@@ -1130,11 +1118,6 @@ class GitLabController:
 
         lines = details_section.splitlines()
         index = 0
-        if lines and lines[0].strip() == "## Details":
-            index = 1
-            while index < len(lines) and not lines[index].strip():
-                index += 1
-
         details: t.Dict[str, str] = {}
         while index < len(lines):
             detail_key = self._decode_note_detail_marker(
@@ -1166,175 +1149,31 @@ class GitLabController:
 
         return details
 
-    def _is_legacy_section_heading(self, lines: t.Sequence[str], index: int, heading: str) -> bool:
-        if lines[index].strip() != heading:
-            return False
-
-        for line in lines[index + 1 :]:
-            stripped_line = line.strip()
-            if not stripped_line:
-                continue
-            if heading == "## Details":
-                return stripped_line.startswith("### ") and (
-                    stripped_line[4:] in self.PIPELINE_STAGE_LABELS
-                )
-            if heading == "## Notes":
-                return stripped_line.startswith("- ")
-            return False
-
-        return False
-
-    def _find_legacy_section_start(self, lines: t.Sequence[str], heading: str) -> t.Optional[int]:
-        for index, line in enumerate(lines):
-            if (
-                self._is_legacy_section_heading(lines, index, line.strip())
-                and line.strip() == heading
-            ):
-                return index
-        return None
-
     def _extract_stage_statuses(self, body: str) -> t.Dict[str, str]:
-        lines = body.splitlines()
-        for index, line in enumerate(lines):
-            if line.strip() != "| Stage | Status |":
-                continue
-            statuses = {}
-            for row in lines[index + 2 :]:
-                stripped_row = row.strip()
-                if not stripped_row.startswith("|"):
-                    break
-                columns = [column.strip() for column in stripped_row.strip("|").split("|")]
-                if len(columns) != 2:
-                    continue
-                stage, status = columns
-                if stage in self.PIPELINE_STAGE_LABELS:
-                    statuses[stage] = status.replace(" ", "_")
-            if statuses:
-                return statuses
-
-        statuses = {}
-        for line in lines:
-            for label in self.PIPELINE_STAGE_LABELS:
-                marker = f"**{label}:** "
-                if marker in line:
-                    statuses[label] = line.split(marker, 1)[1].strip().replace(" ", "_")
-        return statuses
+        return {}
 
     def _extract_note_summary(self, body: str) -> str:
-        if self.BOT_NOTE_SUMMARY_START_MARKER in body:
-            summary_section = body.split(self.BOT_NOTE_SUMMARY_START_MARKER, 1)[1]
-            if self.BOT_NOTE_SUMMARY_END_MARKER in summary_section:
-                summary_section = summary_section.split(self.BOT_NOTE_SUMMARY_END_MARKER, 1)[0]
-            else:
-                summary_end_candidates = [
-                    marker_index
-                    for marker in (
-                        self.BOT_NOTE_STATE_MARKER_PREFIX,
-                        self.BOT_NOTE_DETAILS_START_MARKER,
-                    )
-                    if (marker_index := summary_section.find(marker)) >= 0
-                ]
-                if (comment_marker_index := summary_section.find("<!--")) >= 0:
-                    summary_end_candidates.append(comment_marker_index)
-                if summary_end_candidates:
-                    summary_section = summary_section[: min(summary_end_candidates)]
-            return self._strip_section_heading(summary_section.strip(), "## Summary")
-
-        lines = body.splitlines()
-        if "## Summary" in lines:
-            start_index = lines.index("## Summary") + 1
-        else:
-            start_index = -1
-            for index, line in enumerate(lines):
-                if line.strip() != "| Stage | Status |":
-                    continue
-                start_index = index + 2
-                for row_index in range(start_index, len(lines)):
-                    if not lines[row_index].strip().startswith("|"):
-                        start_index = row_index
-                        break
-                else:
-                    start_index = len(lines)
-                break
-
-        if start_index < 0:
+        if self.BOT_NOTE_SUMMARY_START_MARKER not in body:
             return ""
-
-        while start_index < len(lines) and not lines[start_index].strip():
-            start_index += 1
-
-        end_index = len(lines)
-        for index in range(start_index, len(lines)):
-            stripped_line = lines[index].strip()
-            if stripped_line == self.BOT_NOTE_DETAILS_START_MARKER:
-                end_index = index
-                break
-            if stripped_line in {"## Details", "## Notes"} and self._is_legacy_section_heading(
-                lines, index, stripped_line
-            ):
-                end_index = index
-                break
-
-        return "\n".join(lines[start_index:end_index]).strip()
+        summary_section = body.split(self.BOT_NOTE_SUMMARY_START_MARKER, 1)[1]
+        if self.BOT_NOTE_SUMMARY_END_MARKER in summary_section:
+            summary_section = summary_section.split(self.BOT_NOTE_SUMMARY_END_MARKER, 1)[0]
+        else:
+            summary_end_candidates = [
+                marker_index
+                for marker in (
+                    self.BOT_NOTE_STATE_MARKER_PREFIX,
+                    self.BOT_NOTE_DETAILS_START_MARKER,
+                )
+                if (marker_index := summary_section.find(marker)) >= 0
+            ]
+            if (comment_marker_index := summary_section.find("<!--")) >= 0:
+                summary_end_candidates.append(comment_marker_index)
+            if summary_end_candidates:
+                summary_section = summary_section[: min(summary_end_candidates)]
+        return summary_section.strip()
 
     def _extract_note_details(self, body: str) -> t.Dict[str, str]:
         if marked_details := self._extract_marked_note_details(body):
             return marked_details
-
-        lines = body.splitlines()
-        legacy_details_start = self._find_legacy_section_start(lines, "## Details")
-        if legacy_details_start is None:
-            return self._extract_legacy_note_details(body, "## Notes")
-        start_index = legacy_details_start + 1
-
-        details: t.Dict[str, str] = {}
-        current_key: t.Optional[str] = None
-        current_lines: t.List[str] = []
-
-        for index, line in enumerate(lines[start_index:], start=start_index):
-            stripped_line = line.strip()
-            if stripped_line in {"## Details", "## Notes"} and self._is_legacy_section_heading(
-                lines, index, stripped_line
-            ):
-                break
-            if stripped_line.startswith("### "):
-                heading = stripped_line[4:]
-                if heading in self.PIPELINE_STAGE_LABELS:
-                    if current_key is not None:
-                        details[current_key] = "\n".join(current_lines).strip()
-                    current_key = heading
-                    current_lines = []
-                    continue
-            if current_key is not None:
-                current_lines.append(line)
-
-        if current_key is not None:
-            details[current_key] = "\n".join(current_lines).strip()
-
-        return {key: value for key, value in details.items() if value}
-
-    def _extract_legacy_note_details(self, body: str, heading: str) -> t.Dict[str, str]:
-        lines = body.splitlines()
-        start_index = self._find_legacy_section_start(lines, heading)
-        if start_index is None:
-            return {}
-
-        details: t.Dict[str, str] = {}
-        current_key: t.Optional[str] = None
-        for line in lines[start_index + 1 :]:
-            if not line:
-                if details:
-                    break
-                continue
-            if line.startswith("- "):
-                detail_key, _, detail_value = line[2:].partition(": ")
-                current_key = detail_key if detail_value else None
-                if current_key:
-                    details[current_key] = detail_value
-                continue
-            if line.startswith("  ") and current_key:
-                details[current_key] = f"{details[current_key]}\n{line[2:]}"
-                continue
-            if details:
-                break
-        return details
+        return {}

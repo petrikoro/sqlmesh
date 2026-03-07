@@ -73,7 +73,7 @@ If you split stages across jobs, keep all of those jobs under the same merge-req
 ## GitLab.com and self-managed GitLab
 The bot supports both GitLab.com and self-managed GitLab.
 
-By default, SQLMesh derives the GitLab API and server URLs from GitLab CI environment variables such as `CI_API_V4_URL` and `CI_SERVER_URL`. The `note_header` option is retained for backward-compatible configuration, but new GitLab notes no longer render a visible header in the MR note body.
+By default, SQLMesh derives the GitLab API and server URLs from GitLab CI environment variables such as `CI_API_V4_URL` and `CI_SERVER_URL`.
 
 === "YAML"
 
@@ -82,7 +82,6 @@ By default, SQLMesh derives the GitLab API and server URLs from GitLab CI enviro
       type: gitlab
       api_v4_url: https://gitlab.example.com/api/v4
       server_url: https://gitlab.example.com
-      note_header: "**Data Bot**"
     ```
 
 === "Python"
@@ -95,7 +94,6 @@ By default, SQLMesh derives the GitLab API and server URLs from GitLab CI enviro
         cicd_bot=GitLabCICDBotConfig(
             api_v4_url="https://gitlab.example.com/api/v4",
             server_url="https://gitlab.example.com",
-            note_header="**Data Bot**",
         ),
     )
     ```
@@ -109,6 +107,7 @@ The GitLab bot reuses the same planning-oriented configuration concepts as the G
 * `pr_include_unmodified`
 * `pr_environment_name`
 * `pr_min_intervals`
+* `prod_branch_name`
 * `forward_only_branch_suffix`
 * `run_on_deploy_to_prod`
 
@@ -116,7 +115,6 @@ GitLab-specific options are:
 
 * `api_v4_url`
 * `server_url`
-* `note_header`
 
 ## Commands
 Run `sqlmesh_cicd gitlab --help` to see the full command list. The primary commands are:

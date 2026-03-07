@@ -211,7 +211,7 @@ class Config(BaseConfig):
         if "cicd_bot" in data and isinstance(data["cicd_bot"], dict):
             cicd_bot = data["cicd_bot"]
             if "type" not in cicd_bot and "type_" not in cicd_bot:
-                gitlab_keys = {"api_v4_url", "server_url", "note_header"}
+                gitlab_keys = {"api_v4_url", "server_url"}
                 cicd_bot["type"] = "gitlab" if gitlab_keys & cicd_bot.keys() else "github"
                 cicd_bot["_legacy_providerless_config"] = True
 

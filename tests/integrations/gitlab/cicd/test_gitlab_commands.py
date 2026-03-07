@@ -41,13 +41,6 @@ def _make_typed_note(
 
 def _assert_note_uses_check_like_output(body: str, expected_title: str) -> None:
     assert expected_title in body
-    assert "**SQLMesh GitLab Bot**" not in body
-    assert "| Merge request |" not in body
-    assert "| Merge request URL |" not in body
-    assert "| MR environment |" not in body
-    assert "| Stage | Status |" not in body
-    assert "## Summary" not in body
-    assert "## Details" not in body
 
 
 def test_run_all_calls_individual_command_behaviors_in_order(
@@ -320,50 +313,17 @@ def test_run_linter_stage_does_not_modify_existing_other_notes(make_gitlab_clien
     run_tests_note = _make_typed_note(
         1,
         "run-tests",
-        """**SQLMesh GitLab Bot**
-## Run Tests
-
-| Stage | Status |
-| --- | --- |
-| Unit Tests | success |
-
-Existing tests summary
-
-## Details
-### Unit Tests
-Existing tests details""",
+        "## Run Tests\n\nExisting tests summary",
     )
     update_mr_environment_note = _make_typed_note(
         2,
         "update-mr-environment",
-        """**SQLMesh GitLab Bot**
-## Update MR Environment
-
-| Stage | Status |
-| --- | --- |
-| MR Environment | success |
-
-Existing MR summary
-
-## Details
-### MR Environment
-Existing MR details""",
+        "## Update MR Environment\n\nExisting MR summary",
     )
     gen_prod_plan_note = _make_typed_note(
         3,
         "gen-prod-plan",
-        """**SQLMesh GitLab Bot**
-## Generate Prod Plan
-
-| Stage | Status |
-| --- | --- |
-| Prod Plan Preview | success |
-
-Existing prod plan
-
-## Details
-### Prod Plan Preview
-Existing prod plan details""",
+        "## Generate Prod Plan\n\nExisting prod plan",
     )
     run_tests_body = run_tests_note.body
     update_mr_environment_body = update_mr_environment_note.body
@@ -469,46 +429,17 @@ def test_run_tests_stage_does_not_modify_existing_other_notes(
     run_linter_note = _make_typed_note(
         1,
         "run-linter",
-        """**SQLMesh GitLab Bot**
-## Run Linter
-
-| Stage | Status |
-| --- | --- |
-| Linter | success |
-
-Existing linter details""",
+        "## Run Linter\n\nExisting linter details",
     )
     update_mr_environment_note = _make_typed_note(
         2,
         "update-mr-environment",
-        """**SQLMesh GitLab Bot**
-## Update MR Environment
-
-| Stage | Status |
-| --- | --- |
-| MR Environment | success |
-
-Existing MR summary
-
-## Details
-### MR Environment
-Existing MR details""",
+        "## Update MR Environment\n\nExisting MR summary",
     )
     gen_prod_plan_note = _make_typed_note(
         3,
         "gen-prod-plan",
-        """**SQLMesh GitLab Bot**
-## Generate Prod Plan
-
-| Stage | Status |
-| --- | --- |
-| Prod Plan Preview | success |
-
-Existing prod plan
-
-## Details
-### Prod Plan Preview
-Existing prod plan details""",
+        "## Generate Prod Plan\n\nExisting prod plan",
     )
     run_linter_body = run_linter_note.body
     update_mr_environment_body = update_mr_environment_note.body
@@ -533,24 +464,12 @@ def test_update_mr_environment_success_updates_only_its_note(
     run_linter_note = _make_typed_note(
         1,
         "run-linter",
-        """**SQLMesh GitLab Bot**
-## Run Linter
-
-| Stage | Status |
-| --- | --- |
-| Linter | success |""",
+        "## Run Linter\n\nExisting linter",
     )
     gen_prod_plan_note = _make_typed_note(
         2,
         "gen-prod-plan",
-        """**SQLMesh GitLab Bot**
-## Generate Prod Plan
-
-| Stage | Status |
-| --- | --- |
-| Prod Plan Preview | success |
-
-Existing prod plan""",
+        "## Generate Prod Plan\n\nExisting prod plan",
     )
     run_linter_body = run_linter_note.body
     gen_prod_plan_body = gen_prod_plan_note.body
@@ -578,14 +497,7 @@ def test_update_mr_environment_skips_when_no_changes(make_gitlab_client, make_co
     prod_plan_note = _make_typed_note(
         1,
         "gen-prod-plan",
-        """**SQLMesh GitLab Bot**
-## Generate Prod Plan
-
-| Stage | Status |
-| --- | --- |
-| Prod Plan Preview | success |
-
-Existing prod plan""",
+        "## Generate Prod Plan\n\nExisting prod plan",
     )
     prod_plan_body = prod_plan_note.body
     client = make_gitlab_client([prod_plan_note])
@@ -618,26 +530,12 @@ def test_update_mr_environment_failure_does_not_modify_existing_prod_preview(
     update_mr_environment_note = _make_typed_note(
         1,
         "update-mr-environment",
-        """**SQLMesh GitLab Bot**
-## Update MR Environment
-
-| Stage | Status |
-| --- | --- |
-| MR Environment | success |
-
-Old MR summary""",
+        "## Update MR Environment\n\nOld MR summary",
     )
     gen_prod_plan_note = _make_typed_note(
         2,
         "gen-prod-plan",
-        """**SQLMesh GitLab Bot**
-## Generate Prod Plan
-
-| Stage | Status |
-| --- | --- |
-| Prod Plan Preview | success |
-
-Old prod plan""",
+        "## Generate Prod Plan\n\nOld prod plan",
     )
     gen_prod_plan_body = gen_prod_plan_note.body
     client = make_gitlab_client([update_mr_environment_note, gen_prod_plan_note])
@@ -671,12 +569,7 @@ def test_update_mr_environment_skips_when_newer_different_note_type_exists(
     prod_plan_note = _make_typed_note(
         1,
         "gen-prod-plan",
-        """**SQLMesh GitLab Bot**
-## Generate Prod Plan
-
-| Stage | Status |
-| --- | --- |
-| Prod Plan Preview | success |""",
+        "## Generate Prod Plan\n\nExisting prod plan",
         pipeline_id=11,
     )
     prod_plan_body = prod_plan_note.body
@@ -707,12 +600,7 @@ def test_update_mr_environment_skips_stale_pipeline_for_same_note_type(
     mr_environment_note = _make_typed_note(
         1,
         "update-mr-environment",
-        """**SQLMesh GitLab Bot**
-## Update MR Environment
-
-| Stage | Status |
-| --- | --- |
-| MR Environment | success |""",
+        "## Update MR Environment\n\nExisting MR summary",
         pipeline_id=11,
     )
     mr_environment_body = mr_environment_note.body
@@ -730,22 +618,12 @@ def test_gen_prod_plan_updates_only_plan_preview_note(make_gitlab_client, make_c
     run_linter_note = _make_typed_note(
         1,
         "run-linter",
-        """**SQLMesh GitLab Bot**
-## Run Linter
-
-| Stage | Status |
-| --- | --- |
-| Linter | success |""",
+        "## Run Linter\n\nExisting linter",
     )
     mr_environment_note = _make_typed_note(
         2,
         "update-mr-environment",
-        """**SQLMesh GitLab Bot**
-## Update MR Environment
-
-| Stage | Status |
-| --- | --- |
-| MR Environment | queued |""",
+        "## Update MR Environment\n\nExisting MR summary",
     )
     run_linter_body = run_linter_note.body
     mr_environment_body = mr_environment_note.body
