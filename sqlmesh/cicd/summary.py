@@ -29,6 +29,59 @@ def generate_plan_flags_section(user_provided_flags: t.Dict[str, UserProvidedFla
     return section
 
 
+def get_linter_stage_title(status: str) -> str:
+    return {
+        "queued": "Waiting to Run linter",
+        "in_progress": "Running linter",
+    }.get(status, "Linter results")
+
+
+def get_test_stage_title(
+    *,
+    status: str,
+    completed_status: t.Optional[str] = None,
+    was_successful: t.Optional[bool] = None,
+) -> str:
+    if status == "queued":
+        return "Waiting to Run Tests"
+    if status == "in_progress":
+        return "Running Tests"
+    if was_successful is not None:
+        return "Tests Passed" if was_successful else "Tests Failed"
+    return {
+        "success": "Tests Passed",
+        "failure": "Tests Failed",
+        "skipped": "Skipped Tests",
+    }.get(completed_status or status, "Tests Failed")
+
+
+def get_virtual_data_environment_title(*, environment_name: str, request_term: str) -> str:
+    return f"{request_term} Virtual Data Environment: {environment_name}"
+
+
+def get_virtual_data_environment_status_summary(
+    *, status: str, environment_name: str, request_term: str
+) -> t.Optional[str]:
+    request_environment_name = f"{request_term} Environment"
+    return {
+        "queued": f":pause_button: Waiting to create or update {request_environment_name} `{environment_name}`",
+        "in_progress": f":rocket: Creating or Updating {request_environment_name} `{environment_name}`",
+    }.get(status)
+
+
+def get_prod_plan_preview_title(*, status: str, request_term: str) -> str:
+    if status == "queued":
+        return "Waiting to Generate Prod Plan"
+    if status == "in_progress":
+        return "Generating Prod Plan"
+    return {
+        "success": "Prod Plan Preview",
+        "cancelled": "Cancelled generating prod plan preview",
+        "skipped": f"Skipped generating prod plan preview since {request_term} was not synchronized",
+        "failure": "Failed to generate prod plan preview",
+    }.get(status, f"Got an unexpected conclusion: {status}")
+
+
 def get_plan_summary(
     *, console: MarkdownConsole, plan: Plan, default_catalog: t.Optional[str]
 ) -> str:

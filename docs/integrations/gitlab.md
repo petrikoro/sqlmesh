@@ -62,7 +62,7 @@ The notes are:
 * `Update MR Environment`: tracks the `MR Environment` stage and includes the MR environment summary, affected models, and loaded or missing intervals
 * `Generate Prod Plan`: tracks the `Prod Plan Preview` stage and reuses the same markdown-rich diff and backfill preview shown by the GitHub bot for what would change in `prod`
 
-Each note uses lightweight markdown tables for merge request metadata and stage status, followed by explicit `Summary` and `Details` sections when content is available. The linter, test, MR environment, and prod plan commands all keep the primary human-readable output in the summary section so the sticky note mirrors the GitHub checks more closely, while still preserving parser-safe note updates behind the scenes. The MR environment and prod plan notes reuse the same underlying SQLMesh diff and backfill summaries as the GitHub integration, so the two bots stay aligned on the substantive preview information even though their delivery surfaces differ.
+The visible body of each note now follows the GitHub bot's shared-stage output as closely as possible: a GitHub-aligned title plus the same SQLMesh markdown summary content, while preserving GitLab terminology such as `MR` and `merge request`. GitLab-specific chrome like the visible bot header, merge-request metadata table, stage-status table, and explicit `Summary` / `Details` wrappers is no longer shown. Instead, SQLMesh stores the sticky-note state in hidden machine-readable metadata so notes can still be updated safely in place. The MR environment and prod plan notes continue to reuse the same underlying SQLMesh diff and backfill summaries as the GitHub integration, so the two bots stay aligned on the substantive preview information as well as the visible rendering style.
 
 The simplest way to keep all four notes current is to run `sqlmesh_cicd gitlab ... run-all`. `run-all` just runs the same command behaviors in order: `run-linter`, `run-tests`, `update-mr-environment`, and `gen-prod-plan`. It does not create a separate overview note or pre-seed downstream note state.
 Each split command updates only its matching note. `run-linter` updates only `Run Linter`, `run-tests` updates only `Run Tests`, `update-mr-environment` updates only `Update MR Environment`, and `gen-prod-plan` updates only `Generate Prod Plan`.
@@ -73,7 +73,7 @@ If you split stages across jobs, keep all of those jobs under the same merge-req
 ## GitLab.com and self-managed GitLab
 The bot supports both GitLab.com and self-managed GitLab.
 
-By default, SQLMesh derives the GitLab API and server URLs from GitLab CI environment variables such as `CI_API_V4_URL` and `CI_SERVER_URL`. Notes use the header `**SQLMesh GitLab Bot**` unless you override `note_header` in the bot config.
+By default, SQLMesh derives the GitLab API and server URLs from GitLab CI environment variables such as `CI_API_V4_URL` and `CI_SERVER_URL`. The `note_header` option is retained for backward-compatible configuration, but new GitLab notes no longer render a visible header in the MR note body.
 
 === "YAML"
 

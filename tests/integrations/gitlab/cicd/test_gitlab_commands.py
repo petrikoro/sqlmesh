@@ -39,6 +39,17 @@ def _make_typed_note(
     return MockMergeRequestNote(note_id, "\n".join(markers))
 
 
+def _assert_note_uses_check_like_output(body: str, expected_title: str) -> None:
+    assert expected_title in body
+    assert "**SQLMesh GitLab Bot**" not in body
+    assert "| Merge request |" not in body
+    assert "| Merge request URL |" not in body
+    assert "| MR environment |" not in body
+    assert "| Stage | Status |" not in body
+    assert "## Summary" not in body
+    assert "## Details" not in body
+
+
 def test_run_all_calls_individual_command_behaviors_in_order(
     make_gitlab_client, make_controller, mocker
 ):
@@ -85,28 +96,39 @@ def test_run_all_creates_four_typed_sticky_notes(make_gitlab_client, make_contro
     assert len(client.updated_notes) == 4
 
     run_linter_note = _get_note_by_type(client, "run-linter")
-    assert "| Stage | Status |" in run_linter_note.body
-    assert "| Linter | success |" in run_linter_note.body
-    assert "| Unit Tests |" not in run_linter_note.body
+    _assert_note_uses_check_like_output(run_linter_note.body, "Linter results")
+    assert (
+        controller.get_merge_request_note_state("run-linter").stage_statuses["Linter"] == "success"
+    )
 
     run_tests_note = _get_note_by_type(client, "run-tests")
-    assert "| Stage | Status |" in run_tests_note.body
-    assert "| Unit Tests | success |" in run_tests_note.body
-    assert "| Linter |" not in run_tests_note.body
+    _assert_note_uses_check_like_output(run_tests_note.body, "Tests Passed")
+    assert (
+        controller.get_merge_request_note_state("run-tests").stage_statuses["Unit Tests"]
+        == "success"
+    )
 
     mr_environment_note = _get_note_by_type(client, "update-mr-environment")
-    assert "| Stage | Status |" in mr_environment_note.body
-    assert "| MR Environment | success |" in mr_environment_note.body
-    assert "## Summary" in mr_environment_note.body
+    _assert_note_uses_check_like_output(
+        mr_environment_note.body, "MR Virtual Data Environment: hello_world_42"
+    )
+    assert (
+        controller.get_merge_request_note_state("update-mr-environment").stage_statuses[
+            "MR Environment"
+        ]
+        == "success"
+    )
     assert (
         "Dates loaded in MR" in mr_environment_note.body
         or "No models were modified in this MR" in mr_environment_note.body
     )
 
     prod_plan_note = _get_note_by_type(client, "gen-prod-plan")
-    assert "| Stage | Status |" in prod_plan_note.body
-    assert "| Prod Plan Preview | success |" in prod_plan_note.body
-    assert "## Summary" in prod_plan_note.body
+    _assert_note_uses_check_like_output(prod_plan_note.body, "Prod Plan Preview")
+    assert (
+        controller.get_merge_request_note_state("gen-prod-plan").stage_statuses["Prod Plan Preview"]
+        == "success"
+    )
     assert "This is a preview that shows the differences between this MR environment" in (
         prod_plan_note.body
     )
@@ -130,7 +152,10 @@ def test_run_all_stops_after_linter_failure(make_gitlab_client, make_controller,
     assert len(client.notes) == 1
 
     run_linter_note = _get_note_by_type(client, "run-linter")
-    assert "| Linter | failure |" in run_linter_note.body
+    _assert_note_uses_check_like_output(run_linter_note.body, "Linter results")
+    assert (
+        controller.get_merge_request_note_state("run-linter").stage_statuses["Linter"] == "failure"
+    )
     assert not _has_note_by_type(client, "run-tests")
     assert not _has_note_by_type(client, "update-mr-environment")
     assert not _has_note_by_type(client, "gen-prod-plan")
@@ -147,10 +172,17 @@ def test_run_all_stops_after_tests_failure(make_gitlab_client, make_controller, 
     assert len(client.notes) == 2
 
     run_linter_note = _get_note_by_type(client, "run-linter")
-    assert "| Linter | success |" in run_linter_note.body
+    _assert_note_uses_check_like_output(run_linter_note.body, "Linter results")
+    assert (
+        controller.get_merge_request_note_state("run-linter").stage_statuses["Linter"] == "success"
+    )
 
     run_tests_note = _get_note_by_type(client, "run-tests")
-    assert "| Unit Tests | failure |" in run_tests_note.body
+    _assert_note_uses_check_like_output(run_tests_note.body, "Tests Failed")
+    assert (
+        controller.get_merge_request_note_state("run-tests").stage_statuses["Unit Tests"]
+        == "failure"
+    )
 
     assert not _has_note_by_type(client, "update-mr-environment")
     assert not _has_note_by_type(client, "gen-prod-plan")
@@ -176,7 +208,15 @@ def test_run_all_stops_before_prod_plan_on_mr_environment_failure(
     assert len(client.notes) == 3
 
     mr_environment_note = _get_note_by_type(client, "update-mr-environment")
-    assert "| MR Environment | failure |" in mr_environment_note.body
+    _assert_note_uses_check_like_output(
+        mr_environment_note.body, "MR Virtual Data Environment: hello_world_42"
+    )
+    assert (
+        controller.get_merge_request_note_state("update-mr-environment").stage_statuses[
+            "MR Environment"
+        ]
+        == "failure"
+    )
     assert "Failed summary" in mr_environment_note.body
 
     assert not _has_note_by_type(client, "gen-prod-plan")
@@ -191,8 +231,10 @@ def test_run_linter_stage_updates_only_own_note(make_gitlab_client, make_control
 
     assert len(client.notes) == 1
     note = _get_note_by_type(client, "run-linter")
-    assert "| Linter | success |" in note.body
-    assert "| Unit Tests |" not in note.body
+    _assert_note_uses_check_like_output(note.body, "Linter results")
+    assert (
+        controller.get_merge_request_note_state("run-linter").stage_statuses["Linter"] == "success"
+    )
     assert not _has_note_by_type(client, "run-tests")
     assert not _has_note_by_type(client, "update-mr-environment")
     assert not _has_note_by_type(client, "gen-prod-plan")
@@ -210,8 +252,7 @@ def test_run_linter_stage_surfaces_warning_details(make_gitlab_client, make_cont
     assert command._run_linter_stage(controller)
 
     note = _get_note_by_type(client, "run-linter")
-    assert "| Linter | success |" in note.body
-    assert "## Summary" in note.body
+    _assert_note_uses_check_like_output(note.body, "Linter results")
     assert "lint warning" in note.body
 
 
@@ -226,7 +267,10 @@ def test_run_linter_stage_failure_updates_only_own_note(
 
     assert len(client.notes) == 1
     note = _get_note_by_type(client, "run-linter")
-    assert "| Linter | failure |" in note.body
+    _assert_note_uses_check_like_output(note.body, "Linter results")
+    assert (
+        controller.get_merge_request_note_state("run-linter").stage_statuses["Linter"] == "failure"
+    )
     assert not _has_note_by_type(client, "run-tests")
     assert not _has_note_by_type(client, "update-mr-environment")
     assert not _has_note_by_type(client, "gen-prod-plan")
@@ -247,11 +291,10 @@ def test_run_linter_stage_failure_keeps_error_summary_and_traceback_details(
     assert not command._run_linter_stage(controller)
 
     note = _get_note_by_type(client, "run-linter")
-    assert "## Summary" in note.body
+    _assert_note_uses_check_like_output(note.body, "Linter results")
     assert "lint warning" in note.body
-    assert "**Error:** lint exploded" in note.body
-    assert "## Details" in note.body
     assert "ValueError: lint exploded" in note.body
+    assert controller.get_merge_request_note_state("run-linter").details == {}
 
 
 def test_run_tests_stage_surfaces_rendered_summary(make_gitlab_client, make_controller, mocker):
@@ -269,8 +312,7 @@ def test_run_tests_stage_surfaces_rendered_summary(make_gitlab_client, make_cont
     assert command._run_tests_stage(controller)
 
     note = _get_note_by_type(client, "run-tests")
-    assert "| Unit Tests | success |" in note.body
-    assert "## Summary" in note.body
+    _assert_note_uses_check_like_output(note.body, "Tests Passed")
     assert "**Successfully Ran `3` Tests Against `duckdb`**" in note.body
 
 
@@ -348,8 +390,11 @@ def test_run_tests_stage_updates_only_own_note(make_gitlab_client, make_controll
 
     assert len(client.notes) == 1
     note = _get_note_by_type(client, "run-tests")
-    assert "| Unit Tests | success |" in note.body
-    assert "| Linter |" not in note.body
+    _assert_note_uses_check_like_output(note.body, "Tests Passed")
+    assert (
+        controller.get_merge_request_note_state("run-tests").stage_statuses["Unit Tests"]
+        == "success"
+    )
     assert not _has_note_by_type(client, "run-linter")
     assert not _has_note_by_type(client, "update-mr-environment")
     assert not _has_note_by_type(client, "gen-prod-plan")
@@ -364,7 +409,11 @@ def test_run_tests_stage_failure_updates_only_own_note(make_gitlab_client, make_
 
     assert len(client.notes) == 1
     note = _get_note_by_type(client, "run-tests")
-    assert "| Unit Tests | failure |" in note.body
+    _assert_note_uses_check_like_output(note.body, "Tests Failed")
+    assert (
+        controller.get_merge_request_note_state("run-tests").stage_statuses["Unit Tests"]
+        == "failure"
+    )
     assert not _has_note_by_type(client, "run-linter")
     assert not _has_note_by_type(client, "update-mr-environment")
     assert not _has_note_by_type(client, "gen-prod-plan")
@@ -380,10 +429,38 @@ def test_run_tests_stage_failure_keeps_error_summary_and_traceback_details(
     assert not command._run_tests_stage(controller)
 
     note = _get_note_by_type(client, "run-tests")
-    assert "## Summary" in note.body
-    assert "**Error:** tests exploded" in note.body
-    assert "## Details" in note.body
+    _assert_note_uses_check_like_output(note.body, "Tests Failed")
     assert "ValueError: tests exploded" in note.body
+    assert controller.get_merge_request_note_state("run-tests").details == {}
+
+
+def test_update_note_clears_stale_summary_when_stage_restarts(make_gitlab_client, make_controller):
+    client = make_gitlab_client()
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    client.notes = [
+        MockMergeRequestNote(
+            1,
+            controller.render_merge_request_note(
+                note_type="run-tests",
+                stage_statuses={command.UNIT_TESTS_STAGE: "failure"},
+                summary="Old failure summary",
+                details={command.UNIT_TESTS_STAGE: "Old traceback"},
+            ),
+        )
+    ]
+
+    command._update_note(
+        controller,
+        "run-tests",
+        stage_statuses={command.UNIT_TESTS_STAGE: "in_progress"},
+    )
+
+    note = _get_note_by_type(client, "run-tests")
+    _assert_note_uses_check_like_output(note.body, "Running Tests")
+    assert "Old failure summary" not in note.body
+    state = controller.get_merge_request_note_state("run-tests")
+    assert state.summary == ""
+    assert state.details == {}
 
 
 def test_run_tests_stage_does_not_modify_existing_other_notes(
@@ -485,7 +562,13 @@ Existing prod plan""",
 
     assert len(client.notes) == 3
     note = _get_note_by_type(client, "update-mr-environment")
-    assert "| MR Environment | success |" in note.body
+    _assert_note_uses_check_like_output(note.body, "MR Virtual Data Environment: hello_world_42")
+    assert (
+        controller.get_merge_request_note_state("update-mr-environment").stage_statuses[
+            "MR Environment"
+        ]
+        == "success"
+    )
     assert "MR updated" in note.body
     assert _get_note_by_type(client, "run-linter").body == run_linter_body
     assert _get_note_by_type(client, "gen-prod-plan").body == gen_prod_plan_body
@@ -518,7 +601,13 @@ Existing prod plan""",
 
     assert len(client.notes) == 2
     note = _get_note_by_type(client, "update-mr-environment")
-    assert "| MR Environment | skipped |" in note.body
+    _assert_note_uses_check_like_output(note.body, "MR Virtual Data Environment: hello_world_42")
+    assert (
+        controller.get_merge_request_note_state("update-mr-environment").stage_statuses[
+            "MR Environment"
+        ]
+        == "skipped"
+    )
     assert "No changes were detected compared to the prod environment." in note.body
     assert _get_note_by_type(client, "gen-prod-plan").body == prod_plan_body
 
@@ -561,7 +650,15 @@ Old prod plan""",
     assert not command._update_mr_environment(controller)
 
     mr_environment_note = _get_note_by_type(client, "update-mr-environment")
-    assert "| MR Environment | failure |" in mr_environment_note.body
+    _assert_note_uses_check_like_output(
+        mr_environment_note.body, "MR Virtual Data Environment: hello_world_42"
+    )
+    assert (
+        controller.get_merge_request_note_state("update-mr-environment").stage_statuses[
+            "MR Environment"
+        ]
+        == "failure"
+    )
     assert "Failed summary" in mr_environment_note.body
 
     assert _get_note_by_type(client, "gen-prod-plan").body == gen_prod_plan_body
@@ -590,7 +687,15 @@ def test_update_mr_environment_skips_when_newer_different_note_type_exists(
 
     assert len(client.notes) == 2
     mr_environment_note = _get_note_by_type(client, "update-mr-environment")
-    assert "| MR Environment | skipped |" in mr_environment_note.body
+    _assert_note_uses_check_like_output(
+        mr_environment_note.body, "MR Virtual Data Environment: hello_world_42"
+    )
+    assert (
+        controller.get_merge_request_note_state("update-mr-environment").stage_statuses[
+            "MR Environment"
+        ]
+        == "skipped"
+    )
     assert _get_note_by_type(client, "gen-prod-plan").body == prod_plan_body
     assert not controller._context.apply.called
 
@@ -656,6 +761,9 @@ def test_gen_prod_plan_updates_only_plan_preview_note(make_gitlab_client, make_c
     assert _get_note_by_type(client, "update-mr-environment").body == mr_environment_body
 
     prod_plan_note = _get_note_by_type(client, "gen-prod-plan")
-    assert "| Prod Plan Preview | success |" in prod_plan_note.body
-    assert "## Summary" in prod_plan_note.body
+    _assert_note_uses_check_like_output(prod_plan_note.body, "Prod Plan Preview")
+    assert (
+        controller.get_merge_request_note_state("gen-prod-plan").stage_statuses["Prod Plan Preview"]
+        == "success"
+    )
     assert "No changes to apply." in prod_plan_note.body

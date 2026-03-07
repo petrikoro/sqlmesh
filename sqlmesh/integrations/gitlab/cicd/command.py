@@ -63,22 +63,31 @@ def _update_note(
 ) -> None:
     note_state = controller.get_merge_request_note_state(note_type)
     resolved_stage_statuses = dict(note_state.stage_statuses)
+    resetting_stages: t.Set[str] = set()
     if stage_statuses:
         resolved_stage_statuses.update(stage_statuses)
+        resetting_stages = {
+            stage for stage, status in stage_statuses.items() if status in {"queued", "in_progress"}
+        }
     resolved_details = dict(note_state.details)
+    for stage in resetting_stages:
+        resolved_details.pop(stage, None)
     if details is not None:
         for stage, detail in details.items():
             if detail:
                 resolved_details[stage] = detail
             else:
                 resolved_details.pop(stage, None)
+    resolved_summary = note_state.summary if summary is None else summary
+    if resetting_stages and summary is None:
+        resolved_summary = ""
 
     controller.upsert_sqlmesh_mr_note(
         note_type,
         controller.render_merge_request_note(
             note_type=note_type,
             stage_statuses=resolved_stage_statuses,
-            summary=note_state.summary if summary is None else summary,
+            summary=resolved_summary,
             details=resolved_details,
         ),
     )
@@ -94,9 +103,9 @@ def _run_tests(controller: GitLabController) -> t.Tuple[bool, str, t.Optional[st
             summary = "Tests Passed" if result.wasSuccessful() else "Tests Failed"
         details = rendered_output if rendered_output and rendered_output != summary else None
         return result.wasSuccessful(), summary, details
-    except Exception as ex:
+    except Exception:
         logger.exception("Error occurred when running tests")
-        return False, f"**Error:** {ex}", traceback.format_exc().strip()
+        return False, traceback.format_exc().strip(), None
 
 
 def _consume_linter_output(controller: GitLabController) -> str:
@@ -118,11 +127,12 @@ def _run_linter(controller: GitLabController) -> t.Tuple[bool, str, t.Optional[s
     except Exception as ex:
         logger.exception("Unexpected error occurred when running linter")
         linter_output = _consume_linter_output(controller)
-        summary = f"{linter_output}\n\n**Error:** {ex}" if linter_output else f"**Error:** {ex}"
+        traceback_output = traceback.format_exc().strip()
+        summary = f"{linter_output}\n\n{traceback_output}" if linter_output else traceback_output
         return (
             False,
             summary,
-            traceback.format_exc().strip(),
+            None,
         )
 
 

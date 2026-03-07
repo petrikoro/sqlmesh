@@ -21,7 +21,12 @@ from sqlmesh.cicd.summary import (
     generate_prod_plan_preview_summary,
     generate_request_environment_summary_intro,
     generate_request_environment_summary_list,
+    get_linter_stage_title,
     get_plan_summary,
+    get_prod_plan_preview_title,
+    get_test_stage_title,
+    get_virtual_data_environment_status_summary,
+    get_virtual_data_environment_title,
 )
 from sqlmesh.core import constants as c
 from sqlmesh.core.console import SNAPSHOT_CHANGE_CATEGORY_STR, get_console, MarkdownConsole
@@ -879,22 +884,13 @@ class GithubController:
             conclusion: GithubCheckConclusion,
         ) -> t.Tuple[GithubCheckConclusion, str, t.Optional[str]]:
             linter_summary = self._console.consume_captured_output() or "Linter Success"
-
-            title = "Linter results"
-
-            return conclusion, title, linter_summary
+            return conclusion, get_linter_stage_title("completed"), linter_summary
 
         self._update_check_handler(
             check_name="SQLMesh - Linter",
             status=status,
             conclusion=conclusion,
-            status_handler=lambda status: (
-                {
-                    GithubCheckStatus.IN_PROGRESS: "Running linter",
-                    GithubCheckStatus.QUEUED: "Waiting to Run linter",
-                }[status],
-                None,
-            ),
+            status_handler=lambda status: (get_linter_stage_title(status.value), None),
             conclusion_handler=conclusion_handler,
         )
 
@@ -927,24 +923,28 @@ class GithubController:
                     if result.wasSuccessful()
                     else GithubCheckConclusion.FAILURE
                 )
-                return test_conclusion, test_title, test_summary
+                return (
+                    test_conclusion,
+                    get_test_stage_title(
+                        status="completed",
+                        completed_status=test_conclusion.value,
+                        was_successful=result.wasSuccessful(),
+                    ),
+                    test_summary,
+                )
             if traceback:
                 self._console._print(traceback)
-
-            test_title = "Skipped Tests" if conclusion.is_skipped else "Tests Failed"
-            return conclusion, test_title, traceback
+            return (
+                conclusion,
+                get_test_stage_title(status="completed", completed_status=conclusion.value),
+                traceback,
+            )
 
         self._update_check_handler(
             check_name="SQLMesh - Run Unit Tests",
             status=status,
             conclusion=conclusion,
-            status_handler=lambda status: (
-                {
-                    GithubCheckStatus.IN_PROGRESS: "Running Tests",
-                    GithubCheckStatus.QUEUED: "Waiting to Run Tests",
-                }[status],
-                None,
-            ),
+            status_handler=lambda status: (get_test_stage_title(status=status.value), None),
             conclusion_handler=functools.partial(conclusion_handler, result=result),
         )
 
@@ -1003,8 +1003,10 @@ class GithubController:
         elif status.is_completed:
             conclusion = GithubCheckConclusion.SUCCESS
 
-        check_title_static = "PR Virtual Data Environment: "
-        check_title = check_title_static + self.pr_environment_name
+        check_title = get_virtual_data_environment_title(
+            environment_name=self.pr_environment_name,
+            request_term="PR",
+        )
 
         def conclusion_handler(
             conclusion: GithubCheckConclusion, exception: t.Optional[Exception]
@@ -1019,10 +1021,11 @@ class GithubController:
             conclusion=conclusion,
             status_handler=lambda status: (
                 check_title,
-                {
-                    GithubCheckStatus.QUEUED: f":pause_button: Waiting to create or update PR Environment `{self.pr_environment_name}`",
-                    GithubCheckStatus.IN_PROGRESS: f":rocket: Creating or Updating PR Environment `{self.pr_environment_name}`",
-                }[status],
+                get_virtual_data_environment_status_summary(
+                    status=status.value,
+                    environment_name=self.pr_environment_name,
+                    request_term="PR",
+                ),
             ),
             conclusion_handler=functools.partial(conclusion_handler, exception=exception),
         )
@@ -1041,14 +1044,9 @@ class GithubController:
         def conclusion_handler(
             conclusion: GithubCheckConclusion, summary: t.Optional[str] = None
         ) -> t.Tuple[GithubCheckConclusion, str, t.Optional[str]]:
-            conclusion_to_title = {
-                GithubCheckConclusion.SUCCESS: "Prod Plan Preview",
-                GithubCheckConclusion.CANCELLED: "Cancelled generating prod plan preview",
-                GithubCheckConclusion.SKIPPED: "Skipped generating prod plan preview since PR was not synchronized",
-                GithubCheckConclusion.FAILURE: "Failed to generate prod plan preview",
-            }
-            title = conclusion_to_title.get(
-                conclusion, f"Got an unexpected conclusion: {conclusion.value}"
+            title = get_prod_plan_preview_title(
+                status=conclusion.value,
+                request_term="PR",
             )
             if conclusion == GithubCheckConclusion.SUCCESS and summary:
                 summary = generate_prod_plan_preview_summary(
@@ -1064,10 +1062,7 @@ class GithubController:
             status=status,
             conclusion=conclusion,
             status_handler=lambda status: (
-                {
-                    GithubCheckStatus.IN_PROGRESS: "Generating Prod Plan",
-                    GithubCheckStatus.QUEUED: "Waiting to Generate Prod Plan",
-                }[status],
+                get_prod_plan_preview_title(status=status.value, request_term="PR"),
                 None,
             ),
             conclusion_handler=functools.partial(conclusion_handler, summary=summary),

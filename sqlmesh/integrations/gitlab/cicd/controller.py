@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -19,7 +20,12 @@ from sqlmesh.cicd.summary import (
     generate_prod_plan_preview_summary,
     generate_request_environment_summary_intro,
     generate_request_environment_summary_list,
+    get_linter_stage_title,
     get_plan_summary,
+    get_prod_plan_preview_title,
+    get_test_stage_title,
+    get_virtual_data_environment_status_summary,
+    get_virtual_data_environment_title,
 )
 from sqlmesh.core import constants as c
 from sqlmesh.core.config import Config
@@ -234,6 +240,9 @@ class GitLabMergeRequestNoteState:
     stage_statuses: t.Dict[str, str]
     summary: str = ""
     details: t.Dict[str, str] = field(default_factory=dict)
+    has_stage_statuses: bool = False
+    has_summary: bool = False
+    has_details: bool = False
 
 
 class GitLabAPIClient:
@@ -346,6 +355,10 @@ class GitLabController:
     BOT_NOTE_SUMMARY_END_MARKER = "<!-- sqlmesh-gitlab-summary-end -->"
     BOT_NOTE_DETAILS_START_MARKER = "<!-- sqlmesh-gitlab-details-start -->"
     BOT_NOTE_DETAILS_END_MARKER = "<!-- sqlmesh-gitlab-details-end -->"
+    BOT_NOTE_STAGE_STATUSES_MARKER_PREFIX = "<!-- sqlmesh-gitlab-stage-statuses:"
+    BOT_NOTE_STAGE_STATUSES_MARKER_SUFFIX = " -->"
+    BOT_NOTE_STATE_MARKER_PREFIX = "<!-- sqlmesh-gitlab-state:"
+    BOT_NOTE_STATE_MARKER_SUFFIX = " -->"
     BOT_NOTE_DETAIL_START_MARKER_PREFIX = "<!-- sqlmesh-gitlab-detail-start:"
     BOT_NOTE_DETAIL_END_MARKER_PREFIX = "<!-- sqlmesh-gitlab-detail-end:"
     BOT_NOTE_DETAIL_MARKER_SUFFIX = " -->"
@@ -690,6 +703,137 @@ class GitLabController:
         except KeyError as ex:
             raise CICDBotError(f"Unsupported GitLab SQLMesh note type: {note_type}") from ex
 
+    def _note_stage_status(self, note_type: str, stage_statuses: t.Mapping[str, str]) -> str:
+        return stage_statuses.get(self._note_stage_labels(note_type)[0], "queued")
+
+    def _render_note_title(self, note_type: str, stage_statuses: t.Mapping[str, str]) -> str:
+        stage_status = self._note_stage_status(note_type, stage_statuses)
+        if note_type == self.RUN_LINTER_NOTE:
+            return get_linter_stage_title(stage_status)
+        if note_type == self.RUN_TESTS_NOTE:
+            return get_test_stage_title(status=stage_status, completed_status=stage_status)
+        if note_type == self.UPDATE_MR_ENVIRONMENT_NOTE:
+            return get_virtual_data_environment_title(
+                environment_name=self.pr_environment_name,
+                request_term="MR",
+            )
+        if note_type == self.GEN_PROD_PLAN_NOTE:
+            return get_prod_plan_preview_title(status=stage_status, request_term="MR")
+        raise CICDBotError(f"Unsupported GitLab SQLMesh note type: {note_type}")
+
+    def _render_note_summary(
+        self,
+        note_type: str,
+        stage_statuses: t.Mapping[str, str],
+        summary: str,
+        title: str,
+    ) -> str:
+        rendered_summary = summary.strip()
+        if rendered_summary == title:
+            return ""
+        if rendered_summary:
+            return rendered_summary
+        if note_type == self.UPDATE_MR_ENVIRONMENT_NOTE:
+            return (
+                get_virtual_data_environment_status_summary(
+                    status=self._note_stage_status(note_type, stage_statuses),
+                    environment_name=self.pr_environment_name,
+                    request_term="MR",
+                )
+                or ""
+            )
+        return ""
+
+    def _render_note_state_marker(
+        self,
+        *,
+        stage_statuses: t.Mapping[str, str],
+        summary: str,
+        details: t.Optional[t.Mapping[str, str]] = None,
+    ) -> str:
+        payload = {
+            "version": 2,
+            "stage_statuses": dict(stage_statuses),
+            "summary": summary,
+            "details": dict(details or {}),
+        }
+        encoded_payload = base64.urlsafe_b64encode(
+            json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        ).decode("ascii")
+        return (
+            f"{self.BOT_NOTE_STATE_MARKER_PREFIX}{encoded_payload}"
+            f"{self.BOT_NOTE_STATE_MARKER_SUFFIX}"
+        )
+
+    def _render_stage_statuses_marker(self, stage_statuses: t.Mapping[str, str]) -> str:
+        encoded_payload = base64.urlsafe_b64encode(
+            json.dumps(dict(stage_statuses), separators=(",", ":"), ensure_ascii=True).encode(
+                "utf-8"
+            )
+        ).decode("ascii")
+        return (
+            f"{self.BOT_NOTE_STAGE_STATUSES_MARKER_PREFIX}{encoded_payload}"
+            f"{self.BOT_NOTE_STAGE_STATUSES_MARKER_SUFFIX}"
+        )
+
+    def _extract_note_state_marker(self, body: str) -> t.Optional[GitLabMergeRequestNoteState]:
+        if self.BOT_NOTE_STATE_MARKER_PREFIX not in body:
+            return None
+        encoded_payload = body.split(self.BOT_NOTE_STATE_MARKER_PREFIX, 1)[1].split(
+            self.BOT_NOTE_STATE_MARKER_SUFFIX, 1
+        )[0]
+        if not encoded_payload:
+            return None
+        try:
+            decoded_payload = base64.urlsafe_b64decode(encoded_payload.encode("ascii"))
+            payload = json.loads(decoded_payload.decode("utf-8"))
+        except Exception:
+            logger.exception("Failed to decode GitLab note state marker")
+            return None
+
+        if not isinstance(payload, dict):
+            return None
+
+        has_stage_statuses = "stage_statuses" in payload
+        has_summary = "summary" in payload
+        has_details = "details" in payload
+
+        raw_stage_statuses = payload.get("stage_statuses") or {}
+        raw_details = payload.get("details") or {}
+        if (has_stage_statuses and not isinstance(raw_stage_statuses, dict)) or (
+            has_details and not isinstance(raw_details, dict)
+        ):
+            return None
+
+        return GitLabMergeRequestNoteState(
+            stage_statuses={
+                str(label): str(status) for label, status in raw_stage_statuses.items()
+            },
+            summary=str(payload.get("summary") or ""),
+            details={str(label): str(detail) for label, detail in raw_details.items()},
+            has_stage_statuses=has_stage_statuses,
+            has_summary=has_summary,
+            has_details=has_details,
+        )
+
+    def _extract_stage_statuses_marker(self, body: str) -> t.Dict[str, str]:
+        if self.BOT_NOTE_STAGE_STATUSES_MARKER_PREFIX not in body:
+            return {}
+        encoded_payload = body.split(self.BOT_NOTE_STAGE_STATUSES_MARKER_PREFIX, 1)[1].split(
+            self.BOT_NOTE_STAGE_STATUSES_MARKER_SUFFIX, 1
+        )[0]
+        if not encoded_payload:
+            return {}
+        try:
+            decoded_payload = base64.urlsafe_b64decode(encoded_payload.encode("ascii"))
+            payload = json.loads(decoded_payload.decode("utf-8"))
+        except Exception:
+            logger.exception("Failed to decode GitLab note stage statuses marker")
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        return {str(label): str(status) for label, status in payload.items()}
+
     def _list_sqlmesh_mr_notes(self) -> t.List[GitLabMergeRequestNote]:
         notes = self._client.list_merge_request_notes(
             self.merge_request_info.project_id,
@@ -755,14 +899,36 @@ class GitLabController:
         if not note:
             return GitLabMergeRequestNoteState(stage_statuses=statuses)
 
-        for label, status in self._extract_stage_statuses(note.body).items():
+        note_state = self._extract_note_state_marker(note.body)
+
+        if note_state and note_state.has_stage_statuses:
+            for label, status in note_state.stage_statuses.items():
+                if label in statuses:
+                    statuses[label] = status
+
+        for label, status in self._extract_stage_statuses_marker(note.body).items():
             if label in statuses:
+                if (
+                    note_state
+                    and note_state.has_stage_statuses
+                    and label in note_state.stage_statuses
+                ):
+                    continue
                 statuses[label] = status
+
+        if not (note_state and note_state.has_stage_statuses):
+            for label, status in self._extract_stage_statuses(note.body).items():
+                if label in statuses:
+                    statuses[label] = status
 
         return GitLabMergeRequestNoteState(
             stage_statuses=statuses,
-            summary=self._extract_note_summary(note.body),
-            details=self._extract_note_details(note.body),
+            summary=note_state.summary
+            if note_state and note_state.has_summary
+            else self._extract_note_summary(note.body),
+            details=note_state.details
+            if note_state and note_state.has_details
+            else self._extract_note_details(note.body),
         )
 
     def upsert_sqlmesh_mr_note(self, note_type: str, body: str) -> GitLabMergeRequestNote:
@@ -835,69 +1001,50 @@ class GitLabController:
         details: t.Optional[t.Mapping[str, str]] = None,
     ) -> str:
         relevant_stages = self._note_stage_labels(note_type)
+        rendered_details = {
+            stage: detail.strip()
+            for stage, detail in (details or {}).items()
+            if detail and detail.strip()
+        }
+        rendered_stage_statuses = {
+            stage: stage_statuses.get(stage, "queued") for stage in relevant_stages
+        }
+        rendered_summary = summary.strip()
+        title = self._render_note_title(note_type, rendered_stage_statuses)
+        visible_summary = self._render_note_summary(
+            note_type,
+            rendered_stage_statuses,
+            rendered_summary,
+            title,
+        )
 
         lines = [
             self.BOT_NOTE_MARKER,
             f"{self.BOT_NOTE_TYPE_MARKER_PREFIX}{note_type}{self.BOT_NOTE_TYPE_MARKER_SUFFIX}",
-            self.bot_config.note_header,
-            f"## {self._note_title(note_type)}",
-            "",
-            "| Item | Value |",
-            "| --- | --- |",
-            f"| Merge request | `{self.merge_request_info.full_merge_request_path}` |",
-            f"| Merge request URL | {self.merge_request_url} |",
-            f"| MR environment | `{self.pr_environment_name}` |",
-            "",
-            "| Stage | Status |",
-            "| --- | --- |",
+            self._render_stage_statuses_marker(rendered_stage_statuses),
+            f"## {title}",
         ]
 
-        for label in relevant_stages:
-            status = stage_statuses.get(label, "queued")
-            lines.append(f"| {label} | {status.replace('_', ' ')} |")
-
-        rendered_summary = summary.strip()
-        if rendered_summary:
+        if visible_summary:
             lines.extend(
                 [
                     "",
                     self.BOT_NOTE_SUMMARY_START_MARKER,
-                    "## Summary",
-                    "",
-                    rendered_summary,
+                    visible_summary,
                     self.BOT_NOTE_SUMMARY_END_MARKER,
                 ]
             )
 
-        ordered_details: t.List[t.Tuple[str, str]] = []
-        if details:
-            rendered_detail_keys = set()
-            for stage in relevant_stages:
-                detail = details.get(stage, "").strip()
-                if not detail:
-                    continue
-                ordered_details.append((stage, detail))
-                rendered_detail_keys.add(stage)
-            for stage, detail in details.items():
-                rendered_detail = detail.strip()
-                if stage in rendered_detail_keys or not rendered_detail:
-                    continue
-                ordered_details.append((stage, rendered_detail))
-
-        if ordered_details:
-            lines.extend(["", self.BOT_NOTE_DETAILS_START_MARKER, "## Details"])
-            for stage, detail in ordered_details:
-                lines.extend(
-                    [
-                        "",
-                        self._note_detail_start_marker(stage),
-                        f"### {stage}",
-                        "",
-                        detail,
-                        self._note_detail_end_marker(stage),
-                    ]
-                )
-            lines.append(self.BOT_NOTE_DETAILS_END_MARKER)
+        lines.extend(
+            [
+                "",
+                self._render_note_state_marker(
+                    stage_statuses=rendered_stage_statuses,
+                    summary=rendered_summary,
+                    details=rendered_details,
+                ),
+            ]
+        )
 
         return "\n".join(lines).strip()
 
@@ -1074,10 +1221,24 @@ class GitLabController:
         return statuses
 
     def _extract_note_summary(self, body: str) -> str:
-        if summary_section := self._extract_marked_section(
-            body, self.BOT_NOTE_SUMMARY_START_MARKER, self.BOT_NOTE_SUMMARY_END_MARKER
-        ):
-            return self._strip_section_heading(summary_section, "## Summary")
+        if self.BOT_NOTE_SUMMARY_START_MARKER in body:
+            summary_section = body.split(self.BOT_NOTE_SUMMARY_START_MARKER, 1)[1]
+            if self.BOT_NOTE_SUMMARY_END_MARKER in summary_section:
+                summary_section = summary_section.split(self.BOT_NOTE_SUMMARY_END_MARKER, 1)[0]
+            else:
+                summary_end_candidates = [
+                    marker_index
+                    for marker in (
+                        self.BOT_NOTE_STATE_MARKER_PREFIX,
+                        self.BOT_NOTE_DETAILS_START_MARKER,
+                    )
+                    if (marker_index := summary_section.find(marker)) >= 0
+                ]
+                if (comment_marker_index := summary_section.find("<!--")) >= 0:
+                    summary_end_candidates.append(comment_marker_index)
+                if summary_end_candidates:
+                    summary_section = summary_section[: min(summary_end_candidates)]
+            return self._strip_section_heading(summary_section.strip(), "## Summary")
 
         lines = body.splitlines()
         if "## Summary" in lines:

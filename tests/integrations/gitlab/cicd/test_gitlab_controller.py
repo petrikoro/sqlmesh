@@ -32,6 +32,17 @@ def _make_typed_note(
     return MockMergeRequestNote(note_id, "\n".join(markers))
 
 
+def _assert_note_uses_check_like_output(body: str, expected_title: str) -> None:
+    assert expected_title in body
+    assert "**SQLMesh GitLab Bot**" not in body
+    assert "| Merge request |" not in body
+    assert "| Merge request URL |" not in body
+    assert "| MR environment |" not in body
+    assert "| Stage | Status |" not in body
+    assert "## Summary" not in body
+    assert "## Details" not in body
+
+
 @pytest.mark.parametrize(
     "existing_notes, expected_notes_count, expected_created_count, expected_updated_count",
     [
@@ -393,15 +404,153 @@ def test_render_merge_request_note_round_trips_rich_markdown_sections(
     )
     client.notes = [MockMergeRequestNote(1, note)]
 
-    assert "## Summary" in note
+    _assert_note_uses_check_like_output(note, "Prod Plan Preview")
     assert rich_summary in note
-    assert "## Details" in note
-    assert rich_details in note
 
     state = controller.get_merge_request_note_state("gen-prod-plan")
 
     assert state.summary == rich_summary
     assert state.details == {"Prod Plan Preview": rich_details}
+
+
+def test_render_merge_request_note_persists_hidden_state_without_details(
+    make_gitlab_client, make_controller
+):
+    client = make_gitlab_client()
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    summary = "Canonical hidden summary"
+    note = controller.render_merge_request_note(
+        note_type="run-tests",
+        stage_statuses={"Unit Tests": "success"},
+        summary=summary,
+    )
+
+    hidden_state = controller._extract_note_state_marker(note)
+
+    assert hidden_state is not None
+    assert hidden_state.stage_statuses == {"Unit Tests": "success"}
+    assert hidden_state.summary == summary
+    assert hidden_state.details == {}
+
+    client.notes = [MockMergeRequestNote(1, note.replace(summary, "Visible summary", 1))]
+
+    state = controller.get_merge_request_note_state("run-tests")
+
+    assert state.stage_statuses["Unit Tests"] == "success"
+    assert state.summary == summary
+    assert state.details == {}
+
+
+def test_get_merge_request_note_state_prefers_hidden_stage_statuses_over_legacy_visible_statuses(
+    make_gitlab_client, make_controller
+):
+    client = make_gitlab_client()
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    note = controller.render_merge_request_note(
+        note_type="run-tests",
+        stage_statuses={"Unit Tests": "success"},
+        summary="Hidden summary",
+        details={"Unit Tests": "Hidden details"},
+    )
+    client.notes = [
+        MockMergeRequestNote(
+            1,
+            "\n".join(
+                [
+                    note,
+                    "",
+                    "| Stage | Status |",
+                    "| --- | --- |",
+                    "| Unit Tests | failure |",
+                ]
+            ),
+        )
+    ]
+
+    state = controller.get_merge_request_note_state("run-tests")
+
+    assert state.stage_statuses["Unit Tests"] == "success"
+    assert state.summary == "Hidden summary"
+    assert state.details == {"Unit Tests": "Hidden details"}
+
+
+def test_get_merge_request_note_state_falls_back_when_hidden_state_is_truncated(
+    make_gitlab_client, make_controller, mocker
+):
+    client = make_gitlab_client()
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    mocker.patch.object(controller, "MAX_NOTE_LENGTH", 350)
+    summary = "Truncated summaries should stay visible."
+    details = {"Prod Plan Preview": "x" * 800}
+
+    controller.upsert_sqlmesh_mr_note(
+        "gen-prod-plan",
+        controller.render_merge_request_note(
+            note_type="gen-prod-plan",
+            stage_statuses={"Prod Plan Preview": "success"},
+            summary=summary,
+            details=details,
+        ),
+    )
+
+    note = client.notes[0]
+    _assert_note_uses_check_like_output(note.body, "Prod Plan Preview")
+    assert summary in note.body
+
+    state = controller.get_merge_request_note_state("gen-prod-plan")
+
+    assert state.stage_statuses["Prod Plan Preview"] == "success"
+    assert state.summary == summary
+    assert state.details == {}
+
+
+def test_get_merge_request_note_state_recovers_truncated_visible_summary(
+    make_gitlab_client, make_controller, mocker
+):
+    client = make_gitlab_client()
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    mocker.patch.object(controller, "MAX_NOTE_LENGTH", 260)
+    summary = "Summary chunk " * 40
+
+    controller.upsert_sqlmesh_mr_note(
+        "gen-prod-plan",
+        controller.render_merge_request_note(
+            note_type="gen-prod-plan",
+            stage_statuses={"Prod Plan Preview": "success"},
+            summary=summary,
+        ),
+    )
+
+    note = client.notes[0]
+    _assert_note_uses_check_like_output(note.body, "Prod Plan Preview")
+    assert controller.BOT_NOTE_SUMMARY_END_MARKER not in note.body
+
+    state = controller.get_merge_request_note_state("gen-prod-plan")
+
+    assert state.stage_statuses["Prod Plan Preview"] == "success"
+    assert state.summary
+    assert state.summary.startswith("Summary chunk")
+
+
+def test_get_merge_request_note_state_ignores_partial_summary_end_marker(
+    make_gitlab_client, make_controller
+):
+    client = make_gitlab_client()
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    note = controller.render_merge_request_note(
+        note_type="gen-prod-plan",
+        stage_statuses={"Prod Plan Preview": "success"},
+        summary="Summary chunk " * 20,
+    )
+    summary_end_marker_index = note.index(controller.BOT_NOTE_SUMMARY_END_MARKER)
+    truncated_note = note[: summary_end_marker_index + 12]
+    client.notes = [MockMergeRequestNote(1, truncated_note)]
+
+    state = controller.get_merge_request_note_state("gen-prod-plan")
+
+    assert state.stage_statuses["Prod Plan Preview"] == "success"
+    assert state.summary.startswith("Summary chunk")
+    assert "<!--" not in state.summary
 
 
 def test_get_merge_request_note_state_preserves_legacy_rich_details(
@@ -570,11 +719,16 @@ def test_get_merge_request_note_state_parses_typed_note(
 
     state = controller.get_merge_request_note_state(note_type)
 
+    expected_title = {
+        "run-linter": "Linter results",
+        "run-tests": "Tests Passed",
+        "update-mr-environment": "MR Virtual Data Environment: hello_world_42",
+        "gen-prod-plan": "Prod Plan Preview",
+    }[note_type]
+    _assert_note_uses_check_like_output(note, expected_title)
     assert state.stage_statuses[stage] == "success"
     assert state.details == {detail_key: detail_value}
     assert state.summary == summary
-    if summary:
-        assert "## Summary" in note
 
 
 def test_list_merge_request_notes_fetches_all_pages(mocker: MockerFixture):
@@ -673,12 +827,9 @@ def test_server_url_override_updates_merge_request_link(make_gitlab_client, make
 
     assert controller.server_url == "https://gitlab.internal.example"
     assert controller.api_v4_url == "https://gitlab.internal.example/api/v4"
-    note = controller.render_merge_request_note(
-        note_type="run-linter", stage_statuses={"Linter": "queued"}
-    )
     assert (
-        "| Merge request URL | https://gitlab.internal.example/group/hello-world/-/merge_requests/42 |"
-        in note
+        controller.merge_request_url
+        == "https://gitlab.internal.example/group/hello-world/-/merge_requests/42"
     )
 
 
