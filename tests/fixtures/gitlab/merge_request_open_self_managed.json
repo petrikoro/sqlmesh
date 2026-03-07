@@ -1,0 +1,16 @@
+{
+  "object_kind": "merge_request",
+  "event_type": "merge_request",
+  "project": {
+    "id": 456,
+    "path_with_namespace": "analytics/sqlmesh",
+    "web_url": "https://gitlab.example.com/analytics/sqlmesh"
+  },
+  "object_attributes": {
+    "iid": 7,
+    "action": "open",
+    "source_branch": "feature/self-managed",
+    "target_branch": "master",
+    "url": "https://gitlab.example.com/analytics/sqlmesh/-/merge_requests/7"
+  }
+}

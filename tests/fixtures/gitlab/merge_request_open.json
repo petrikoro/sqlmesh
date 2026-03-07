@@ -1,0 +1,16 @@
+{
+  "object_kind": "merge_request",
+  "event_type": "merge_request",
+  "project": {
+    "id": 123,
+    "path_with_namespace": "group/hello-world",
+    "web_url": "https://gitlab.com/group/hello-world"
+  },
+  "object_attributes": {
+    "iid": 42,
+    "action": "open",
+    "source_branch": "feature/add-gitlab-bot",
+    "target_branch": "main",
+    "url": "https://gitlab.com/group/hello-world/-/merge_requests/42"
+  }
+}

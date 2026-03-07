@@ -16,6 +16,12 @@ from functools import cached_property
 import requests
 from sqlglot.helper import seq_get
 
+from sqlmesh.cicd.summary import (
+    generate_plan_flags_section,
+    generate_request_environment_summary_intro,
+    generate_request_environment_summary_list,
+    get_plan_summary,
+)
 from sqlmesh.core import constants as c
 from sqlmesh.core.console import SNAPSHOT_CHANGE_CATEGORY_STR, get_console, MarkdownConsole
 from sqlmesh.core.context import Context
@@ -33,6 +39,7 @@ from sqlglot.errors import SqlglotError
 from sqlmesh.core.user import User
 from sqlmesh.core.config import Config
 from sqlmesh.integrations.github.cicd.config import GithubCICDBotConfig
+from sqlmesh.integrations.gitlab.cicd.config import GitLabCICDBotConfig
 from sqlmesh.utils import word_characters_only, Verbosity
 from sqlmesh.utils.date import now
 from sqlmesh.utils.errors import (
@@ -459,10 +466,17 @@ class GithubController:
 
     @property
     def bot_config(self) -> GithubCICDBotConfig:
-        bot_config = self._context.config.cicd_bot or GithubCICDBotConfig(
-            auto_categorize_changes=self._context.auto_categorize_changes
+        bot_config = self._context.config.cicd_bot or GithubCICDBotConfig.model_validate(
+            {"auto_categorize_changes": self._context.auto_categorize_changes}
         )
-        return bot_config
+        if isinstance(bot_config, GithubCICDBotConfig):
+            return bot_config
+        if isinstance(bot_config, GitLabCICDBotConfig):
+            raise CICDBotError(
+                "The GitHub bot cannot use a GitLab `cicd_bot` config. "
+                "Set `cicd_bot.type: github` to run the GitHub integration."
+            )
+        raise CICDBotError("Unsupported CI/CD bot configuration for the GitHub integration.")
 
     @property
     def modified_snapshots(self) -> t.Dict[SnapshotId, t.Union[Snapshot, SnapshotTableInfo]]:
@@ -517,51 +531,11 @@ class GithubController:
         )
 
     def get_plan_summary(self, plan: Plan) -> str:
-        # use Verbosity.VERY_VERBOSE to prevent the list of models from being truncated
-        # this is particularly important for the "Models needing backfill" list because
-        # there is no easy way to tell this otherwise
-        orig_verbosity = self._console.verbosity
-        self._console.verbosity = Verbosity.VERY_VERBOSE
-
-        try:
-            # Clear out any output that might exist from prior steps
-            self._console.consume_captured_output()
-            if plan.restatements:
-                self._console._print("\n**Restating models**\n")
-            else:
-                self._console.show_environment_difference_summary(
-                    context_diff=plan.context_diff,
-                    no_diff=False,
-                )
-            if plan.context_diff.has_changes:
-                self._console.show_model_difference_summary(
-                    context_diff=plan.context_diff,
-                    environment_naming_info=plan.environment_naming_info,
-                    default_catalog=self._context.default_catalog,
-                    no_diff=False,
-                )
-            difference_summary = self._console.consume_captured_output()
-            self._console._show_missing_dates(plan, self._context.default_catalog)
-            missing_dates = self._console.consume_captured_output()
-
-            plan_flags_section = (
-                f"\n\n{self._generate_plan_flags_section(plan.user_provided_flags)}"
-                if plan.user_provided_flags
-                else ""
-            )
-
-            if not difference_summary and not missing_dates:
-                return f"No changes to apply.{plan_flags_section}"
-
-            warnings_block = self._console.consume_captured_warnings()
-            errors_block = self._console.consume_captured_errors()
-
-            return f"{warnings_block}{errors_block}{difference_summary}\n{missing_dates}{plan_flags_section}"
-        except PlanError as e:
-            logger.exception("Plan failed to generate")
-            return f"Plan failed to generate. Check for pending or unresolved changes. Error: {e}"
-        finally:
-            self._console.verbosity = orig_verbosity
+        return get_plan_summary(
+            console=self._console,
+            plan=plan,
+            default_catalog=self._context.default_catalog,
+        )
 
     def get_pr_environment_summary(
         self, conclusion: GithubCheckConclusion, exception: t.Optional[Exception] = None
@@ -1201,79 +1175,19 @@ class GithubController:
     def _generate_plan_flags_section(
         self, user_provided_flags: t.Dict[str, UserProvidedFlags]
     ) -> str:
-        # collapsed section syntax:
-        # https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/organizing-information-with-collapsed-sections#creating-a-collapsed-section
-        section = "<details>\n\n<summary>Plan flags</summary>\n\n"
-        for flag_name, flag_value in user_provided_flags.items():
-            section += f"- `{flag_name}` = `{flag_value}`\n"
-        section += "\n</details>"
-
-        return section
+        return generate_plan_flags_section(user_provided_flags)
 
     def _generate_pr_environment_summary_intro(self) -> str:
-        note = ""
-        subset_reasons = []
-
-        if self.bot_config.skip_pr_backfill:
-            subset_reasons.append("`skip_pr_backfill` is enabled")
-
-        if default_pr_start := self.bot_config.default_pr_start:
-            subset_reasons.append(f"`default_pr_start` is set to `{default_pr_start}`")
-
-        if subset_reasons:
-            note = (
-                "> [!IMPORTANT]\n"
-                f"> This PR environment may only contain a subset of data because:\n"
-                + "\n".join(f"> - {r}" for r in subset_reasons)
-                + "\n"
-                "> \n"
-                "> This means that deploying to `prod` may not be a simple virtual update if there is still some data to load.\n"
-                "> See `Dates not loaded in PR` below or the `Prod Plan Preview` check for more information.\n\n"
-            )
-
-        return (
-            f"Here is a summary of data that has been loaded into the PR environment `{self.pr_environment_name}` and could be deployed to `prod`.\n\n"
-            + note
+        return generate_request_environment_summary_intro(
+            bot_config=self.bot_config,
+            environment_name=self.pr_environment_name,
+            request_term="PR",
+            preview_label="Prod Plan Preview",
+            preview_location="check",
         )
 
     def _generate_pr_environment_summary_list(self, plan: Plan) -> str:
-        added_snapshot_ids = set(plan.context_diff.added)
-        modified_snapshot_ids = set(
-            s.snapshot_id for s, _ in plan.context_diff.modified_snapshots.values()
-        )
-        removed_snapshot_ids = set(plan.context_diff.removed_snapshots.keys())
-
-        # note: we sort these to get a deterministic order for the output tests
-        table_records = sorted(
-            [
-                SnapshotSummaryRecord(snapshot_id=snapshot_id, plan=plan)
-                for snapshot_id in (
-                    added_snapshot_ids | modified_snapshot_ids | removed_snapshot_ids
-                )
-            ],
-            key=lambda r: r.display_name,
-        )
-
-        sections = [
-            ("### Added", [r for r in table_records if r.is_added]),
-            ("### Removed", [r for r in table_records if r.is_removed]),
-            ("### Directly Modified", [r for r in table_records if r.is_directly_modified]),
-            ("### Indirectly Modified", [r for r in table_records if r.is_indirectly_modified]),
-            (
-                "### Metadata Updated",
-                [r for r in table_records if r.is_metadata_updated and not r.is_modified],
-            ),
-        ]
-
-        summary = ""
-        for title, records in sections:
-            if records:
-                summary += f"\n{title}\n"
-
-            for record in records:
-                summary += f"{record.as_markdown_list_item}\n"
-
-        return summary
+        return generate_request_environment_summary_list(plan, request_term="PR")
 
 
 @dataclass
