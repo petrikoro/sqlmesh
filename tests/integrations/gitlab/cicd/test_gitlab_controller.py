@@ -16,6 +16,21 @@ from tests.utils.test_filesystem import create_temp_file
 
 pytestmark = pytest.mark.gitlab
 
+NOTE_TYPE_MARKER_PREFIX = "<!-- sqlmesh-gitlab-note-type:"
+
+
+def _make_typed_note(
+    note_id: int, note_type: str, body: str, *, pipeline_id: t.Optional[int] = None
+) -> MockMergeRequestNote:
+    markers = [
+        "<!-- sqlmesh-gitlab-bot-note -->",
+        f"{NOTE_TYPE_MARKER_PREFIX}{note_type} -->",
+    ]
+    if pipeline_id is not None:
+        markers.append(f"<!-- sqlmesh-gitlab-pipeline-id:{pipeline_id} -->")
+    markers.append(body)
+    return MockMergeRequestNote(note_id, "\n".join(markers))
+
 
 @pytest.mark.parametrize(
     "existing_notes, expected_notes_count, expected_created_count, expected_updated_count",
@@ -23,9 +38,10 @@ pytestmark = pytest.mark.gitlab
         ([], 1, 1, 0),
         (
             [
-                MockMergeRequestNote(
+                _make_typed_note(
                     1,
-                    "<!-- sqlmesh-gitlab-bot-note -->\n:robot: **SQLMesh Bot Info** :robot:\nOld merge request note",
+                    "run-linter",
+                    "**SQLMesh GitLab Bot**\n## Run Linter\nOld merge request note",
                 )
             ],
             1,
@@ -46,13 +62,12 @@ def test_upsert_sqlmesh_mr_note(
     controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
 
     note = controller.upsert_sqlmesh_mr_note(
-        ":robot: **SQLMesh Bot Info** :robot:\nNew merge request note"
+        "run-linter", "**SQLMesh GitLab Bot**\n## Run Linter\nNew merge request note"
     )
 
-    assert (
-        note.body
-        == "<!-- sqlmesh-gitlab-bot-note -->\n:robot: **SQLMesh Bot Info** :robot:\nNew merge request note"
-    )
+    assert "<!-- sqlmesh-gitlab-bot-note -->" in note.body
+    assert f"{NOTE_TYPE_MARKER_PREFIX}run-linter -->" in note.body
+    assert note.body.endswith("New merge request note")
     assert len(client.notes) == expected_notes_count
     assert len(client.created_notes) == expected_created_count
     assert len(client.updated_notes) == expected_updated_count
@@ -64,21 +79,76 @@ def test_upsert_sqlmesh_mr_note_skips_older_pipeline_update(
     monkeypatch.setenv("CI_PIPELINE_ID", "10")
     client = make_gitlab_client(
         [
-            MockMergeRequestNote(
+            _make_typed_note(
                 1,
-                """<!-- sqlmesh-gitlab-bot-note -->
-<!-- sqlmesh-gitlab-pipeline-id:11 -->
-:robot: **SQLMesh Bot Info** :robot:
-Existing note""",
+                "update-mr-environment",
+                "**SQLMesh GitLab Bot**\n## Update MR Environment\nExisting note",
+                pipeline_id=11,
             )
         ]
     )
     controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
 
-    note = controller.upsert_sqlmesh_mr_note(":robot: **SQLMesh Bot Info** :robot:\nOlder note")
+    note = controller.upsert_sqlmesh_mr_note(
+        "update-mr-environment",
+        "**SQLMesh GitLab Bot**\n## Update MR Environment\nOlder note",
+    )
 
     assert note.body.endswith("Existing note")
     assert len(client.updated_notes) == 0
+    assert len(client.created_notes) == 0
+
+
+def test_upsert_sqlmesh_mr_note_ignores_newer_other_note_type(
+    monkeypatch: pytest.MonkeyPatch, make_gitlab_client, make_controller
+):
+    monkeypatch.setenv("CI_PIPELINE_ID", "10")
+    client = make_gitlab_client(
+        [
+            _make_typed_note(
+                1,
+                "gen-prod-plan",
+                "**SQLMesh GitLab Bot**\n## Generate Prod Plan\nExisting note",
+                pipeline_id=11,
+            )
+        ]
+    )
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+
+    note = controller.upsert_sqlmesh_mr_note(
+        "update-mr-environment",
+        "**SQLMesh GitLab Bot**\n## Update MR Environment\nNew note",
+    )
+
+    assert note.body.endswith("New note")
+    assert len(client.updated_notes) == 0
+    assert len(client.created_notes) == 1
+
+
+def test_has_newer_pipeline_note_ignores_unknown_typed_note(
+    monkeypatch: pytest.MonkeyPatch, make_gitlab_client, make_controller
+):
+    monkeypatch.setenv("CI_PIPELINE_ID", "10")
+    client = make_gitlab_client(
+        [
+            MockMergeRequestNote(
+                1,
+                "\n".join(
+                    [
+                        "<!-- sqlmesh-gitlab-bot-note -->",
+                        f"{NOTE_TYPE_MARKER_PREFIX}experimental-note -->",
+                        "<!-- sqlmesh-gitlab-pipeline-id:11 -->",
+                        "**SQLMesh GitLab Bot**",
+                        "## Experimental Note",
+                        "Ignore me",
+                    ]
+                ),
+            )
+        ]
+    )
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+
+    assert not controller.has_newer_pipeline_note()
 
 
 def test_upsert_sqlmesh_mr_note_recreates_missing_note(make_controller):
@@ -91,22 +161,21 @@ def test_upsert_sqlmesh_mr_note_recreates_missing_note(make_controller):
 
     client = MissingNoteOnUpdateClient(
         [
-            MockMergeRequestNote(
+            _make_typed_note(
                 1,
-                "<!-- sqlmesh-gitlab-bot-note -->\n:robot: **SQLMesh Bot Info** :robot:\nOld merge request note",
+                "run-linter",
+                "**SQLMesh GitLab Bot**\n## Run Linter\nOld merge request note",
             )
         ]
     )
     controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
 
     note = controller.upsert_sqlmesh_mr_note(
-        ":robot: **SQLMesh Bot Info** :robot:\nNew merge request note"
+        "run-linter", "**SQLMesh GitLab Bot**\n## Run Linter\nNew merge request note"
     )
 
-    assert (
-        note.body
-        == "<!-- sqlmesh-gitlab-bot-note -->\n:robot: **SQLMesh Bot Info** :robot:\nNew merge request note"
-    )
+    assert f"{NOTE_TYPE_MARKER_PREFIX}run-linter -->" in note.body
+    assert note.body.endswith("New merge request note")
     assert len(client.notes) == 1
     assert len(client.created_notes) == 1
     assert len(client.updated_notes) == 0
@@ -115,51 +184,108 @@ def test_upsert_sqlmesh_mr_note_recreates_missing_note(make_controller):
 def test_get_sqlmesh_mr_note_deletes_duplicate_bot_notes(make_gitlab_client, make_controller):
     client = make_gitlab_client(
         [
-            MockMergeRequestNote(
+            _make_typed_note(
                 1,
-                "<!-- sqlmesh-gitlab-bot-note -->\n:robot: **SQLMesh Bot Info** :robot:\nOld",
+                "run-linter",
+                "**SQLMesh GitLab Bot**\n## Run Linter\nOld",
             ),
-            MockMergeRequestNote(
+            _make_typed_note(
                 2,
-                "<!-- sqlmesh-gitlab-bot-note -->\n:robot: **SQLMesh Bot Info** :robot:\nNew",
+                "run-linter",
+                "**SQLMesh GitLab Bot**\n## Run Linter\nNew",
+            ),
+            _make_typed_note(
+                3,
+                "update-mr-environment",
+                "**SQLMesh GitLab Bot**\n## Update MR Environment\nLeave me alone",
             ),
         ]
     )
     controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
 
-    note = controller._get_sqlmesh_mr_note()
+    note = controller._get_sqlmesh_mr_note("run-linter")
 
     assert note is not None
     assert note.id == 2
     assert client.deleted_note_ids == [1]
+    assert len(client.notes) == 2
+    assert any("Leave me alone" in note.body for note in client.notes)
 
 
 def test_get_sqlmesh_mr_note_prefers_newest_pipeline_marker(make_gitlab_client, make_controller):
     client = make_gitlab_client(
         [
-            MockMergeRequestNote(
+            _make_typed_note(
                 1,
-                """<!-- sqlmesh-gitlab-bot-note -->
-<!-- sqlmesh-gitlab-pipeline-id:11 -->
-:robot: **SQLMesh Bot Info** :robot:
-Newer pipeline note""",
+                "gen-prod-plan",
+                "**SQLMesh GitLab Bot**\n## Generate Prod Plan\nNewer pipeline note",
+                pipeline_id=11,
             ),
-            MockMergeRequestNote(
+            _make_typed_note(
                 2,
-                """<!-- sqlmesh-gitlab-bot-note -->
-<!-- sqlmesh-gitlab-pipeline-id:10 -->
-:robot: **SQLMesh Bot Info** :robot:
-Older pipeline note""",
+                "gen-prod-plan",
+                "**SQLMesh GitLab Bot**\n## Generate Prod Plan\nOlder pipeline note",
+                pipeline_id=10,
             ),
         ]
     )
     controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
 
-    note = controller._get_sqlmesh_mr_note()
+    note = controller._get_sqlmesh_mr_note("gen-prod-plan")
 
     assert note is not None
     assert note.id == 1
     assert client.deleted_note_ids == [2]
+
+
+def test_upsert_sqlmesh_mr_note_deletes_legacy_untyped_note(make_gitlab_client, make_controller):
+    client = make_gitlab_client(
+        [
+            MockMergeRequestNote(
+                1,
+                "<!-- sqlmesh-gitlab-bot-note -->\n:robot: **SQLMesh Bot Info** :robot:\nLegacy note",
+            )
+        ]
+    )
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+
+    note = controller.upsert_sqlmesh_mr_note(
+        "update-mr-environment",
+        "**SQLMesh GitLab Bot**\n## Update MR Environment\nNew typed note",
+    )
+
+    assert len(client.notes) == 1
+    assert client.deleted_note_ids == [1]
+    assert f"{NOTE_TYPE_MARKER_PREFIX}update-mr-environment -->" in note.body
+
+
+def test_upsert_sqlmesh_mr_note_preserves_legacy_typed_note(make_gitlab_client, make_controller):
+    client = make_gitlab_client(
+        [
+            MockMergeRequestNote(
+                1,
+                "\n".join(
+                    [
+                        "<!-- sqlmesh-gitlab-bot-note -->",
+                        f"{NOTE_TYPE_MARKER_PREFIX}plan-preview -->",
+                        "**SQLMesh GitLab Bot**",
+                        "## Prod Plan Preview",
+                        "Legacy typed note",
+                    ]
+                ),
+            )
+        ]
+    )
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+
+    note = controller.upsert_sqlmesh_mr_note(
+        "update-mr-environment",
+        "**SQLMesh GitLab Bot**\n## Update MR Environment\nNew typed note",
+    )
+
+    assert len(client.notes) == 2
+    assert client.deleted_note_ids == []
+    assert f"{NOTE_TYPE_MARKER_PREFIX}update-mr-environment -->" in note.body
 
 
 def test_get_mr_environment_summary_uses_mr_wording(make_gitlab_client, make_controller):
@@ -173,6 +299,105 @@ def test_get_mr_environment_summary_uses_mr_wording(make_gitlab_client, make_con
 
     assert "MR environment" in summary
     assert "Dates loaded in MR" in summary or "No models were modified in this MR" in summary
+
+
+def test_get_mr_environment_summary_references_gen_prod_plan_output(
+    make_gitlab_client, make_controller, mocker
+):
+    controller = make_controller(
+        "tests/fixtures/gitlab/merge_request_open.json",
+        make_gitlab_client(),
+        config=Config(
+            model_defaults=ModelDefaultsConfig(dialect="duckdb"),
+            cicd_bot=GitLabCICDBotConfig(skip_pr_backfill=True),
+        ),
+    )
+    fake_plan = mocker.MagicMock()
+    fake_plan.has_changes = True
+    fake_plan.user_provided_flags = {}
+    controller._prod_plan_with_gaps_builder = mocker.MagicMock()
+    controller._prod_plan_with_gaps_builder.build.return_value = fake_plan
+    mocker.patch(
+        "sqlmesh.integrations.gitlab.cicd.controller.generate_request_environment_summary_list",
+        return_value="",
+    )
+
+    summary = controller._get_merge_request_environment_summary_success()
+
+    assert "`Prod Plan Preview` output from `gen-prod-plan`" in summary
+    assert "`Prod Plan Preview` note" not in summary
+
+
+def test_get_prod_plan_preview_summary_lists_all_change_categories(
+    make_gitlab_client, make_controller, mocker
+):
+    controller = make_controller(
+        "tests/fixtures/gitlab/merge_request_open.json", make_gitlab_client()
+    )
+    mocker.patch.object(controller, "get_plan_summary", return_value="Plan summary")
+    mocker.patch.object(
+        controller,
+        "_render_prod_plan_preview_diff",
+        return_value="""```diff
++ sushi.orders (Forward-only)
+! sushi.waiter_revenue_by_day (Indirect Breaking)
+! sushi.waiter_names (Uncategorized)
+```""",
+    )
+
+    summary = controller.get_prod_plan_preview_summary(mocker.MagicMock())
+
+    assert (
+        "**Change categories:** `Breaking`, `Non-breaking`, `Forward-only`, "
+        "`Indirect Breaking`, `Indirect Non-breaking`, `Metadata`, `Uncategorized`"
+    ) in summary
+
+
+@pytest.mark.parametrize(
+    ("note_type", "stage", "detail_key", "detail_value", "summary"),
+    [
+        ("run-linter", "Linter", "Linter", "First line\nSecond line", ""),
+        ("run-tests", "Unit Tests", "Unit Tests", "Test details", "Test summary"),
+        (
+            "update-mr-environment",
+            "MR Environment",
+            "MR Environment",
+            "Warning details",
+            "MR summary",
+        ),
+        (
+            "gen-prod-plan",
+            "Prod Plan Preview",
+            "Prod Plan Preview",
+            "Plan details",
+            "Plan summary",
+        ),
+    ],
+)
+def test_get_merge_request_note_state_parses_typed_note(
+    note_type: str,
+    stage: str,
+    detail_key: str,
+    detail_value: str,
+    summary: str,
+    make_gitlab_client,
+    make_controller,
+):
+    client = make_gitlab_client()
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    note = controller.render_merge_request_note(
+        note_type=note_type,
+        stage_statuses={stage: "success"},
+        details={detail_key: detail_value},
+        summary=summary,
+    )
+    client.notes = [MockMergeRequestNote(1, note)]
+
+    state = controller.get_merge_request_note_state(note_type)
+
+    assert state.stage_statuses[stage] == "success"
+    assert state.details == {detail_key: detail_value}
+    assert state.summary == summary
 
 
 def test_list_merge_request_notes_fetches_all_pages(mocker: MockerFixture):
@@ -271,10 +496,12 @@ def test_server_url_override_updates_merge_request_link(make_gitlab_client, make
 
     assert controller.server_url == "https://gitlab.internal.example"
     assert controller.api_v4_url == "https://gitlab.internal.example/api/v4"
+    note = controller.render_merge_request_note(
+        note_type="run-linter", stage_statuses={"Linter": "queued"}
+    )
     assert (
-        controller.render_merge_request_note(stage_statuses={"Linter": "queued"})
-        .splitlines()[3]
-        .endswith("https://gitlab.internal.example/group/hello-world/-/merge_requests/42")
+        "| Merge request URL | https://gitlab.internal.example/group/hello-world/-/merge_requests/42 |"
+        in note
     )
 
 
@@ -380,59 +607,48 @@ def test_gitlab_controller_rejects_explicit_github_bot_config(make_gitlab_client
 def test_note_state_preserves_multiline_details(make_gitlab_client, make_controller):
     client = make_gitlab_client(
         [
-            MockMergeRequestNote(
+            _make_typed_note(
                 1,
-                """<!-- sqlmesh-gitlab-bot-note -->
-:robot: **SQLMesh Bot Info** :robot:
-- Merge request: `group/hello-world!42`
-- Merge request URL: https://gitlab.com/group/hello-world/-/merge_requests/42
-- MR environment: `hello_world_42`
+                "run-tests",
+                """**SQLMesh GitLab Bot**
+## Run Tests
 
-## Pipeline Status
-- :x: **Linter:** failure
-- :hourglass_flowing_sand: **Unit Tests:** queued
-- :hourglass_flowing_sand: **MR Environment:** queued
-- :hourglass_flowing_sand: **Prod Plan Preview:** queued
+| Stage | Status |
+| --- | --- |
+| Unit Tests | failure |
 
-## Notes
-- Linter: First line
-  Second line
-- Prod Plan Preview: Another detail""",
+## Details
+### Unit Tests
+First line
+Second line""",
             )
         ]
     )
     controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
 
-    state = controller.get_merge_request_note_state()
+    state = controller.get_merge_request_note_state("run-tests")
 
-    assert state.details == {
-        "Linter": "First line\nSecond line",
-        "Prod Plan Preview": "Another detail",
-    }
+    assert state.details == {"Unit Tests": "First line\nSecond line"}
 
 
 def test_note_state_normalizes_in_progress_status(make_gitlab_client, make_controller):
     client = make_gitlab_client(
         [
-            MockMergeRequestNote(
+            _make_typed_note(
                 1,
-                """<!-- sqlmesh-gitlab-bot-note -->
-:robot: **SQLMesh Bot Info** :robot:
-- Merge request: `group/hello-world!42`
-- Merge request URL: https://gitlab.com/group/hello-world/-/merge_requests/42
-- MR environment: `hello_world_42`
+                "run-linter",
+                """**SQLMesh GitLab Bot**
+## Run Linter
 
-## Pipeline Status
-- :rocket: **Linter:** in progress
-- :hourglass_flowing_sand: **Unit Tests:** queued
-- :hourglass_flowing_sand: **MR Environment:** queued
-- :hourglass_flowing_sand: **Prod Plan Preview:** queued""",
+| Stage | Status |
+| --- | --- |
+| Linter | in progress |""",
             )
         ]
     )
     controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
 
-    state = controller.get_merge_request_note_state()
+    state = controller.get_merge_request_note_state("run-linter")
 
     assert state.stage_statuses["Linter"] == "in_progress"
 

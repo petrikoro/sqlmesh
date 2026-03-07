@@ -1,6 +1,8 @@
 # type: ignore
 from unittest.result import TestResult
 
+import typing as t
+
 import pytest
 
 from sqlmesh.integrations.gitlab.cicd import command
@@ -11,8 +13,65 @@ TestResult.__test__ = False
 
 pytestmark = pytest.mark.gitlab
 
+NOTE_TYPE_MARKER_PREFIX = "<!-- sqlmesh-gitlab-note-type:"
 
-def test_run_all_updates_single_sticky_note(make_gitlab_client, make_controller, mocker):
+
+def _get_note_by_type(client, note_type: str) -> MockMergeRequestNote:
+    marker = f"{NOTE_TYPE_MARKER_PREFIX}{note_type} -->"
+    return next(note for note in client.notes if marker in note.body)
+
+
+def _has_note_by_type(client, note_type: str) -> bool:
+    marker = f"{NOTE_TYPE_MARKER_PREFIX}{note_type} -->"
+    return any(marker in note.body for note in client.notes)
+
+
+def _make_typed_note(
+    note_id: int, note_type: str, body: str, *, pipeline_id: t.Optional[int] = None
+) -> MockMergeRequestNote:
+    markers = [
+        "<!-- sqlmesh-gitlab-bot-note -->",
+        f"{NOTE_TYPE_MARKER_PREFIX}{note_type} -->",
+    ]
+    if pipeline_id is not None:
+        markers.append(f"<!-- sqlmesh-gitlab-pipeline-id:{pipeline_id} -->")
+    markers.append(body)
+    return MockMergeRequestNote(note_id, "\n".join(markers))
+
+
+def test_run_all_calls_individual_command_behaviors_in_order(
+    make_gitlab_client, make_controller, mocker
+):
+    client = make_gitlab_client()
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    calls: t.List[str] = []
+
+    mocker.patch.object(
+        command, "_run_linter_command", side_effect=lambda _: calls.append("run-linter")
+    )
+    mocker.patch.object(
+        command, "_run_tests_command", side_effect=lambda _: calls.append("run-tests")
+    )
+    mocker.patch.object(
+        command,
+        "_update_mr_environment_command",
+        side_effect=lambda _: calls.append("update-mr-environment"),
+    )
+    mocker.patch.object(
+        command, "_gen_prod_plan_command", side_effect=lambda _: calls.append("gen-prod-plan")
+    )
+
+    command._run_all(controller)
+
+    assert calls == [
+        "run-linter",
+        "run-tests",
+        "update-mr-environment",
+        "gen-prod-plan",
+    ]
+
+
+def test_run_all_creates_four_typed_sticky_notes(make_gitlab_client, make_controller, mocker):
     client = make_gitlab_client()
     controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
     controller._context._run_tests = mocker.MagicMock(
@@ -21,43 +80,119 @@ def test_run_all_updates_single_sticky_note(make_gitlab_client, make_controller,
 
     command._run_all(controller)
 
-    assert len(client.notes) == 1
-    assert len(client.created_notes) == 1
-    assert len(client.updated_notes) > 0
-    assert "## Pipeline Status" in client.notes[0].body
-    assert "MR Environment Summary" in client.notes[0].body
-    assert "Prod Plan Preview" in client.notes[0].body
+    assert len(client.notes) == 4
+    assert len(client.created_notes) == 4
+    assert len(client.updated_notes) == 4
+
+    run_linter_note = _get_note_by_type(client, "run-linter")
+    assert "| Stage | Status |" in run_linter_note.body
+    assert "| Linter | success |" in run_linter_note.body
+    assert "| Unit Tests |" not in run_linter_note.body
+
+    run_tests_note = _get_note_by_type(client, "run-tests")
+    assert "| Stage | Status |" in run_tests_note.body
+    assert "| Unit Tests | success |" in run_tests_note.body
+    assert "| Linter |" not in run_tests_note.body
+
+    mr_environment_note = _get_note_by_type(client, "update-mr-environment")
+    assert "| Stage | Status |" in mr_environment_note.body
+    assert "| MR Environment | success |" in mr_environment_note.body
     assert (
-        "Dates loaded in MR" in client.notes[0].body
-        or "No models were modified in this MR" in client.notes[0].body
+        "Dates loaded in MR" in mr_environment_note.body
+        or "No models were modified in this MR" in mr_environment_note.body
+    )
+
+    prod_plan_note = _get_note_by_type(client, "gen-prod-plan")
+    assert "| Stage | Status |" in prod_plan_note.body
+    assert "| Prod Plan Preview | success |" in prod_plan_note.body
+    assert "This is a preview that shows the differences between this MR environment" in (
+        prod_plan_note.body
+    )
+    assert "```diff" in prod_plan_note.body
+    assert "Non-breaking" in prod_plan_note.body
+    assert (
+        "**Models needing backfill:**" in prod_plan_note.body
+        or "No changes to apply." in prod_plan_note.body
     )
 
 
-def test_run_all_marks_remaining_stages_skipped_on_linter_failure(
-    make_gitlab_client, make_controller, mocker
-):
+def test_run_all_stops_after_linter_failure(make_gitlab_client, make_controller, mocker):
     client = make_gitlab_client()
     controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
     controller._context.lint_models = mocker.MagicMock(side_effect=LinterError("lint failed"))
 
-    with pytest.raises(CICDBotError, match="Linter failed"):
+    with pytest.raises(CICDBotError, match="Failed to run the linter."):
         command._run_all(controller)
 
     assert len(client.notes) == 1
-    assert "**Linter:** failure" in client.notes[0].body
-    assert "**Unit Tests:** skipped" in client.notes[0].body
-    assert "**MR Environment:** skipped" in client.notes[0].body
-    assert "**Prod Plan Preview:** skipped" in client.notes[0].body
+
+    run_linter_note = _get_note_by_type(client, "run-linter")
+    assert "| Linter | failure |" in run_linter_note.body
+    assert not _has_note_by_type(client, "run-tests")
+    assert not _has_note_by_type(client, "update-mr-environment")
+    assert not _has_note_by_type(client, "gen-prod-plan")
 
 
-def test_run_linter_stage_updates_sticky_note(make_gitlab_client, make_controller):
+def test_run_all_stops_after_tests_failure(make_gitlab_client, make_controller, mocker):
+    client = make_gitlab_client()
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    controller._context._run_tests = mocker.MagicMock(side_effect=ValueError("tests exploded"))
+
+    with pytest.raises(CICDBotError, match="Failed to run tests."):
+        command._run_all(controller)
+
+    assert len(client.notes) == 2
+
+    run_linter_note = _get_note_by_type(client, "run-linter")
+    assert "| Linter | success |" in run_linter_note.body
+
+    run_tests_note = _get_note_by_type(client, "run-tests")
+    assert "| Unit Tests | failure |" in run_tests_note.body
+
+    assert not _has_note_by_type(client, "update-mr-environment")
+    assert not _has_note_by_type(client, "gen-prod-plan")
+
+
+def test_run_all_stops_before_prod_plan_on_mr_environment_failure(
+    make_gitlab_client, make_controller, mocker
+):
+    client = make_gitlab_client()
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    controller._context._run_tests = mocker.MagicMock(
+        side_effect=lambda **kwargs: (TestResult(), "")
+    )
+    controller.update_merge_request_environment = mocker.MagicMock(side_effect=ValueError("boom"))
+    controller.get_merge_request_environment_summary = mocker.MagicMock(
+        return_value="Failed summary"
+    )
+    controller.get_prod_plan_preview_summary = mocker.MagicMock(return_value="Should not run")
+
+    with pytest.raises(CICDBotError, match="Failed to update merge request environment."):
+        command._run_all(controller)
+
+    assert len(client.notes) == 3
+
+    mr_environment_note = _get_note_by_type(client, "update-mr-environment")
+    assert "| MR Environment | failure |" in mr_environment_note.body
+    assert "Failed summary" in mr_environment_note.body
+
+    assert not _has_note_by_type(client, "gen-prod-plan")
+    controller.get_prod_plan_preview_summary.assert_not_called()
+
+
+def test_run_linter_stage_updates_only_own_note(make_gitlab_client, make_controller):
     client = make_gitlab_client()
     controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
 
     assert command._run_linter_stage(controller)
 
     assert len(client.notes) == 1
-    assert "**Linter:** success" in client.notes[0].body
+    note = _get_note_by_type(client, "run-linter")
+    assert "| Linter | success |" in note.body
+    assert "| Unit Tests |" not in note.body
+    assert not _has_note_by_type(client, "run-tests")
+    assert not _has_note_by_type(client, "update-mr-environment")
+    assert not _has_note_by_type(client, "gen-prod-plan")
 
 
 def test_run_linter_stage_surfaces_warning_details(make_gitlab_client, make_controller, mocker):
@@ -71,11 +206,12 @@ def test_run_linter_stage_surfaces_warning_details(make_gitlab_client, make_cont
 
     assert command._run_linter_stage(controller)
 
-    assert "**Linter:** success" in client.notes[0].body
-    assert "lint warning" in client.notes[0].body
+    note = _get_note_by_type(client, "run-linter")
+    assert "| Linter | success |" in note.body
+    assert "lint warning" in note.body
 
 
-def test_run_linter_stage_failure_skips_downstream_stages(
+def test_run_linter_stage_failure_updates_only_own_note(
     make_gitlab_client, make_controller, mocker
 ):
     client = make_gitlab_client()
@@ -84,15 +220,78 @@ def test_run_linter_stage_failure_skips_downstream_stages(
 
     assert not command._run_linter_stage(controller)
 
-    assert "**Linter:** failure" in client.notes[0].body
-    assert "**Unit Tests:** skipped" in client.notes[0].body
-    assert "**MR Environment:** skipped" in client.notes[0].body
-    assert "**Prod Plan Preview:** skipped" in client.notes[0].body
-    assert "MR Environment Summary" not in client.notes[0].body
-    assert "Prod Plan Preview</summary>" not in client.notes[0].body
+    assert len(client.notes) == 1
+    note = _get_note_by_type(client, "run-linter")
+    assert "| Linter | failure |" in note.body
+    assert not _has_note_by_type(client, "run-tests")
+    assert not _has_note_by_type(client, "update-mr-environment")
+    assert not _has_note_by_type(client, "gen-prod-plan")
 
 
-def test_run_tests_stage_updates_sticky_note(make_gitlab_client, make_controller, mocker):
+def test_run_linter_stage_does_not_modify_existing_other_notes(make_gitlab_client, make_controller):
+    run_tests_note = _make_typed_note(
+        1,
+        "run-tests",
+        """**SQLMesh GitLab Bot**
+## Run Tests
+
+| Stage | Status |
+| --- | --- |
+| Unit Tests | success |
+
+Existing tests summary
+
+## Details
+### Unit Tests
+Existing tests details""",
+    )
+    update_mr_environment_note = _make_typed_note(
+        2,
+        "update-mr-environment",
+        """**SQLMesh GitLab Bot**
+## Update MR Environment
+
+| Stage | Status |
+| --- | --- |
+| MR Environment | success |
+
+Existing MR summary
+
+## Details
+### MR Environment
+Existing MR details""",
+    )
+    gen_prod_plan_note = _make_typed_note(
+        3,
+        "gen-prod-plan",
+        """**SQLMesh GitLab Bot**
+## Generate Prod Plan
+
+| Stage | Status |
+| --- | --- |
+| Prod Plan Preview | success |
+
+Existing prod plan
+
+## Details
+### Prod Plan Preview
+Existing prod plan details""",
+    )
+    run_tests_body = run_tests_note.body
+    update_mr_environment_body = update_mr_environment_note.body
+    gen_prod_plan_body = gen_prod_plan_note.body
+    client = make_gitlab_client([run_tests_note, update_mr_environment_note, gen_prod_plan_note])
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+
+    assert command._run_linter_stage(controller)
+
+    assert len(client.notes) == 4
+    assert _get_note_by_type(client, "run-tests").body == run_tests_body
+    assert _get_note_by_type(client, "update-mr-environment").body == update_mr_environment_body
+    assert _get_note_by_type(client, "gen-prod-plan").body == gen_prod_plan_body
+
+
+def test_run_tests_stage_updates_only_own_note(make_gitlab_client, make_controller, mocker):
     client = make_gitlab_client()
     controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
     controller._context._run_tests = mocker.MagicMock(
@@ -102,11 +301,149 @@ def test_run_tests_stage_updates_sticky_note(make_gitlab_client, make_controller
     assert command._run_tests_stage(controller)
 
     assert len(client.notes) == 1
-    assert "**Unit Tests:** success" in client.notes[0].body
+    note = _get_note_by_type(client, "run-tests")
+    assert "| Unit Tests | success |" in note.body
+    assert "| Linter |" not in note.body
+    assert not _has_note_by_type(client, "run-linter")
+    assert not _has_note_by_type(client, "update-mr-environment")
+    assert not _has_note_by_type(client, "gen-prod-plan")
+
+
+def test_run_tests_stage_failure_updates_only_own_note(make_gitlab_client, make_controller, mocker):
+    client = make_gitlab_client()
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    controller._context._run_tests = mocker.MagicMock(side_effect=ValueError("tests exploded"))
+
+    assert not command._run_tests_stage(controller)
+
+    assert len(client.notes) == 1
+    note = _get_note_by_type(client, "run-tests")
+    assert "| Unit Tests | failure |" in note.body
+    assert not _has_note_by_type(client, "run-linter")
+    assert not _has_note_by_type(client, "update-mr-environment")
+    assert not _has_note_by_type(client, "gen-prod-plan")
+
+
+def test_run_tests_stage_does_not_modify_existing_other_notes(
+    make_gitlab_client, make_controller, mocker
+):
+    run_linter_note = _make_typed_note(
+        1,
+        "run-linter",
+        """**SQLMesh GitLab Bot**
+## Run Linter
+
+| Stage | Status |
+| --- | --- |
+| Linter | success |
+
+Existing linter details""",
+    )
+    update_mr_environment_note = _make_typed_note(
+        2,
+        "update-mr-environment",
+        """**SQLMesh GitLab Bot**
+## Update MR Environment
+
+| Stage | Status |
+| --- | --- |
+| MR Environment | success |
+
+Existing MR summary
+
+## Details
+### MR Environment
+Existing MR details""",
+    )
+    gen_prod_plan_note = _make_typed_note(
+        3,
+        "gen-prod-plan",
+        """**SQLMesh GitLab Bot**
+## Generate Prod Plan
+
+| Stage | Status |
+| --- | --- |
+| Prod Plan Preview | success |
+
+Existing prod plan
+
+## Details
+### Prod Plan Preview
+Existing prod plan details""",
+    )
+    run_linter_body = run_linter_note.body
+    update_mr_environment_body = update_mr_environment_note.body
+    gen_prod_plan_body = gen_prod_plan_note.body
+    client = make_gitlab_client([run_linter_note, update_mr_environment_note, gen_prod_plan_note])
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    controller._context._run_tests = mocker.MagicMock(
+        side_effect=lambda **kwargs: (TestResult(), "")
+    )
+
+    assert command._run_tests_stage(controller)
+
+    assert len(client.notes) == 4
+    assert _get_note_by_type(client, "run-linter").body == run_linter_body
+    assert _get_note_by_type(client, "update-mr-environment").body == update_mr_environment_body
+    assert _get_note_by_type(client, "gen-prod-plan").body == gen_prod_plan_body
+
+
+def test_update_mr_environment_success_updates_only_its_note(
+    make_gitlab_client, make_controller, mocker
+):
+    run_linter_note = _make_typed_note(
+        1,
+        "run-linter",
+        """**SQLMesh GitLab Bot**
+## Run Linter
+
+| Stage | Status |
+| --- | --- |
+| Linter | success |""",
+    )
+    gen_prod_plan_note = _make_typed_note(
+        2,
+        "gen-prod-plan",
+        """**SQLMesh GitLab Bot**
+## Generate Prod Plan
+
+| Stage | Status |
+| --- | --- |
+| Prod Plan Preview | success |
+
+Existing prod plan""",
+    )
+    run_linter_body = run_linter_note.body
+    gen_prod_plan_body = gen_prod_plan_note.body
+    client = make_gitlab_client([run_linter_note, gen_prod_plan_note])
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    controller.update_merge_request_environment = mocker.MagicMock(return_value="MR updated")
+
+    assert command._update_mr_environment(controller)
+
+    assert len(client.notes) == 3
+    note = _get_note_by_type(client, "update-mr-environment")
+    assert "| MR Environment | success |" in note.body
+    assert "MR updated" in note.body
+    assert _get_note_by_type(client, "run-linter").body == run_linter_body
+    assert _get_note_by_type(client, "gen-prod-plan").body == gen_prod_plan_body
 
 
 def test_update_mr_environment_skips_when_no_changes(make_gitlab_client, make_controller, mocker):
-    client = make_gitlab_client()
+    prod_plan_note = _make_typed_note(
+        1,
+        "gen-prod-plan",
+        """**SQLMesh GitLab Bot**
+## Generate Prod Plan
+
+| Stage | Status |
+| --- | --- |
+| Prod Plan Preview | success |
+
+Existing prod plan""",
+    )
+    prod_plan_body = prod_plan_note.body
+    client = make_gitlab_client([prod_plan_note])
     controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
     controller.update_merge_request_environment = mocker.MagicMock(
         side_effect=NoChangesPlanError("no changes")
@@ -115,41 +452,44 @@ def test_update_mr_environment_skips_when_no_changes(make_gitlab_client, make_co
         return_value="No changes were detected compared to the prod environment."
     )
 
-    command._update_mr_environment(controller)
+    assert command._update_mr_environment(controller)
 
-    assert len(client.notes) == 1
-    assert "**MR Environment:** skipped" in client.notes[0].body
-    assert "**Linter:** queued" in client.notes[0].body
-    assert "**Unit Tests:** queued" in client.notes[0].body
+    assert len(client.notes) == 2
+    note = _get_note_by_type(client, "update-mr-environment")
+    assert "| MR Environment | skipped |" in note.body
+    assert "No changes were detected compared to the prod environment." in note.body
+    assert _get_note_by_type(client, "gen-prod-plan").body == prod_plan_body
 
 
-def test_update_mr_environment_failure_clears_stale_prod_preview(
+def test_update_mr_environment_failure_does_not_modify_existing_prod_preview(
     make_gitlab_client, make_controller, mocker
 ):
-    client = make_gitlab_client(
-        [
-            mocker.MagicMock(
-                id=1,
-                body="""<!-- sqlmesh-gitlab-bot-note -->
-:robot: **SQLMesh Bot Info** :robot:
-- Merge request: `group/hello-world!42`
-- Merge request URL: https://gitlab.com/group/hello-world/-/merge_requests/42
-- MR environment: `hello_world_42`
+    update_mr_environment_note = _make_typed_note(
+        1,
+        "update-mr-environment",
+        """**SQLMesh GitLab Bot**
+## Update MR Environment
 
-## Pipeline Status
-- :white_check_mark: **Linter:** success
-- :white_check_mark: **Unit Tests:** success
-- :white_check_mark: **MR Environment:** success
-- :white_check_mark: **Prod Plan Preview:** success
+| Stage | Status |
+| --- | --- |
+| MR Environment | success |
 
-<details>
-  <summary>:ship: Prod Plan Preview</summary>
-
-Old prod plan
-</details>""",
-            )
-        ]
+Old MR summary""",
     )
+    gen_prod_plan_note = _make_typed_note(
+        2,
+        "gen-prod-plan",
+        """**SQLMesh GitLab Bot**
+## Generate Prod Plan
+
+| Stage | Status |
+| --- | --- |
+| Prod Plan Preview | success |
+
+Old prod plan""",
+    )
+    gen_prod_plan_body = gen_prod_plan_note.body
+    client = make_gitlab_client([update_mr_environment_note, gen_prod_plan_note])
     controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
     controller.update_merge_request_environment = mocker.MagicMock(side_effect=ValueError("boom"))
     controller.get_merge_request_environment_summary = mocker.MagicMock(
@@ -158,69 +498,101 @@ Old prod plan
 
     assert not command._update_mr_environment(controller)
 
-    assert "**MR Environment:** failure" in client.notes[0].body
-    assert "**Prod Plan Preview:** skipped" in client.notes[0].body
-    assert "<summary>:ship: Prod Plan Preview</summary>" not in client.notes[0].body
+    mr_environment_note = _get_note_by_type(client, "update-mr-environment")
+    assert "| MR Environment | failure |" in mr_environment_note.body
+    assert "Failed summary" in mr_environment_note.body
+
+    assert _get_note_by_type(client, "gen-prod-plan").body == gen_prod_plan_body
 
 
-def test_update_mr_environment_skips_stale_pipeline(
+def test_update_mr_environment_skips_when_newer_different_note_type_exists(
     monkeypatch: pytest.MonkeyPatch, make_gitlab_client, make_controller
 ):
     monkeypatch.setenv("CI_PIPELINE_ID", "10")
-    client = make_gitlab_client(
-        [
-            MockMergeRequestNote(
-                1,
-                """<!-- sqlmesh-gitlab-bot-note -->
-<!-- sqlmesh-gitlab-pipeline-id:11 -->
-:robot: **SQLMesh Bot Info** :robot:
-- Merge request: `group/hello-world!42`
-- Merge request URL: https://gitlab.com/group/hello-world/-/merge_requests/42
-- MR environment: `hello_world_42`
+    prod_plan_note = _make_typed_note(
+        1,
+        "gen-prod-plan",
+        """**SQLMesh GitLab Bot**
+## Generate Prod Plan
 
-## Pipeline Status
-- :white_check_mark: **Linter:** success
-- :white_check_mark: **Unit Tests:** success
-- :white_check_mark: **MR Environment:** success
-- :white_check_mark: **Prod Plan Preview:** success""",
-            )
-        ]
+| Stage | Status |
+| --- | --- |
+| Prod Plan Preview | success |""",
+        pipeline_id=11,
     )
+    prod_plan_body = prod_plan_note.body
+    client = make_gitlab_client([prod_plan_note])
     controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
 
     assert command._update_mr_environment(controller)
 
-    assert "**MR Environment:** success" in client.notes[0].body
+    assert len(client.notes) == 2
+    mr_environment_note = _get_note_by_type(client, "update-mr-environment")
+    assert "| MR Environment | skipped |" in mr_environment_note.body
+    assert _get_note_by_type(client, "gen-prod-plan").body == prod_plan_body
     assert not controller._context.apply.called
 
 
-def test_gen_prod_plan_preserves_existing_stage_statuses(
-    make_gitlab_client, make_controller, mocker
+def test_update_mr_environment_skips_stale_pipeline_for_same_note_type(
+    monkeypatch: pytest.MonkeyPatch, make_gitlab_client, make_controller
 ):
-    existing_note = make_gitlab_client(
-        [
-            mocker.MagicMock(
-                id=1,
-                body="""<!-- sqlmesh-gitlab-bot-note -->
-:robot: **SQLMesh Bot Info** :robot:
-- Merge request: `group/hello-world!42`
-- Merge request URL: https://gitlab.com/group/hello-world/-/merge_requests/42
-- MR environment: `hello_world_42`
+    monkeypatch.setenv("CI_PIPELINE_ID", "10")
+    mr_environment_note = _make_typed_note(
+        1,
+        "update-mr-environment",
+        """**SQLMesh GitLab Bot**
+## Update MR Environment
 
-## Pipeline Status
-- :white_check_mark: **Linter:** success
-- :x: **Unit Tests:** failure
-- :hourglass_flowing_sand: **MR Environment:** queued
-- :hourglass_flowing_sand: **Prod Plan Preview:** queued""",
-            )
-        ]
+| Stage | Status |
+| --- | --- |
+| MR Environment | success |""",
+        pipeline_id=11,
     )
-    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", existing_note)
-    mocker.patch.object(controller, "get_plan_summary", return_value="No changes to apply.")
+    mr_environment_body = mr_environment_note.body
+    client = make_gitlab_client([mr_environment_note])
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
 
-    command._gen_prod_plan(controller)
+    assert command._update_mr_environment(controller)
 
-    assert "**Linter:** success" in existing_note.notes[0].body
-    assert "**Unit Tests:** failure" in existing_note.notes[0].body
-    assert "**MR Environment:** queued" in existing_note.notes[0].body
-    assert "**Prod Plan Preview:** success" in existing_note.notes[0].body
+    assert len(client.notes) == 1
+    assert _get_note_by_type(client, "update-mr-environment").body == mr_environment_body
+    assert not controller._context.apply.called
+
+
+def test_gen_prod_plan_updates_only_plan_preview_note(make_gitlab_client, make_controller, mocker):
+    run_linter_note = _make_typed_note(
+        1,
+        "run-linter",
+        """**SQLMesh GitLab Bot**
+## Run Linter
+
+| Stage | Status |
+| --- | --- |
+| Linter | success |""",
+    )
+    mr_environment_note = _make_typed_note(
+        2,
+        "update-mr-environment",
+        """**SQLMesh GitLab Bot**
+## Update MR Environment
+
+| Stage | Status |
+| --- | --- |
+| MR Environment | queued |""",
+    )
+    run_linter_body = run_linter_note.body
+    mr_environment_body = mr_environment_note.body
+    client = make_gitlab_client([run_linter_note, mr_environment_note])
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    mocker.patch.object(
+        controller, "get_prod_plan_preview_summary", return_value="No changes to apply."
+    )
+
+    assert command._gen_prod_plan(controller)
+
+    assert _get_note_by_type(client, "run-linter").body == run_linter_body
+    assert _get_note_by_type(client, "update-mr-environment").body == mr_environment_body
+
+    prod_plan_note = _get_note_by_type(client, "gen-prod-plan")
+    assert "| Prod Plan Preview | success |" in prod_plan_note.body
+    assert "No changes to apply." in prod_plan_note.body

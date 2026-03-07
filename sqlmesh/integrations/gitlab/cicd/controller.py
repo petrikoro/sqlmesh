@@ -14,6 +14,7 @@ import requests
 from sqlglot.errors import SqlglotError
 
 from sqlmesh.cicd.summary import (
+    SnapshotSummaryRecord,
     generate_plan_flags_section,
     generate_request_environment_summary_intro,
     generate_request_environment_summary_list,
@@ -21,7 +22,7 @@ from sqlmesh.cicd.summary import (
 )
 from sqlmesh.core import constants as c
 from sqlmesh.core.config import Config
-from sqlmesh.core.console import MarkdownConsole, get_console
+from sqlmesh.core.console import MarkdownConsole, SNAPSHOT_CHANGE_CATEGORY_STR, get_console
 from sqlmesh.core.context import Context
 from sqlmesh.core.environment import Environment
 from sqlmesh.core.plan import Plan, PlanBuilder
@@ -40,6 +41,10 @@ from sqlmesh.utils.errors import (
 from sqlmesh.utils.pydantic import PydanticModel
 
 logger = logging.getLogger(__name__)
+
+PROD_PLAN_CHANGE_CATEGORY_LABELS = tuple(
+    label for category, label in SNAPSHOT_CHANGE_CATEGORY_STR.items() if category is not None
+) + ("Uncategorized",)
 
 
 class TestFailure(Exception):
@@ -230,8 +235,7 @@ class GitLabMergeRequestNote(PydanticModel):
 @dataclass
 class GitLabMergeRequestNoteState:
     stage_statuses: t.Dict[str, str]
-    merge_request_environment_summary: str = ""
-    prod_plan_summary: str = ""
+    summary: str = ""
     details: t.Dict[str, str] = field(default_factory=dict)
 
 
@@ -336,12 +340,41 @@ class RequestsGitLabAPIClient(GitLabAPIClient):
 
 
 class GitLabController:
-    BOT_HEADER_MSG = ":robot: **SQLMesh Bot Info** :robot:"
     BOT_NOTE_MARKER = "<!-- sqlmesh-gitlab-bot-note -->"
+    BOT_NOTE_TYPE_MARKER_PREFIX = "<!-- sqlmesh-gitlab-note-type:"
+    BOT_NOTE_TYPE_MARKER_SUFFIX = " -->"
     BOT_PIPELINE_MARKER_PREFIX = "<!-- sqlmesh-gitlab-pipeline-id:"
     BOT_PIPELINE_MARKER_SUFFIX = " -->"
     MAX_NOTE_LENGTH = 1_000_000
     PIPELINE_STAGE_LABELS = ("Linter", "Unit Tests", "MR Environment", "Prod Plan Preview")
+    RUN_LINTER_NOTE = "run-linter"
+    RUN_TESTS_NOTE = "run-tests"
+    UPDATE_MR_ENVIRONMENT_NOTE = "update-mr-environment"
+    GEN_PROD_PLAN_NOTE = "gen-prod-plan"
+    LEGACY_NOTE_TYPES = frozenset({"linter-tests", "mr-environment", "plan-preview"})
+    SUPPORTED_NOTE_TYPES = (
+        frozenset(
+            {
+                RUN_LINTER_NOTE,
+                RUN_TESTS_NOTE,
+                UPDATE_MR_ENVIRONMENT_NOTE,
+                GEN_PROD_PLAN_NOTE,
+            }
+        )
+        | LEGACY_NOTE_TYPES
+    )
+    NOTE_TYPE_TO_TITLE = {
+        RUN_LINTER_NOTE: "Run Linter",
+        RUN_TESTS_NOTE: "Run Tests",
+        UPDATE_MR_ENVIRONMENT_NOTE: "Update MR Environment",
+        GEN_PROD_PLAN_NOTE: "Generate Prod Plan",
+    }
+    NOTE_TYPE_TO_STAGE_LABELS = {
+        RUN_LINTER_NOTE: ("Linter",),
+        RUN_TESTS_NOTE: ("Unit Tests",),
+        UPDATE_MR_ENVIRONMENT_NOTE: ("MR Environment",),
+        GEN_PROD_PLAN_NOTE: ("Prod Plan Preview",),
+    }
 
     def __init__(
         self,
@@ -555,6 +588,38 @@ class GitLabController:
             default_catalog=self._context.default_catalog,
         )
 
+    def get_prod_plan_preview_summary(self, plan: Plan) -> str:
+        summary = self.get_plan_summary(plan).strip()
+        if not summary:
+            return ""
+        parts = [
+            (
+                f"This is a preview that shows the differences between this MR environment "
+                f"`{self.pr_environment_name}` and `prod`.\n\n"
+                "These are the changes that would be deployed."
+            ),
+            (
+                "**Change categories:** "
+                + ", ".join(f"`{category}`" for category in PROD_PLAN_CHANGE_CATEGORY_LABELS)
+            ),
+        ]
+        if diff_overview := self._render_prod_plan_preview_diff(plan):
+            parts.append(diff_overview)
+        parts.append(summary)
+        return "\n\n".join(part for part in parts if part).strip()
+
+    def get_test_summary(self, result: ModelTextTestResult) -> str:
+        try:
+            self._console.consume_captured_output()
+            self._console.log_test_results(
+                result,
+                self._context.test_connection_config._engine_adapter.DIALECT,
+            )
+            return self._console.consume_captured_output().strip()
+        except Exception:
+            logger.exception("Failed to render GitLab test summary")
+            return ""
+
     def get_merge_request_environment_summary(self, exception: t.Optional[Exception] = None) -> str:
         if exception is None:
             summary = self._get_merge_request_environment_summary_success()
@@ -599,6 +664,7 @@ class GitLabController:
                 environment_name=self.pr_environment_name,
                 request_term="MR",
                 preview_label="Prod Plan Preview",
+                preview_location="output from `gen-prod-plan`",
             ) + generate_request_environment_summary_list(prod_plan, request_term="MR")
 
         if prod_plan.user_provided_flags:
@@ -621,24 +687,70 @@ class GitLabController:
             for index in range(0, len(message), self.MAX_NOTE_LENGTH)
         ]
 
-    def _get_sqlmesh_mr_note(self) -> t.Optional[GitLabMergeRequestNote]:
+    def _note_stage_labels(self, note_type: str) -> t.Tuple[str, ...]:
+        try:
+            return self.NOTE_TYPE_TO_STAGE_LABELS[note_type]
+        except KeyError as ex:
+            raise CICDBotError(f"Unsupported GitLab SQLMesh note type: {note_type}") from ex
+
+    def _note_title(self, note_type: str) -> str:
+        try:
+            return self.NOTE_TYPE_TO_TITLE[note_type]
+        except KeyError as ex:
+            raise CICDBotError(f"Unsupported GitLab SQLMesh note type: {note_type}") from ex
+
+    def _list_sqlmesh_mr_notes(self) -> t.List[GitLabMergeRequestNote]:
         notes = self._client.list_merge_request_notes(
             self.merge_request_info.project_id,
             self.merge_request_info.merge_request_iid,
         )
+        return [
+            t.cast(GitLabMergeRequestNote, note)
+            for note in notes
+            if self.BOT_NOTE_MARKER in note.body
+        ]
+
+    def _sqlmesh_note_sort_key(self, note: GitLabMergeRequestNote) -> t.Tuple[int, int]:
+        return (self._extract_pipeline_id(note.body) or -1, note.id)
+
+    def _extract_note_type(self, body: str) -> t.Optional[str]:
+        if self.BOT_NOTE_TYPE_MARKER_PREFIX not in body:
+            return None
+        note_type = body.split(self.BOT_NOTE_TYPE_MARKER_PREFIX, 1)[1].split(
+            self.BOT_NOTE_TYPE_MARKER_SUFFIX, 1
+        )[0]
+        return note_type or None
+
+    def _get_latest_sqlmesh_mr_note(
+        self, notes: t.Optional[t.Sequence[GitLabMergeRequestNote]] = None
+    ) -> t.Optional[GitLabMergeRequestNote]:
         bot_notes = sorted(
             [
-                t.cast(GitLabMergeRequestNote, note)
-                for note in notes
-                if self.BOT_NOTE_MARKER in note.body
+                note
+                for note in (notes or self._list_sqlmesh_mr_notes())
+                if (note_type := self._extract_note_type(note.body)) is None
+                or note_type in self.SUPPORTED_NOTE_TYPES
             ],
-            key=lambda note: (self._extract_pipeline_id(note.body) or -1, note.id),
+            key=self._sqlmesh_note_sort_key,
         )
         if not bot_notes:
             return None
+        return bot_notes[-1]
 
-        latest_note = bot_notes[-1]
-        for note in bot_notes[:-1]:
+    def _get_sqlmesh_mr_note(self, note_type: str) -> t.Optional[GitLabMergeRequestNote]:
+        typed_notes = sorted(
+            [
+                note
+                for note in self._list_sqlmesh_mr_notes()
+                if self._extract_note_type(note.body) == note_type
+            ],
+            key=self._sqlmesh_note_sort_key,
+        )
+        if not typed_notes:
+            return None
+
+        latest_note = typed_notes[-1]
+        for note in typed_notes[:-1]:
             self._client.delete_merge_request_note(
                 self.merge_request_info.project_id,
                 self.merge_request_info.merge_request_iid,
@@ -646,39 +758,41 @@ class GitLabController:
             )
         return latest_note
 
-    def get_merge_request_note_state(self) -> GitLabMergeRequestNoteState:
-        note = self._get_sqlmesh_mr_note()
-        statuses = {label: "queued" for label in self.PIPELINE_STAGE_LABELS}
+    def get_merge_request_note_state(self, note_type: str) -> GitLabMergeRequestNoteState:
+        note = self._get_sqlmesh_mr_note(note_type)
+        statuses = {label: "queued" for label in self._note_stage_labels(note_type)}
         if not note:
             return GitLabMergeRequestNoteState(stage_statuses=statuses)
 
-        for line in note.body.splitlines():
-            for label in self.PIPELINE_STAGE_LABELS:
-                marker = f"**{label}:** "
-                if marker in line:
-                    statuses[label] = line.split(marker, 1)[1].strip().replace(" ", "_")
-
-        details = self._extract_note_details(note.body, "## Notes")
+        for label, status in self._extract_stage_statuses(note.body).items():
+            if label in statuses:
+                statuses[label] = status
 
         return GitLabMergeRequestNoteState(
             stage_statuses=statuses,
-            merge_request_environment_summary=self._extract_details_section(
-                note.body, "  <summary>:eyes: MR Environment Summary</summary>"
-            ),
-            prod_plan_summary=self._extract_details_section(
-                note.body, "  <summary>:ship: Prod Plan Preview</summary>"
-            ),
-            details=details,
+            summary=self._extract_note_summary(note.body),
+            details=self._extract_note_details(note.body),
         )
 
-    def upsert_sqlmesh_mr_note(self, body: str) -> GitLabMergeRequestNote:
-        note_body, *truncated = self._chunk_up_api_message(self._with_note_marker(body))
+    def upsert_sqlmesh_mr_note(self, note_type: str, body: str) -> GitLabMergeRequestNote:
+        note_body, *truncated = self._chunk_up_api_message(self._with_note_marker(note_type, body))
         if truncated:
             logger.warning("GitLab MR note body exceeded max size and was truncated.")
 
-        note = self._get_sqlmesh_mr_note()
-        if note:
-            existing_pipeline_id = self._extract_pipeline_id(note.body)
+        existing_notes = self._list_sqlmesh_mr_notes()
+
+        for note in existing_notes:
+            existing_note_type = self._extract_note_type(note.body)
+            if existing_note_type is None:
+                self._client.delete_merge_request_note(
+                    self.merge_request_info.project_id,
+                    self.merge_request_info.merge_request_iid,
+                    note.id,
+                )
+
+        existing_note = self._get_sqlmesh_mr_note(note_type)
+        if existing_note:
+            existing_pipeline_id = self._extract_pipeline_id(existing_note.body)
             if (
                 self.pipeline_id is not None
                 and existing_pipeline_id is not None
@@ -687,21 +801,21 @@ class GitLabController:
                 logger.info(
                     "Skipping GitLab MR note update because a newer pipeline note already exists."
                 )
-                return note
+                return existing_note
             try:
                 return t.cast(
                     GitLabMergeRequestNote,
                     self._client.update_merge_request_note(
                         self.merge_request_info.project_id,
                         self.merge_request_info.merge_request_iid,
-                        note.id,
+                        existing_note.id,
                         note_body,
                     ),
                 )
             except NotFoundError:
                 logger.info(
                     "GitLab MR note %s no longer exists; creating a new SQLMesh bot note.",
-                    note.id,
+                    existing_note.id,
                 )
                 return t.cast(
                     GitLabMergeRequestNote,
@@ -724,81 +838,68 @@ class GitLabController:
     def render_merge_request_note(
         self,
         *,
+        note_type: str,
         stage_statuses: t.Mapping[str, str],
-        merge_request_environment_summary: str = "",
-        prod_plan_summary: str = "",
+        summary: str = "",
         details: t.Optional[t.Mapping[str, str]] = None,
     ) -> str:
-        status_icon = {
-            "queued": ":hourglass_flowing_sand:",
-            "in_progress": ":rocket:",
-            "success": ":white_check_mark:",
-            "failure": ":x:",
-            "skipped": ":next_track_button:",
-        }
+        relevant_stages = self._note_stage_labels(note_type)
 
         lines = [
             self.BOT_NOTE_MARKER,
+            f"{self.BOT_NOTE_TYPE_MARKER_PREFIX}{note_type}{self.BOT_NOTE_TYPE_MARKER_SUFFIX}",
             self.bot_config.note_header,
-            f"- Merge request: `{self.merge_request_info.full_merge_request_path}`",
-            f"- Merge request URL: {self.merge_request_url}",
-            f"- MR environment: `{self.pr_environment_name}`",
+            f"## {self._note_title(note_type)}",
             "",
-            "## Pipeline Status",
+            "| Item | Value |",
+            "| --- | --- |",
+            f"| Merge request | `{self.merge_request_info.full_merge_request_path}` |",
+            f"| Merge request URL | {self.merge_request_url} |",
+            f"| MR environment | `{self.pr_environment_name}` |",
+            "",
+            "| Stage | Status |",
+            "| --- | --- |",
         ]
 
-        for label, status in stage_statuses.items():
-            lines.append(
-                f"- {status_icon.get(status, ':grey_question:')} **{label}:** {status.replace('_', ' ')}"
-            )
+        for label in relevant_stages:
+            status = stage_statuses.get(label, "queued")
+            lines.append(f"| {label} | {status.replace('_', ' ')} |")
 
+        rendered_summary = summary.strip()
+        if rendered_summary:
+            lines.extend(["", rendered_summary])
+
+        ordered_details: t.List[t.Tuple[str, str]] = []
         if details:
-            lines.extend(["", "## Notes"])
             rendered_detail_keys = set()
-            for stage in self.PIPELINE_STAGE_LABELS:
-                if stage not in details:
+            for stage in relevant_stages:
+                detail = details.get(stage, "").strip()
+                if not detail:
                     continue
+                ordered_details.append((stage, detail))
                 rendered_detail_keys.add(stage)
-                detail_lines = details[stage].splitlines() or [details[stage]]
-                lines.append(f"- {stage}: {detail_lines[0]}")
-                lines.extend(f"  {line}" for line in detail_lines[1:])
             for stage, detail in details.items():
-                if stage in rendered_detail_keys:
+                rendered_detail = detail.strip()
+                if stage in rendered_detail_keys or not rendered_detail:
                     continue
-                detail_lines = detail.splitlines() or [detail]
-                lines.append(f"- {stage}: {detail_lines[0]}")
-                lines.extend(f"  {line}" for line in detail_lines[1:])
+                ordered_details.append((stage, rendered_detail))
 
-        if merge_request_environment_summary:
-            lines.extend(
-                [
-                    "",
-                    "<details>",
-                    "  <summary>:eyes: MR Environment Summary</summary>",
-                    "",
-                    merge_request_environment_summary,
-                    "</details>",
-                ]
-            )
-
-        if prod_plan_summary:
-            lines.extend(
-                [
-                    "",
-                    "<details>",
-                    "  <summary>:ship: Prod Plan Preview</summary>",
-                    "",
-                    prod_plan_summary,
-                    "</details>",
-                ]
-            )
+        if ordered_details:
+            lines.extend(["", "## Details"])
+            for stage, detail in ordered_details:
+                lines.extend(["", f"### {stage}", detail])
 
         return "\n".join(lines).strip()
 
-    def _with_note_marker(self, body: str) -> str:
+    def _with_note_marker(self, note_type: str, body: str) -> str:
         parts = []
         if self.BOT_NOTE_MARKER not in body:
             parts.append(self.BOT_NOTE_MARKER)
+        note_type_marker = (
+            f"{self.BOT_NOTE_TYPE_MARKER_PREFIX}{note_type}{self.BOT_NOTE_TYPE_MARKER_SUFFIX}"
+        )
+        if note_type_marker not in body:
+            parts.append(note_type_marker)
         if self.pipeline_id is not None and self.BOT_PIPELINE_MARKER_PREFIX not in body:
             parts.append(
                 f"{self.BOT_PIPELINE_MARKER_PREFIX}{self.pipeline_id}{self.BOT_PIPELINE_MARKER_SUFFIX}"
@@ -816,12 +917,48 @@ class GitLabController:
             return int(marker)
         return None
 
-    def has_newer_pipeline_note(self) -> bool:
-        note = self._get_sqlmesh_mr_note()
+    def has_newer_pipeline_note(self, note_type: t.Optional[str] = None) -> bool:
+        note = (
+            self._get_sqlmesh_mr_note(note_type)
+            if note_type is not None
+            else self._get_latest_sqlmesh_mr_note()
+        )
         if not note or self.pipeline_id is None:
             return False
         existing_pipeline_id = self._extract_pipeline_id(note.body)
         return existing_pipeline_id is not None and existing_pipeline_id > self.pipeline_id
+
+    def _render_prod_plan_preview_diff(self, plan: Plan) -> str:
+        snapshot_ids = (
+            set(plan.context_diff.added)
+            | set(plan.context_diff.removed_snapshots)
+            | {
+                snapshot.snapshot_id
+                for snapshot, _ in plan.context_diff.modified_snapshots.values()
+            }
+        )
+        if not snapshot_ids:
+            return ""
+
+        records = sorted(
+            [
+                SnapshotSummaryRecord(snapshot_id=snapshot_id, plan=plan)
+                for snapshot_id in snapshot_ids
+            ],
+            key=lambda record: record.display_name,
+        )
+
+        diff_lines = []
+        for record in records:
+            if record.is_added:
+                marker = "+"
+            elif record.is_removed:
+                marker = "-"
+            else:
+                marker = "!"
+            diff_lines.append(f"{marker} {record.display_name} ({record.change_category})")
+
+        return f"```diff\n{chr(10).join(diff_lines)}\n```"
 
     def _extract_details_section(self, body: str, summary_line: str) -> str:
         lines = body.splitlines()
@@ -844,7 +981,95 @@ class GitLabController:
 
         return "\n".join(extracted_lines).strip()
 
-    def _extract_note_details(self, body: str, heading: str) -> t.Dict[str, str]:
+    def _extract_stage_statuses(self, body: str) -> t.Dict[str, str]:
+        lines = body.splitlines()
+        for index, line in enumerate(lines):
+            if line.strip() != "| Stage | Status |":
+                continue
+            statuses = {}
+            for row in lines[index + 2 :]:
+                stripped_row = row.strip()
+                if not stripped_row.startswith("|"):
+                    break
+                columns = [column.strip() for column in stripped_row.strip("|").split("|")]
+                if len(columns) != 2:
+                    continue
+                stage, status = columns
+                if stage in self.PIPELINE_STAGE_LABELS:
+                    statuses[stage] = status.replace(" ", "_")
+            if statuses:
+                return statuses
+
+        statuses = {}
+        for line in lines:
+            for label in self.PIPELINE_STAGE_LABELS:
+                marker = f"**{label}:** "
+                if marker in line:
+                    statuses[label] = line.split(marker, 1)[1].strip().replace(" ", "_")
+        return statuses
+
+    def _extract_note_summary(self, body: str) -> str:
+        lines = body.splitlines()
+        if "## Summary" in lines:
+            start_index = lines.index("## Summary") + 1
+        else:
+            start_index = -1
+            for index, line in enumerate(lines):
+                if line.strip() != "| Stage | Status |":
+                    continue
+                start_index = index + 2
+                for row_index in range(start_index, len(lines)):
+                    if not lines[row_index].strip().startswith("|"):
+                        start_index = row_index
+                        break
+                else:
+                    start_index = len(lines)
+                break
+
+        if start_index < 0:
+            return ""
+
+        while start_index < len(lines) and not lines[start_index].strip():
+            start_index += 1
+
+        end_index = len(lines)
+        for index in range(start_index, len(lines)):
+            if lines[index].strip() == "## Details":
+                end_index = index
+                break
+
+        return "\n".join(lines[start_index:end_index]).strip()
+
+    def _extract_note_details(self, body: str) -> t.Dict[str, str]:
+        lines = body.splitlines()
+        try:
+            start_index = lines.index("## Details") + 1
+        except ValueError:
+            return self._extract_legacy_note_details(body, "## Notes")
+
+        details: t.Dict[str, str] = {}
+        current_key: t.Optional[str] = None
+        current_lines: t.List[str] = []
+
+        for line in lines[start_index:]:
+            stripped_line = line.strip()
+            if stripped_line.startswith("## ") and not stripped_line.startswith("### "):
+                break
+            if stripped_line.startswith("### "):
+                if current_key is not None:
+                    details[current_key] = "\n".join(current_lines).strip()
+                current_key = stripped_line[4:]
+                current_lines = []
+                continue
+            if current_key is not None:
+                current_lines.append(line)
+
+        if current_key is not None:
+            details[current_key] = "\n".join(current_lines).strip()
+
+        return {key: value for key, value in details.items() if value}
+
+    def _extract_legacy_note_details(self, body: str, heading: str) -> t.Dict[str, str]:
         if heading not in body:
             return {}
 

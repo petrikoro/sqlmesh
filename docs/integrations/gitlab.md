@@ -5,7 +5,7 @@ The SQLMesh GitLab CI/CD bot provides merge request feedback for GitLab CI pipel
 * Run the SQLMesh linter for merge requests
 * Run unit tests for merge requests
 * Create or update a merge request environment
-* Maintain a single sticky merge request note with pipeline status, affected models, and a production plan preview
+* Maintain four sticky SQLMesh merge request notes, one for each GitLab bot command
 
 Unlike the [GitHub Actions bot](github.md), the GitLab integration is currently focused on merge request feedback. It does not yet support deploy commands, approval-triggered deploys, auto-merging merge requests, or GitLab status/check-run equivalents.
 
@@ -53,29 +53,27 @@ The bot uses GitLab CI merge request variables to resolve the current project, m
 Use a merge-request-scoped `resource_group` to serialize note updates when multiple pipelines, reruns, or split stage jobs target the same merge request.
 
 ## Merge request note workflow
-The GitLab bot centers around one sticky merge request note. Every pipeline run updates the same note in place instead of creating a new comment each time.
+The GitLab bot maintains up to four sticky SQLMesh merge request notes, one per command. Each pipeline updates the matching note in place instead of adding a new comment.
 
-The note tracks these stages:
+The notes are:
 
-* `Linter`
-* `Unit Tests`
-* `MR Environment`
-* `Prod Plan Preview`
+* `Run Linter`: tracks the `Linter` stage and includes captured warnings or failures
+* `Run Tests`: tracks the `Unit Tests` stage and includes failure details when tests fail
+* `Update MR Environment`: tracks the `MR Environment` stage and includes the MR environment summary, affected models, and loaded or missing intervals
+* `Generate Prod Plan`: tracks the `Prod Plan Preview` stage and includes a GitHub-style diff and backfill preview for what would change in `prod`
 
-The simplest way to keep all four stages current is to run `sqlmesh_cicd gitlab ... run-all`. If you prefer separate CI jobs, run the stage commands individually in order: `run-linter`, `run-tests`, `update-mr-environment`, and `gen-prod-plan`.
+Each note uses lightweight markdown tables for merge request metadata and stage status. The MR environment and prod plan notes reuse the same underlying SQLMesh diff and backfill summaries as the GitHub integration, so the two bots stay aligned on the substantive preview information even though their note layouts differ.
 
-If you split stages across jobs, keep all of those jobs under the same merge-request-scoped `resource_group` and run them in order. Without both serialization and stage ordering, later jobs can overwrite the sticky note with stale stage state.
+The simplest way to keep all four notes current is to run `sqlmesh_cicd gitlab ... run-all`. `run-all` just runs the same command behaviors in order: `run-linter`, `run-tests`, `update-mr-environment`, and `gen-prod-plan`. It does not create a separate overview note or pre-seed downstream note state.
+Each split command updates only its matching note. `run-linter` updates only `Run Linter`, `run-tests` updates only `Run Tests`, `update-mr-environment` updates only `Update MR Environment`, and `gen-prod-plan` updates only `Generate Prod Plan`.
+The one shared-state safeguard that remains is the MR environment apply itself: if a newer pipeline has already posted SQLMesh note activity for the merge request, an older `update-mr-environment` run skips applying stale state. If a newer `Update MR Environment` note already exists, that note remains unchanged.
 
-When the merge request environment is built successfully, the note also includes:
-
-* Affected models grouped by `Added`, `Removed`, `Directly Modified`, `Indirectly Modified`, and `Metadata Updated`
-* Loaded and missing intervals for incremental models
-* A production plan preview rendered from the same SQLMesh planning logic used by the GitHub bot
+If you split stages across jobs, keep all of those jobs under the same merge-request-scoped `resource_group` and run them in order. That serialization still matters so older pipelines do not overwrite newer versions of the same note, but earlier commands no longer queue, skip, or otherwise mutate downstream notes on behalf of later commands.
 
 ## GitLab.com and self-managed GitLab
 The bot supports both GitLab.com and self-managed GitLab.
 
-By default, SQLMesh derives the GitLab API and server URLs from GitLab CI environment variables such as `CI_API_V4_URL` and `CI_SERVER_URL`. If your setup needs explicit overrides, you can configure them in the bot config.
+By default, SQLMesh derives the GitLab API and server URLs from GitLab CI environment variables such as `CI_API_V4_URL` and `CI_SERVER_URL`. Notes use the header `**SQLMesh GitLab Bot**` unless you override `note_header` in the bot config.
 
 === "YAML"
 
@@ -84,7 +82,7 @@ By default, SQLMesh derives the GitLab API and server URLs from GitLab CI enviro
       type: gitlab
       api_v4_url: https://gitlab.example.com/api/v4
       server_url: https://gitlab.example.com
-      note_header: ":robot: **Data Bot** :robot:"
+      note_header: "**Data Bot**"
     ```
 
 === "Python"
@@ -97,7 +95,7 @@ By default, SQLMesh derives the GitLab API and server URLs from GitLab CI enviro
         cicd_bot=GitLabCICDBotConfig(
             api_v4_url="https://gitlab.example.com/api/v4",
             server_url="https://gitlab.example.com",
-            note_header=":robot: **Data Bot** :robot:",
+            note_header="**Data Bot**",
         ),
     )
     ```
@@ -123,11 +121,11 @@ GitLab-specific options are:
 ## Commands
 Run `sqlmesh_cicd gitlab --help` to see the full command list. The primary commands are:
 
-* `run-all`: run linting, unit tests, merge request environment update, and prod plan preview while updating the sticky note
-* `run-linter`: run the SQLMesh linter and update the sticky note's `Linter` stage
-* `run-tests`: run SQLMesh unit tests
-* `update-mr-environment`: create or update the merge request environment and update the `MR Environment` note section
-* `gen-prod-plan`: generate the production plan preview and update the `Prod Plan Preview` note section
+* `run-all`: run linting, unit tests, merge request environment update, and prod plan preview by invoking the same per-command behaviors in order
+* `run-linter`: run the SQLMesh linter and update only the `Run Linter` note
+* `run-tests`: run SQLMesh unit tests and update only the `Run Tests` note
+* `update-mr-environment`: create or update the merge request environment and update only the `Update MR Environment` note
+* `gen-prod-plan`: generate the production plan preview and update the `Generate Prod Plan` note
 
 ## Current limitations
 The GitLab integration reuses the same SQLMesh planning and environment logic as the GitHub bot, but its v1 scope is intentionally narrower.
@@ -139,4 +137,4 @@ It does not currently:
 * Auto-merge merge requests
 * Publish GitLab pipeline status widgets or check-run equivalents
 
-The merge request note is the primary user interface for the GitLab bot.
+The SQLMesh merge request notes are the primary user interface for the GitLab bot.
