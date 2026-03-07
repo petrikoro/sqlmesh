@@ -16,7 +16,7 @@ from sqlmesh.utils.yaml import dump as yaml_dump
 from sqlmesh.utils.yaml import load as yaml_load
 
 if t.TYPE_CHECKING:
-    from sqlmesh.cicd.config import CICDBotConfig
+    from sqlmesh.cicd.config import AnyCICDBotConfig
     from sqlmesh.core.plan import EvaluatablePlan
     from sqlmesh.core.snapshot import Snapshot
 
@@ -38,7 +38,7 @@ class AnalyticsCollector:
         command_name: str,
         command_args: t.Collection[str],
         parent_command_names: t.Collection[str],
-        cicd_bot_config: t.Optional[CICDBotConfig],
+        cicd_bot_config: t.Optional[AnyCICDBotConfig],
     ) -> None:
         """Called when a CICD command is executed.
 

@@ -1,0 +1,20 @@
+{
+  "object_kind": "note",
+  "event_type": "note",
+  "project": {
+    "id": 123,
+    "path_with_namespace": "group/hello-world",
+    "web_url": "https://gitlab.com/group/hello-world"
+  },
+  "merge_request": {
+    "iid": 42,
+    "source_branch": "feature/add-gitlab-bot",
+    "target_branch": "main"
+  },
+  "object_attributes": {
+    "action": "create",
+    "note": "example note",
+    "noteable_type": "MergeRequest",
+    "url": "https://gitlab.com/group/hello-world/-/merge_requests/42#note_1"
+  }
+}

@@ -76,6 +76,7 @@ nav:
       - integrations/dbt.md
       - integrations/dlt.md
       - integrations/github.md
+      - integrations/gitlab.md
     - Execution engines:
       - integrations/engines/athena.md
       - integrations/engines/azuresql.md

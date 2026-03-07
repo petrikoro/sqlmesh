@@ -26,7 +26,7 @@ pip install sqlmesh
 ## Install extras
 Some SQLMesh functionality requires additional Python libraries, which are bundled with SQLMesh via "extras".
 
-In your `pip` command, specify the extra's name in brackets to automatically install the additional libraries. For example, you install the SQLMesh Github CI/CD bot extras with `pip install "sqlmesh[github]"`.
+In your `pip` command, specify the extra's name in brackets to automatically install the additional libraries. For example, you install the SQLMesh GitHub or GitLab CI/CD bot extras with `pip install "sqlmesh[github]"` or `pip install "sqlmesh[gitlab]"`.
 
 There are two types of extras.
 
@@ -37,6 +37,7 @@ Some extras add features, like the SQLMesh VSCode extension or Github CI/CD bot:
     | ------------------- | ------------------------------- |
     | VSCode extension    | `pip install "sqlmesh[lsp]"`    |
     | Github CI/CD bot    | `pip install "sqlmesh[github]"` |
+    | GitLab CI/CD extra  | `pip install "sqlmesh[gitlab]"` |
     | dbt projects        | `pip install "sqlmesh[dbt]"`    |
     | dlt projects        | `pip install "sqlmesh[dlt]"`    |
     | Slack notifications | `pip install "sqlmesh[slack]"`  |

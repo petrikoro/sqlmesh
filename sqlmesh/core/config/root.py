@@ -11,7 +11,7 @@ from sqlglot import exp
 from sqlglot.helper import first
 from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
 
-from sqlmesh.cicd.config import CICDBotConfig
+from sqlmesh.cicd.config import AnyCICDBotConfig
 from sqlmesh.core import constants as c
 from sqlmesh.core.console import get_console
 from sqlmesh.core.config.common import (
@@ -178,7 +178,7 @@ class Config(BaseConfig):
     environment_catalog_mapping: RegexKeyDict = {}
     default_target_environment: str = c.PROD
     log_limit: int = c.DEFAULT_LOG_LIMIT
-    cicd_bot: t.Optional[CICDBotConfig] = None
+    cicd_bot: t.Optional[AnyCICDBotConfig] = None
     run: RunConfig = RunConfig()
     format: FormatConfig = FormatConfig()
     ui: UIConfig = UIConfig()
@@ -225,6 +225,13 @@ class Config(BaseConfig):
 
         if "gateways" not in data and "gateway" in data:
             data["gateways"] = data.pop("gateway")
+
+        if "cicd_bot" in data and isinstance(data["cicd_bot"], dict):
+            cicd_bot = data["cicd_bot"]
+            if "type" not in cicd_bot and "type_" not in cicd_bot:
+                gitlab_keys = {"api_v4_url", "server_url"}
+                cicd_bot["type"] = "gitlab" if gitlab_keys & cicd_bot.keys() else "github"
+                cicd_bot["_legacy_providerless_config"] = True
 
         for plan_deprecated in ("auto_categorize_changes", "include_unmodified"):
             if plan_deprecated in data:
