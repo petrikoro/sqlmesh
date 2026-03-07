@@ -10,8 +10,8 @@ from sqlmesh.core.config import Config, ModelDefaultsConfig, load_config_from_pa
 from sqlmesh.integrations.github.cicd.config import GithubCICDBotConfig, MergeMethod
 from sqlmesh.integrations.gitlab.cicd.config import GitLabCICDBotConfig
 from sqlmesh.integrations.gitlab.cicd.controller import RequestsGitLabAPIClient
-from sqlmesh.utils.errors import CICDBotError
-from tests.integrations.gitlab.cicd.conftest import MockMergeRequestNote
+from sqlmesh.utils.errors import CICDBotError, NotFoundError
+from tests.integrations.gitlab.cicd.conftest import MockGitLabClient, MockMergeRequestNote
 from tests.utils.test_filesystem import create_temp_file
 
 pytestmark = pytest.mark.gitlab
@@ -78,6 +78,37 @@ Existing note""",
     note = controller.upsert_sqlmesh_mr_note(":robot: **SQLMesh Bot Info** :robot:\nOlder note")
 
     assert note.body.endswith("Existing note")
+    assert len(client.updated_notes) == 0
+
+
+def test_upsert_sqlmesh_mr_note_recreates_missing_note(make_controller):
+    class MissingNoteOnUpdateClient(MockGitLabClient):
+        def update_merge_request_note(
+            self, project_id: int, merge_request_iid: int, note_id: int, body: str
+        ) -> MockMergeRequestNote:
+            self.notes = [note for note in self.notes if note.id != note_id]
+            raise NotFoundError("GitLab note no longer exists.")
+
+    client = MissingNoteOnUpdateClient(
+        [
+            MockMergeRequestNote(
+                1,
+                "<!-- sqlmesh-gitlab-bot-note -->\n:robot: **SQLMesh Bot Info** :robot:\nOld merge request note",
+            )
+        ]
+    )
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+
+    note = controller.upsert_sqlmesh_mr_note(
+        ":robot: **SQLMesh Bot Info** :robot:\nNew merge request note"
+    )
+
+    assert (
+        note.body
+        == "<!-- sqlmesh-gitlab-bot-note -->\n:robot: **SQLMesh Bot Info** :robot:\nNew merge request note"
+    )
+    assert len(client.notes) == 1
+    assert len(client.created_notes) == 1
     assert len(client.updated_notes) == 0
 
 
@@ -206,6 +237,26 @@ def test_list_merge_request_notes_ignores_extra_api_fields(mocker: MockerFixture
     assert len(notes) == 1
     assert notes[0].id == 1
     assert notes[0].body == "bot note"
+
+
+def test_update_merge_request_note_raises_not_found_for_404(mocker: MockerFixture):
+    session = mocker.MagicMock()
+    response = mocker.MagicMock()
+    response.ok = False
+    response.status_code = 404
+    response.text = "404 Note Not Found"
+    session.request.return_value = response
+
+    client = RequestsGitLabAPIClient(
+        api_v4_url="https://gitlab.example.com/api/v4",
+        token="abc",
+        session=session,
+    )
+
+    with pytest.raises(NotFoundError, match="404 Note Not Found"):
+        client.update_merge_request_note(
+            project_id=1, merge_request_iid=2, note_id=3, body="updated"
+        )
 
 
 def test_server_url_override_updates_merge_request_link(make_gitlab_client, make_controller):

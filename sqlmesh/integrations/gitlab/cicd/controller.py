@@ -32,6 +32,7 @@ from sqlmesh.utils import Verbosity
 from sqlmesh.utils.errors import (
     CICDBotError,
     NoChangesPlanError,
+    NotFoundError,
     PlanError,
     SQLMeshError,
     UncategorizedPlanError,
@@ -326,6 +327,8 @@ class RequestsGitLabAPIClient(GitLabAPIClient):
             **kwargs,
         )
         if not response.ok:
+            if response.status_code == 404:
+                raise NotFoundError(response.text)
             raise CICDBotError(
                 f"GitLab API request failed with status {response.status_code}: {response.text}"
             )
@@ -685,15 +688,29 @@ class GitLabController:
                     "Skipping GitLab MR note update because a newer pipeline note already exists."
                 )
                 return note
-            return t.cast(
-                GitLabMergeRequestNote,
-                self._client.update_merge_request_note(
-                    self.merge_request_info.project_id,
-                    self.merge_request_info.merge_request_iid,
+            try:
+                return t.cast(
+                    GitLabMergeRequestNote,
+                    self._client.update_merge_request_note(
+                        self.merge_request_info.project_id,
+                        self.merge_request_info.merge_request_iid,
+                        note.id,
+                        note_body,
+                    ),
+                )
+            except NotFoundError:
+                logger.info(
+                    "GitLab MR note %s no longer exists; creating a new SQLMesh bot note.",
                     note.id,
-                    note_body,
-                ),
-            )
+                )
+                return t.cast(
+                    GitLabMergeRequestNote,
+                    self._client.create_merge_request_note(
+                        self.merge_request_info.project_id,
+                        self.merge_request_info.merge_request_iid,
+                        note_body,
+                    ),
+                )
 
         return t.cast(
             GitLabMergeRequestNote,
