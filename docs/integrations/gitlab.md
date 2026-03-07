@@ -31,7 +31,9 @@ Unlike the [GitHub Actions bot](github.md), the GitLab integration is currently 
     )
     ```
 
-3. Add a GitLab CI job that runs the bot for merge request pipelines:
+3. Create a CI/CD variable backed by a GitLab personal access token or project access token with the `api` scope.
+
+4. Add a GitLab CI job that runs the bot for merge request pipelines:
 
 ```yaml
 sqlmesh:
