@@ -83,6 +83,7 @@ dev = [
     "pydantic",
     "PyAthena[Pandas]",
     "PyGithub>=2.6.0",
+    "python-gitlab",
     "pyodbc>=5.0.0",
     "pyperf",
     "pyspark~=3.5.0",
@@ -111,6 +112,7 @@ duckdb = []
 fabric = ["pyodbc>=5.0.0"]
 gcppostgres = ["cloud-sql-python-connector[pg8000]>=1.8.0"]
 github = ["PyGithub>=2.6.0"]
+gitlab = ["python-gitlab"]
 motherduck = ["duckdb>=1.3.2"]
 mssql = ["pymssql"]
 mssql-odbc = ["pyodbc>=5.0.0"]
@@ -249,6 +251,7 @@ markers = [
     "cli: test for CLI",
     "dbt: test for dbt adapter",
     "github: test for Github CI/CD bot",
+    "gitlab: test for GitLab CI/CD bot",
     "jupyter: tests for Jupyter integration",
     "web: tests for web UI",
 
