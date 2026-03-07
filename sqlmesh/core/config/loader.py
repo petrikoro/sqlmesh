@@ -145,6 +145,16 @@ def load_config_from_paths(
 
     non_python_config_dict = merge_dicts(*non_python_configs)
 
+    if python_config and isinstance(non_python_config_dict.get("cicd_bot"), dict):
+        cicd_bot = non_python_config_dict["cicd_bot"]
+        if "type" not in cicd_bot and "type_" not in cicd_bot and python_config.cicd_bot:
+            cicd_bot["type"] = python_config.cicd_bot.type_
+        if python_config.cicd_bot and cicd_bot.get("type") == python_config.cicd_bot.type_:
+            non_python_config_dict["cicd_bot"] = merge_dicts(
+                python_config.cicd_bot.model_dump(by_alias=True, exclude_none=True),
+                cicd_bot,
+            )
+
     supported_model_defaults = ModelDefaultsConfig.all_fields()
     for default in non_python_config_dict.get("model_defaults", {}):
         if default not in supported_model_defaults:

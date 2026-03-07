@@ -50,6 +50,10 @@ def get_columns(
     return controller._context.engine_adapter.columns(table)
 
 
+def _make_bot_config(**kwargs: t.Any) -> GithubCICDBotConfig:
+    return GithubCICDBotConfig.model_validate(kwargs)
+
+
 @time_machine.travel("2023-01-01 15:00:00 UTC")
 def test_linter(
     github_client,
@@ -104,7 +108,7 @@ def test_linter(
     controller = make_controller(
         "tests/fixtures/github/pull_request_synchronized.json",
         github_client,
-        bot_config=GithubCICDBotConfig(
+        bot_config=_make_bot_config(
             merge_method=MergeMethod.MERGE,
             invalidate_environment_after_deploy=False,
             auto_categorize_changes=CategorizerConfig.all_full(),
@@ -154,7 +158,7 @@ def test_linter(
     controller = make_controller(
         "tests/fixtures/github/pull_request_synchronized.json",
         github_client,
-        bot_config=GithubCICDBotConfig(
+        bot_config=_make_bot_config(
             merge_method=MergeMethod.MERGE,
             invalidate_environment_after_deploy=False,
             auto_categorize_changes=CategorizerConfig.all_full(),
@@ -235,7 +239,7 @@ def test_merge_pr_has_non_breaking_change(
     controller = make_controller(
         "tests/fixtures/github/pull_request_synchronized.json",
         github_client,
-        bot_config=GithubCICDBotConfig(
+        bot_config=_make_bot_config(
             merge_method=MergeMethod.MERGE,
             invalidate_environment_after_deploy=False,
             auto_categorize_changes=CategorizerConfig.all_full(),
@@ -446,7 +450,7 @@ def test_merge_pr_has_non_breaking_change_diff_start(
     controller = make_controller(
         "tests/fixtures/github/pull_request_synchronized.json",
         github_client,
-        bot_config=GithubCICDBotConfig(
+        bot_config=_make_bot_config(
             merge_method=MergeMethod.MERGE,
             invalidate_environment_after_deploy=False,
             auto_categorize_changes=CategorizerConfig.all_full(),
@@ -975,7 +979,7 @@ def test_no_merge_since_no_deploy_signal(
     controller = make_controller(
         "tests/fixtures/github/pull_request_synchronized.json",
         github_client,
-        bot_config=GithubCICDBotConfig(
+        bot_config=_make_bot_config(
             merge_method=MergeMethod.MERGE,
             invalidate_environment_after_deploy=False,
             auto_categorize_changes=CategorizerConfig.all_full(),
@@ -1179,7 +1183,7 @@ def test_no_merge_since_no_deploy_signal_no_approvers_defined(
     controller = make_controller(
         "tests/fixtures/github/pull_request_synchronized.json",
         github_client,
-        bot_config=GithubCICDBotConfig(
+        bot_config=_make_bot_config(
             merge_method=MergeMethod.MERGE,
             invalidate_environment_after_deploy=False,
             auto_categorize_changes=CategorizerConfig.all_full(),
@@ -1355,7 +1359,7 @@ def test_deploy_comment_pre_categorized(
     controller = make_controller(
         "tests/fixtures/github/pull_request_command_deploy.json",
         github_client,
-        bot_config=GithubCICDBotConfig(
+        bot_config=_make_bot_config(
             merge_method=MergeMethod.MERGE,
             invalidate_environment_after_deploy=False,
             auto_categorize_changes=CategorizerConfig.all_off(),
@@ -1557,7 +1561,7 @@ def test_error_msg_when_applying_plan_with_bug(
     controller = make_controller(
         "tests/fixtures/github/pull_request_synchronized.json",
         github_client,
-        bot_config=GithubCICDBotConfig(
+        bot_config=_make_bot_config(
             merge_method=MergeMethod.MERGE,
             auto_categorize_changes=CategorizerConfig.all_full(),
             invalidate_environment_after_deploy=False,
@@ -1716,7 +1720,7 @@ def test_overlapping_changes_models(
     controller = make_controller(
         "tests/fixtures/github/pull_request_synchronized.json",
         github_client,
-        bot_config=GithubCICDBotConfig(
+        bot_config=_make_bot_config(
             merge_method=MergeMethod.MERGE,
             invalidate_environment_after_deploy=False,
             auto_categorize_changes=CategorizerConfig.all_full(),
@@ -1958,7 +1962,7 @@ def test_pr_add_model(
     controller = make_controller(
         "tests/fixtures/github/pull_request_command_deploy.json",
         github_client,
-        bot_config=GithubCICDBotConfig(
+        bot_config=_make_bot_config(
             merge_method=MergeMethod.MERGE,
             auto_categorize_changes=CategorizerConfig.all_full(),
             enable_deploy_command=True,
@@ -2112,7 +2116,7 @@ def test_pr_delete_model(
     controller = make_controller(
         "tests/fixtures/github/pull_request_synchronized.json",
         github_client,
-        bot_config=GithubCICDBotConfig(
+        bot_config=_make_bot_config(
             merge_method=MergeMethod.MERGE,
             invalidate_environment_after_deploy=False,
             auto_categorize_changes=CategorizerConfig.all_full(),
@@ -2287,7 +2291,7 @@ def test_has_required_approval_but_not_base_branch(
     controller = make_controller(
         "tests/fixtures/github/pull_request_synchronized.json",
         github_client,
-        bot_config=GithubCICDBotConfig(
+        bot_config=_make_bot_config(
             merge_method=MergeMethod.MERGE,
             invalidate_environment_after_deploy=False,
             auto_categorize_changes=CategorizerConfig.all_full(),
