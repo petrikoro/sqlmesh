@@ -83,6 +83,7 @@ dev = [
     "pydantic",
     "PyAthena[Pandas]",
     "PyGithub>=2.6.0",
+    "python-gitlab",
     "pyodbc>=5.0.0",
     "mssql-python>=1.1.0;python_version>=\"3.10\"",
     "pyperf",
@@ -113,6 +114,7 @@ fabric = ["pyodbc>=5.0.0"]
 fabric-mssql-python = ["mssql-python>=1.1.0;python_version>=\"3.10\""]
 gcppostgres = ["cloud-sql-python-connector[pg8000]>=1.8.0"]
 github = ["PyGithub>=2.6.0"]
+gitlab = ["python-gitlab"]
 motherduck = ["duckdb>=1.3.2"]
 mssql = ["pymssql"]
 mssql-odbc = ["pyodbc>=5.0.0"]
@@ -252,6 +254,7 @@ markers = [
     "cli: test for CLI",
     "dbt: test for dbt adapter",
     "github: test for Github CI/CD bot",
+    "gitlab: test for GitLab CI/CD bot",
     "jupyter: tests for Jupyter integration",
     "web: tests for web UI",
 

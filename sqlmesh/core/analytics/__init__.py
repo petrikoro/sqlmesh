@@ -70,11 +70,16 @@ def cli_analytics(func: t.Callable[_P, _T]) -> t.Callable[_P, _T]:
             "parent_command_names": parent_command_names,
         }
 
-        if "github" in parent_command_names:
+        cicd_provider = next(
+            (provider for provider in ("github", "gitlab") if provider in parent_command_names),
+            None,
+        )
+
+        if cicd_provider:
             cicd_bot_config = None
-            github_controller = cli_context.obj.get("github")
-            if github_controller:
-                cicd_bot_config = github_controller._context.config.cicd_bot
+            cicd_controller = cli_context.obj.get(cicd_provider)
+            if cicd_controller:
+                cicd_bot_config = cicd_controller._context.config.cicd_bot
             collector.on_cicd_command(**common_context, cicd_bot_config=cicd_bot_config)
         else:
             collector.on_cli_command(**common_context)

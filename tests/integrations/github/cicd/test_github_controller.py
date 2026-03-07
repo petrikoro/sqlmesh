@@ -10,13 +10,14 @@ import time_machine
 from pytest_mock.plugin import MockerFixture
 
 from sqlmesh.core import constants as c
-from sqlmesh.core.config import CategorizerConfig
+from sqlmesh.core.config import CategorizerConfig, Config
 from sqlmesh.core.dialect import parse_one
 from sqlmesh.core.model import SqlModel
 from sqlmesh.core.user import User, UserRole
 from sqlmesh.core.plan.definition import Plan
 from sqlmesh.core.linter.rule import RuleViolation
 from sqlmesh.integrations.github.cicd.config import GithubCICDBotConfig, MergeMethod
+from sqlmesh.integrations.gitlab.cicd.config import GitLabCICDBotConfig
 from sqlmesh.integrations.github.cicd.controller import (
     BotCommand,
     MergeStateStatus,
@@ -26,7 +27,7 @@ from sqlmesh.integrations.github.cicd.controller import GithubController
 from sqlmesh.integrations.github.cicd.command import _update_pr_environment
 from sqlmesh.utils.date import to_datetime, now
 from tests.integrations.github.cicd.conftest import MockIssueComment
-from sqlmesh.utils.errors import SQLMeshError
+from sqlmesh.utils.errors import CICDBotError, SQLMeshError
 
 pytestmark = pytest.mark.github
 
@@ -248,6 +249,43 @@ def test_pr_environment_name(github_client, make_controller):
     assert controller.pr_environment_name == "hello_world_2"
 
 
+def test_pr_environment_summary_references_prod_plan_preview_check(github_client, make_controller):
+    controller = make_controller(
+        "tests/fixtures/github/pull_request_synchronized.json",
+        github_client,
+    )
+
+    summary = controller.get_pr_environment_summary(conclusion=GithubCheckConclusion.SUCCESS)
+
+    assert "`Prod Plan Preview` check" in summary or "No models were modified in this PR" in summary
+
+
+def test_github_controller_rejects_gitlab_bot_config(github_client, make_controller):
+    with pytest.raises(CICDBotError, match="GitLab `cicd_bot` config"):
+        make_controller(
+            "tests/fixtures/github/pull_request_synchronized.json",
+            github_client,
+            config=Config(
+                model_defaults={"dialect": "duckdb"},
+                cicd_bot=GitLabCICDBotConfig(),
+            ),
+        )
+
+
+def test_github_controller_default_bot_config_inherits_context_auto_categorization(
+    github_client, make_controller
+):
+    controller = make_controller(
+        "tests/fixtures/github/pull_request_synchronized.json",
+        github_client,
+    )
+
+    assert isinstance(controller.bot_config, GithubCICDBotConfig)
+    assert (
+        controller.bot_config.auto_categorize_changes == controller._context.auto_categorize_changes
+    )
+
+
 def test_pr_plan(github_client, make_controller):
     controller = make_controller(
         "tests/fixtures/github/pull_request_synchronized.json", github_client
@@ -270,8 +308,11 @@ def test_pr_plan_auto_categorization(github_client, make_controller):
     controller = make_controller(
         "tests/fixtures/github/pull_request_synchronized.json",
         github_client,
-        bot_config=GithubCICDBotConfig(
-            auto_categorize_changes=custom_categorizer_config, default_pr_start=default_start
+        bot_config=GithubCICDBotConfig.model_validate(
+            {
+                "auto_categorize_changes": custom_categorizer_config,
+                "default_pr_start": default_start,
+            }
         ),
     )
     assert controller.pr_plan.environment.name == "hello_world_2"
@@ -378,8 +419,11 @@ def test_prod_plan_auto_categorization(github_client, make_controller):
     controller = make_controller(
         "tests/fixtures/github/pull_request_synchronized.json",
         github_client,
-        bot_config=GithubCICDBotConfig(
-            auto_categorize_changes=custom_categorizer_config, default_pr_start=default_pr_start
+        bot_config=GithubCICDBotConfig.model_validate(
+            {
+                "auto_categorize_changes": custom_categorizer_config,
+                "default_pr_start": default_pr_start,
+            }
         ),
     )
 

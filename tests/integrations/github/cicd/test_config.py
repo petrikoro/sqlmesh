@@ -8,6 +8,7 @@ from sqlmesh.core.config import (
     Config,
     load_config_from_paths,
 )
+from sqlmesh.cicd.config import CICDBotConfig
 from sqlmesh.utils.errors import ConfigError
 from sqlmesh.integrations.github.cicd.config import MergeMethod
 from tests.utils.test_filesystem import create_temp_file
@@ -44,6 +45,67 @@ model_defaults:
     assert config.cicd_bot.prod_branch_names == ["main", "master"]
     assert not config.cicd_bot.pr_min_intervals
     assert config.cicd_bot.pr_preview_min_intervals == 1
+
+
+def test_load_yaml_config_default_without_type(tmp_path):
+    create_temp_file(
+        tmp_path,
+        pathlib.Path("config.yaml"),
+        """
+cicd_bot:
+    pr_environment_name: my_env
+model_defaults:
+    dialect: duckdb
+""",
+    )
+    config = load_config_from_paths(
+        Config,
+        project_paths=[tmp_path / "config.yaml"],
+    )
+    assert config.cicd_bot.type_ == "github"
+    assert config.cicd_bot.pr_environment_name == "my_env"
+
+
+def test_public_cicd_bot_config_alias_still_instantiates_github():
+    config = CICDBotConfig()
+
+    assert config.type_ == "github"
+
+
+def test_public_cicd_bot_config_alias_supports_yaml_overlay(tmp_path):
+    project_path = tmp_path / "project"
+    personal_path = tmp_path / "personal"
+
+    create_temp_file(
+        project_path,
+        pathlib.Path("config.py"),
+        """
+from sqlmesh.cicd.config import CICDBotConfig
+from sqlmesh.core.config import Config, ModelDefaultsConfig
+
+config = Config(
+    model_defaults=ModelDefaultsConfig(dialect="duckdb"),
+    cicd_bot=CICDBotConfig(pr_environment_name="base_env"),
+)
+""",
+    )
+    create_temp_file(
+        personal_path,
+        pathlib.Path("config.yaml"),
+        """
+cicd_bot:
+    pr_environment_name: overlay_env
+""",
+    )
+
+    config = load_config_from_paths(
+        Config,
+        project_paths=[project_path / "config.py"],
+        personal_paths=[personal_path / "config.yaml"],
+    )
+
+    assert config.cicd_bot.type_ == "github"
+    assert config.cicd_bot.pr_environment_name == "overlay_env"
 
 
 def test_load_yaml_config(tmp_path):
