@@ -24,7 +24,7 @@ It is more than just a [dbt alternative](https://tobikodata.com/reduce_costs_wit
 
 * Create isolated development environments without data warehouse costs
 * Plan / Apply workflow like [Terraform](https://www.terraform.io/) to understand potential impact of changes
-* Easy to use [CI/CD bot](https://sqlmesh.readthedocs.io/en/stable/integrations/github/) for true blue-green deployments
+* Easy to use [CI/CD bot integrations](https://sqlmesh.readthedocs.io/en/stable/integrations/overview/) for merge request and pull request feedback
 
 ??? tip "Efficiency and Testing"
 
