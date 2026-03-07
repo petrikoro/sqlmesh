@@ -9,6 +9,7 @@ import typing as t
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import pydantic
 import requests
 from sqlglot.errors import SqlglotError
 
@@ -219,6 +220,8 @@ class GitLabEventContext:
 
 
 class GitLabMergeRequestNote(PydanticModel):
+    model_config = pydantic.ConfigDict(extra="ignore")
+
     id: int
     body: str
 

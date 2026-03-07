@@ -169,6 +169,45 @@ def test_list_merge_request_notes_fetches_all_pages(mocker: MockerFixture):
     assert session.request.call_args_list[1].kwargs["params"] == {"page": 2, "per_page": 100}
 
 
+def test_list_merge_request_notes_ignores_extra_api_fields(mocker: MockerFixture):
+    session = mocker.MagicMock()
+    response = mocker.MagicMock()
+    response.ok = True
+    response.json.return_value = [
+        {
+            "id": 1,
+            "body": "bot note",
+            "type": None,
+            "attachment": None,
+            "author": {"id": 99, "username": "sqlmesh-bot"},
+            "created_at": "2026-03-07T00:00:00.000Z",
+            "updated_at": "2026-03-07T00:00:00.000Z",
+            "system": False,
+            "resolvable": False,
+            "confidential": False,
+            "internal": False,
+            "noteable_id": 2,
+            "noteable_iid": 3,
+            "noteable_type": "MergeRequest",
+            "project_id": 1,
+        }
+    ]
+    response.headers = {"X-Next-Page": ""}
+    session.request.return_value = response
+
+    client = RequestsGitLabAPIClient(
+        api_v4_url="https://gitlab.example.com/api/v4",
+        token="abc",
+        session=session,
+    )
+
+    notes = client.list_merge_request_notes(project_id=1, merge_request_iid=2)
+
+    assert len(notes) == 1
+    assert notes[0].id == 1
+    assert notes[0].body == "bot note"
+
+
 def test_server_url_override_updates_merge_request_link(make_gitlab_client, make_controller):
     controller = make_controller(
         "tests/fixtures/gitlab/merge_request_open.json",
