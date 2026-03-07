@@ -8,21 +8,22 @@ import traceback
 import typing as t
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import quote, unquote
 
 import pydantic
 import requests
 from sqlglot.errors import SqlglotError
 
 from sqlmesh.cicd.summary import (
-    SnapshotSummaryRecord,
     generate_plan_flags_section,
+    generate_prod_plan_preview_summary,
     generate_request_environment_summary_intro,
     generate_request_environment_summary_list,
     get_plan_summary,
 )
 from sqlmesh.core import constants as c
 from sqlmesh.core.config import Config
-from sqlmesh.core.console import MarkdownConsole, SNAPSHOT_CHANGE_CATEGORY_STR, get_console
+from sqlmesh.core.console import MarkdownConsole, get_console
 from sqlmesh.core.context import Context
 from sqlmesh.core.environment import Environment
 from sqlmesh.core.plan import Plan, PlanBuilder
@@ -41,10 +42,6 @@ from sqlmesh.utils.errors import (
 from sqlmesh.utils.pydantic import PydanticModel
 
 logger = logging.getLogger(__name__)
-
-PROD_PLAN_CHANGE_CATEGORY_LABELS = tuple(
-    label for category, label in SNAPSHOT_CHANGE_CATEGORY_STR.items() if category is not None
-) + ("Uncategorized",)
 
 
 class TestFailure(Exception):
@@ -345,6 +342,13 @@ class GitLabController:
     BOT_NOTE_TYPE_MARKER_SUFFIX = " -->"
     BOT_PIPELINE_MARKER_PREFIX = "<!-- sqlmesh-gitlab-pipeline-id:"
     BOT_PIPELINE_MARKER_SUFFIX = " -->"
+    BOT_NOTE_SUMMARY_START_MARKER = "<!-- sqlmesh-gitlab-summary-start -->"
+    BOT_NOTE_SUMMARY_END_MARKER = "<!-- sqlmesh-gitlab-summary-end -->"
+    BOT_NOTE_DETAILS_START_MARKER = "<!-- sqlmesh-gitlab-details-start -->"
+    BOT_NOTE_DETAILS_END_MARKER = "<!-- sqlmesh-gitlab-details-end -->"
+    BOT_NOTE_DETAIL_START_MARKER_PREFIX = "<!-- sqlmesh-gitlab-detail-start:"
+    BOT_NOTE_DETAIL_END_MARKER_PREFIX = "<!-- sqlmesh-gitlab-detail-end:"
+    BOT_NOTE_DETAIL_MARKER_SUFFIX = " -->"
     MAX_NOTE_LENGTH = 1_000_000
     PIPELINE_STAGE_LABELS = ("Linter", "Unit Tests", "MR Environment", "Prod Plan Preview")
     RUN_LINTER_NOTE = "run-linter"
@@ -589,24 +593,11 @@ class GitLabController:
         )
 
     def get_prod_plan_preview_summary(self, plan: Plan) -> str:
-        summary = self.get_plan_summary(plan).strip()
-        if not summary:
-            return ""
-        parts = [
-            (
-                f"This is a preview that shows the differences between this MR environment "
-                f"`{self.pr_environment_name}` and `prod`.\n\n"
-                "These are the changes that would be deployed."
-            ),
-            (
-                "**Change categories:** "
-                + ", ".join(f"`{category}`" for category in PROD_PLAN_CHANGE_CATEGORY_LABELS)
-            ),
-        ]
-        if diff_overview := self._render_prod_plan_preview_diff(plan):
-            parts.append(diff_overview)
-        parts.append(summary)
-        return "\n\n".join(part for part in parts if part).strip()
+        return generate_prod_plan_preview_summary(
+            plan_summary=self.get_plan_summary(plan),
+            environment_name=self.pr_environment_name,
+            request_term="MR",
+        )
 
     def get_test_summary(self, result: ModelTextTestResult) -> str:
         try:
@@ -867,7 +858,16 @@ class GitLabController:
 
         rendered_summary = summary.strip()
         if rendered_summary:
-            lines.extend(["", rendered_summary])
+            lines.extend(
+                [
+                    "",
+                    self.BOT_NOTE_SUMMARY_START_MARKER,
+                    "## Summary",
+                    "",
+                    rendered_summary,
+                    self.BOT_NOTE_SUMMARY_END_MARKER,
+                ]
+            )
 
         ordered_details: t.List[t.Tuple[str, str]] = []
         if details:
@@ -885,9 +885,19 @@ class GitLabController:
                 ordered_details.append((stage, rendered_detail))
 
         if ordered_details:
-            lines.extend(["", "## Details"])
+            lines.extend(["", self.BOT_NOTE_DETAILS_START_MARKER, "## Details"])
             for stage, detail in ordered_details:
-                lines.extend(["", f"### {stage}", detail])
+                lines.extend(
+                    [
+                        "",
+                        self._note_detail_start_marker(stage),
+                        f"### {stage}",
+                        "",
+                        detail,
+                        self._note_detail_end_marker(stage),
+                    ]
+                )
+            lines.append(self.BOT_NOTE_DETAILS_END_MARKER)
 
         return "\n".join(lines).strip()
 
@@ -928,58 +938,113 @@ class GitLabController:
         existing_pipeline_id = self._extract_pipeline_id(note.body)
         return existing_pipeline_id is not None and existing_pipeline_id > self.pipeline_id
 
-    def _render_prod_plan_preview_diff(self, plan: Plan) -> str:
-        snapshot_ids = (
-            set(plan.context_diff.added)
-            | set(plan.context_diff.removed_snapshots)
-            | {
-                snapshot.snapshot_id
-                for snapshot, _ in plan.context_diff.modified_snapshots.values()
-            }
-        )
-        if not snapshot_ids:
-            return ""
-
-        records = sorted(
-            [
-                SnapshotSummaryRecord(snapshot_id=snapshot_id, plan=plan)
-                for snapshot_id in snapshot_ids
-            ],
-            key=lambda record: record.display_name,
+    def _note_detail_start_marker(self, detail_key: str) -> str:
+        return (
+            f"{self.BOT_NOTE_DETAIL_START_MARKER_PREFIX}{quote(detail_key, safe='')}"
+            f"{self.BOT_NOTE_DETAIL_MARKER_SUFFIX}"
         )
 
-        diff_lines = []
-        for record in records:
-            if record.is_added:
-                marker = "+"
-            elif record.is_removed:
-                marker = "-"
-            else:
-                marker = "!"
-            diff_lines.append(f"{marker} {record.display_name} ({record.change_category})")
+    def _note_detail_end_marker(self, detail_key: str) -> str:
+        return (
+            f"{self.BOT_NOTE_DETAIL_END_MARKER_PREFIX}{quote(detail_key, safe='')}"
+            f"{self.BOT_NOTE_DETAIL_MARKER_SUFFIX}"
+        )
 
-        return f"```diff\n{chr(10).join(diff_lines)}\n```"
+    def _extract_marked_section(
+        self, body: str, start_marker: str, end_marker: str
+    ) -> t.Optional[str]:
+        if start_marker not in body or end_marker not in body:
+            return None
+        return body.split(start_marker, 1)[1].split(end_marker, 1)[0].strip()
 
-    def _extract_details_section(self, body: str, summary_line: str) -> str:
-        lines = body.splitlines()
-        try:
-            start_index = lines.index(summary_line)
-        except ValueError:
-            return ""
+    def _strip_section_heading(self, content: str, heading: str) -> str:
+        lines = content.splitlines()
+        if lines and lines[0].strip() == heading:
+            lines = lines[1:]
+            while lines and not lines[0].strip():
+                lines = lines[1:]
+        return "\n".join(lines).strip()
 
-        extracted_lines: t.List[str] = []
-        depth = 1
-        for line in lines[start_index + 1 :]:
+    def _decode_note_detail_marker(self, line: str, prefix: str) -> t.Optional[str]:
+        stripped_line = line.strip()
+        if not stripped_line.startswith(prefix) or not stripped_line.endswith(
+            self.BOT_NOTE_DETAIL_MARKER_SUFFIX
+        ):
+            return None
+        encoded_detail_key = stripped_line[len(prefix) : -len(self.BOT_NOTE_DETAIL_MARKER_SUFFIX)]
+        return unquote(encoded_detail_key) or None
+
+    def _extract_marked_note_details(self, body: str) -> t.Optional[t.Dict[str, str]]:
+        details_section = self._extract_marked_section(
+            body, self.BOT_NOTE_DETAILS_START_MARKER, self.BOT_NOTE_DETAILS_END_MARKER
+        )
+        if details_section is None:
+            return None
+
+        lines = details_section.splitlines()
+        index = 0
+        if lines and lines[0].strip() == "## Details":
+            index = 1
+            while index < len(lines) and not lines[index].strip():
+                index += 1
+
+        details: t.Dict[str, str] = {}
+        while index < len(lines):
+            detail_key = self._decode_note_detail_marker(
+                lines[index], self.BOT_NOTE_DETAIL_START_MARKER_PREFIX
+            )
+            if not detail_key:
+                index += 1
+                continue
+
+            index += 1
+            expected_heading = f"### {detail_key}"
+            if index < len(lines) and lines[index].strip() == expected_heading:
+                index += 1
+            while index < len(lines) and not lines[index].strip():
+                index += 1
+
+            detail_lines: t.List[str] = []
+            detail_end_marker = self._note_detail_end_marker(detail_key)
+            while index < len(lines) and lines[index].strip() != detail_end_marker:
+                detail_lines.append(lines[index])
+                index += 1
+
+            if index < len(lines) and lines[index].strip() == detail_end_marker:
+                index += 1
+
+            detail = "\n".join(detail_lines).strip()
+            if detail:
+                details[detail_key] = detail
+
+        return details
+
+    def _is_legacy_section_heading(self, lines: t.Sequence[str], index: int, heading: str) -> bool:
+        if lines[index].strip() != heading:
+            return False
+
+        for line in lines[index + 1 :]:
             stripped_line = line.strip()
-            if stripped_line == "<details>":
-                depth += 1
-            elif stripped_line == "</details>":
-                depth -= 1
-                if depth == 0:
-                    break
-            extracted_lines.append(line)
+            if not stripped_line:
+                continue
+            if heading == "## Details":
+                return stripped_line.startswith("### ") and (
+                    stripped_line[4:] in self.PIPELINE_STAGE_LABELS
+                )
+            if heading == "## Notes":
+                return stripped_line.startswith("- ")
+            return False
 
-        return "\n".join(extracted_lines).strip()
+        return False
+
+    def _find_legacy_section_start(self, lines: t.Sequence[str], heading: str) -> t.Optional[int]:
+        for index, line in enumerate(lines):
+            if (
+                self._is_legacy_section_heading(lines, index, line.strip())
+                and line.strip() == heading
+            ):
+                return index
+        return None
 
     def _extract_stage_statuses(self, body: str) -> t.Dict[str, str]:
         lines = body.splitlines()
@@ -1009,6 +1074,11 @@ class GitLabController:
         return statuses
 
     def _extract_note_summary(self, body: str) -> str:
+        if summary_section := self._extract_marked_section(
+            body, self.BOT_NOTE_SUMMARY_START_MARKER, self.BOT_NOTE_SUMMARY_END_MARKER
+        ):
+            return self._strip_section_heading(summary_section, "## Summary")
+
         lines = body.splitlines()
         if "## Summary" in lines:
             start_index = lines.index("## Summary") + 1
@@ -1034,33 +1104,46 @@ class GitLabController:
 
         end_index = len(lines)
         for index in range(start_index, len(lines)):
-            if lines[index].strip() == "## Details":
+            stripped_line = lines[index].strip()
+            if stripped_line == self.BOT_NOTE_DETAILS_START_MARKER:
+                end_index = index
+                break
+            if stripped_line in {"## Details", "## Notes"} and self._is_legacy_section_heading(
+                lines, index, stripped_line
+            ):
                 end_index = index
                 break
 
         return "\n".join(lines[start_index:end_index]).strip()
 
     def _extract_note_details(self, body: str) -> t.Dict[str, str]:
+        if marked_details := self._extract_marked_note_details(body):
+            return marked_details
+
         lines = body.splitlines()
-        try:
-            start_index = lines.index("## Details") + 1
-        except ValueError:
+        legacy_details_start = self._find_legacy_section_start(lines, "## Details")
+        if legacy_details_start is None:
             return self._extract_legacy_note_details(body, "## Notes")
+        start_index = legacy_details_start + 1
 
         details: t.Dict[str, str] = {}
         current_key: t.Optional[str] = None
         current_lines: t.List[str] = []
 
-        for line in lines[start_index:]:
+        for index, line in enumerate(lines[start_index:], start=start_index):
             stripped_line = line.strip()
-            if stripped_line.startswith("## ") and not stripped_line.startswith("### "):
+            if stripped_line in {"## Details", "## Notes"} and self._is_legacy_section_heading(
+                lines, index, stripped_line
+            ):
                 break
             if stripped_line.startswith("### "):
-                if current_key is not None:
-                    details[current_key] = "\n".join(current_lines).strip()
-                current_key = stripped_line[4:]
-                current_lines = []
-                continue
+                heading = stripped_line[4:]
+                if heading in self.PIPELINE_STAGE_LABELS:
+                    if current_key is not None:
+                        details[current_key] = "\n".join(current_lines).strip()
+                    current_key = heading
+                    current_lines = []
+                    continue
             if current_key is not None:
                 current_lines.append(line)
 
@@ -1070,13 +1153,14 @@ class GitLabController:
         return {key: value for key, value in details.items() if value}
 
     def _extract_legacy_note_details(self, body: str, heading: str) -> t.Dict[str, str]:
-        if heading not in body:
+        lines = body.splitlines()
+        start_index = self._find_legacy_section_start(lines, heading)
+        if start_index is None:
             return {}
 
-        section = body.split(heading, 1)[1].lstrip("\n")
         details: t.Dict[str, str] = {}
         current_key: t.Optional[str] = None
-        for line in section.splitlines():
+        for line in lines[start_index + 1 :]:
             if not line:
                 if details:
                     break

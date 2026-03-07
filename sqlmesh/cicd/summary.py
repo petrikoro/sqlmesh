@@ -75,6 +75,25 @@ def get_plan_summary(
         console.verbosity = orig_verbosity
 
 
+def generate_prod_plan_preview_summary(
+    *,
+    plan_summary: str,
+    environment_name: str,
+    request_term: str,
+    target_environment_name: str = "prod",
+) -> str:
+    rendered_plan_summary = plan_summary.strip()
+    if not rendered_plan_summary:
+        return ""
+
+    return (
+        f"This is a preview that shows the differences between this {request_term} environment "
+        f"`{environment_name}` and `{target_environment_name}`.\n\n"
+        "These are the changes that would be deployed.\n\n"
+        f"{rendered_plan_summary}"
+    )
+
+
 def generate_request_environment_summary_intro(
     *,
     bot_config: BaseCICDBotConfig,

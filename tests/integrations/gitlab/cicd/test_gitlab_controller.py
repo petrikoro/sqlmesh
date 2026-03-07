@@ -328,29 +328,204 @@ def test_get_mr_environment_summary_references_gen_prod_plan_output(
     assert "`Prod Plan Preview` note" not in summary
 
 
-def test_get_prod_plan_preview_summary_lists_all_change_categories(
+def test_get_prod_plan_preview_summary_reuses_shared_plan_summary(
     make_gitlab_client, make_controller, mocker
 ):
     controller = make_controller(
         "tests/fixtures/gitlab/merge_request_open.json", make_gitlab_client()
     )
-    mocker.patch.object(controller, "get_plan_summary", return_value="Plan summary")
-    mocker.patch.object(
-        controller,
-        "_render_prod_plan_preview_diff",
-        return_value="""```diff
-+ sushi.orders (Forward-only)
-! sushi.waiter_revenue_by_day (Indirect Breaking)
-! sushi.waiter_names (Uncategorized)
-```""",
-    )
+    rich_plan_summary = """**Directly Modified:**
+* `memory.sushi.waiter_revenue_by_day` (Non-breaking)
+  
+  ```diff
+  - old_line
+  + new_line
+  ```"""
+    mocker.patch.object(controller, "get_plan_summary", return_value=rich_plan_summary)
 
     summary = controller.get_prod_plan_preview_summary(mocker.MagicMock())
 
+    assert summary == (
+        "This is a preview that shows the differences between this MR environment "
+        "`hello_world_42` and `prod`.\n\n"
+        "These are the changes that would be deployed.\n\n"
+        f"{rich_plan_summary}"
+    )
+
+
+def test_render_merge_request_note_round_trips_rich_markdown_sections(
+    make_gitlab_client, make_controller
+):
+    client = make_gitlab_client()
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    rich_summary = """**Directly Modified:**
+* `memory.sushi.waiter_revenue_by_day` (Non-breaking)
+
+> [!IMPORTANT]
+> Review the diff before deploying.
+
+| Item | Value |
+| --- | --- |
+| Diff | Rich |
+
+```diff
+- old_line
++ new_line
+```"""
+    rich_details = """**Plan diagnostics**
+
+### Added
+- `memory.sushi.orders` (Breaking)
+
+<details>
+
+<summary>Plan flags</summary>
+
+- `skip_tests` = `True`
+
+</details>"""
+
+    note = controller.render_merge_request_note(
+        note_type="gen-prod-plan",
+        stage_statuses={"Prod Plan Preview": "success"},
+        summary=rich_summary,
+        details={"Prod Plan Preview": rich_details},
+    )
+    client.notes = [MockMergeRequestNote(1, note)]
+
+    assert "## Summary" in note
+    assert rich_summary in note
+    assert "## Details" in note
+    assert rich_details in note
+
+    state = controller.get_merge_request_note_state("gen-prod-plan")
+
+    assert state.summary == rich_summary
+    assert state.details == {"Prod Plan Preview": rich_details}
+
+
+def test_get_merge_request_note_state_preserves_legacy_rich_details(
+    make_gitlab_client, make_controller
+):
+    client = make_gitlab_client(
+        [
+            _make_typed_note(
+                1,
+                "gen-prod-plan",
+                """**SQLMesh GitLab Bot**
+## Generate Prod Plan
+
+| Stage | Status |
+| --- | --- |
+| Prod Plan Preview | success |
+
+Legacy summary
+
+## Details
+### Prod Plan Preview
+## Added Models
+- `memory.sushi.orders` (Breaking)
+
+<details>
+<summary>Plan flags</summary>
+
+- `skip_backfill` = `True`
+
+</details>""",
+            )
+        ]
+    )
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+
+    state = controller.get_merge_request_note_state("gen-prod-plan")
+
+    assert state.summary == "Legacy summary"
+    assert state.details == {
+        "Prod Plan Preview": """## Added Models
+- `memory.sushi.orders` (Breaking)
+
+<details>
+<summary>Plan flags</summary>
+
+- `skip_backfill` = `True`
+
+</details>"""
+    }
+
+
+def test_get_merge_request_note_state_stops_legacy_details_before_notes(
+    make_gitlab_client, make_controller
+):
+    client = make_gitlab_client(
+        [
+            _make_typed_note(
+                1,
+                "gen-prod-plan",
+                """**SQLMesh GitLab Bot**
+## Generate Prod Plan
+
+| Stage | Status |
+| --- | --- |
+| Prod Plan Preview | success |
+
+Legacy summary
+
+## Details
+### Prod Plan Preview
+Actual detail block
+
+## Notes
+- Prod Plan Preview: Legacy notes detail
+  Continuation""",
+            )
+        ]
+    )
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+
+    state = controller.get_merge_request_note_state("gen-prod-plan")
+
+    assert state.summary == "Legacy summary"
+    assert state.details == {"Prod Plan Preview": "Actual detail block"}
+
+
+def test_get_merge_request_note_state_preserves_legacy_summary_with_lookalike_details_heading(
+    make_gitlab_client, make_controller
+):
+    client = make_gitlab_client(
+        [
+            _make_typed_note(
+                1,
+                "gen-prod-plan",
+                """**SQLMesh GitLab Bot**
+## Generate Prod Plan
+
+| Stage | Status |
+| --- | --- |
+| Prod Plan Preview | success |
+
+Legacy summary
+
+## Details
+This heading is part of the summary body.
+
+## Details
+### Prod Plan Preview
+Actual detail block""",
+            )
+        ]
+    )
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+
+    state = controller.get_merge_request_note_state("gen-prod-plan")
+
     assert (
-        "**Change categories:** `Breaking`, `Non-breaking`, `Forward-only`, "
-        "`Indirect Breaking`, `Indirect Non-breaking`, `Metadata`, `Uncategorized`"
-    ) in summary
+        state.summary
+        == """Legacy summary
+
+## Details
+This heading is part of the summary body."""
+    )
+    assert state.details == {"Prod Plan Preview": "Actual detail block"}
 
 
 @pytest.mark.parametrize(
@@ -398,6 +573,8 @@ def test_get_merge_request_note_state_parses_typed_note(
     assert state.stage_statuses[stage] == "success"
     assert state.details == {detail_key: detail_value}
     assert state.summary == summary
+    if summary:
+        assert "## Summary" in note
 
 
 def test_list_merge_request_notes_fetches_all_pages(mocker: MockerFixture):

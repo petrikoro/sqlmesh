@@ -97,6 +97,7 @@ def test_run_all_creates_four_typed_sticky_notes(make_gitlab_client, make_contro
     mr_environment_note = _get_note_by_type(client, "update-mr-environment")
     assert "| Stage | Status |" in mr_environment_note.body
     assert "| MR Environment | success |" in mr_environment_note.body
+    assert "## Summary" in mr_environment_note.body
     assert (
         "Dates loaded in MR" in mr_environment_note.body
         or "No models were modified in this MR" in mr_environment_note.body
@@ -105,11 +106,13 @@ def test_run_all_creates_four_typed_sticky_notes(make_gitlab_client, make_contro
     prod_plan_note = _get_note_by_type(client, "gen-prod-plan")
     assert "| Stage | Status |" in prod_plan_note.body
     assert "| Prod Plan Preview | success |" in prod_plan_note.body
+    assert "## Summary" in prod_plan_note.body
     assert "This is a preview that shows the differences between this MR environment" in (
         prod_plan_note.body
     )
-    assert "```diff" in prod_plan_note.body
-    assert "Non-breaking" in prod_plan_note.body
+    assert "```diff" in prod_plan_note.body or "**Added Models:**" in prod_plan_note.body
+    assert "Breaking" in prod_plan_note.body or "Non-breaking" in prod_plan_note.body
+    assert "**Change categories:**" not in prod_plan_note.body
     assert (
         "**Models needing backfill:**" in prod_plan_note.body
         or "No changes to apply." in prod_plan_note.body
@@ -208,6 +211,7 @@ def test_run_linter_stage_surfaces_warning_details(make_gitlab_client, make_cont
 
     note = _get_note_by_type(client, "run-linter")
     assert "| Linter | success |" in note.body
+    assert "## Summary" in note.body
     assert "lint warning" in note.body
 
 
@@ -226,6 +230,48 @@ def test_run_linter_stage_failure_updates_only_own_note(
     assert not _has_note_by_type(client, "run-tests")
     assert not _has_note_by_type(client, "update-mr-environment")
     assert not _has_note_by_type(client, "gen-prod-plan")
+
+
+def test_run_linter_stage_failure_keeps_error_summary_and_traceback_details(
+    make_gitlab_client, make_controller, mocker
+):
+    client = make_gitlab_client()
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+
+    def _raise_linter_error() -> None:
+        controller._console.log_warning("lint warning")
+        raise ValueError("lint exploded")
+
+    mocker.patch.object(controller, "run_linter", side_effect=_raise_linter_error)
+
+    assert not command._run_linter_stage(controller)
+
+    note = _get_note_by_type(client, "run-linter")
+    assert "## Summary" in note.body
+    assert "lint warning" in note.body
+    assert "**Error:** lint exploded" in note.body
+    assert "## Details" in note.body
+    assert "ValueError: lint exploded" in note.body
+
+
+def test_run_tests_stage_surfaces_rendered_summary(make_gitlab_client, make_controller, mocker):
+    client = make_gitlab_client()
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    controller._context._run_tests = mocker.MagicMock(
+        side_effect=lambda **kwargs: (TestResult(), "")
+    )
+    mocker.patch.object(
+        controller,
+        "get_test_summary",
+        return_value="**Successfully Ran `3` Tests Against `duckdb`**",
+    )
+
+    assert command._run_tests_stage(controller)
+
+    note = _get_note_by_type(client, "run-tests")
+    assert "| Unit Tests | success |" in note.body
+    assert "## Summary" in note.body
+    assert "**Successfully Ran `3` Tests Against `duckdb`**" in note.body
 
 
 def test_run_linter_stage_does_not_modify_existing_other_notes(make_gitlab_client, make_controller):
@@ -322,6 +368,22 @@ def test_run_tests_stage_failure_updates_only_own_note(make_gitlab_client, make_
     assert not _has_note_by_type(client, "run-linter")
     assert not _has_note_by_type(client, "update-mr-environment")
     assert not _has_note_by_type(client, "gen-prod-plan")
+
+
+def test_run_tests_stage_failure_keeps_error_summary_and_traceback_details(
+    make_gitlab_client, make_controller, mocker
+):
+    client = make_gitlab_client()
+    controller = make_controller("tests/fixtures/gitlab/merge_request_open.json", client)
+    controller._context._run_tests = mocker.MagicMock(side_effect=ValueError("tests exploded"))
+
+    assert not command._run_tests_stage(controller)
+
+    note = _get_note_by_type(client, "run-tests")
+    assert "## Summary" in note.body
+    assert "**Error:** tests exploded" in note.body
+    assert "## Details" in note.body
+    assert "ValueError: tests exploded" in note.body
 
 
 def test_run_tests_stage_does_not_modify_existing_other_notes(
@@ -595,4 +657,5 @@ def test_gen_prod_plan_updates_only_plan_preview_note(make_gitlab_client, make_c
 
     prod_plan_note = _get_note_by_type(client, "gen-prod-plan")
     assert "| Prod Plan Preview | success |" in prod_plan_note.body
+    assert "## Summary" in prod_plan_note.body
     assert "No changes to apply." in prod_plan_note.body

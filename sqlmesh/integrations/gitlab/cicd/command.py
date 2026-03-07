@@ -84,62 +84,72 @@ def _update_note(
     )
 
 
-def _run_tests(controller: GitLabController) -> t.Tuple[bool, str]:
+def _run_tests(controller: GitLabController) -> t.Tuple[bool, str, t.Optional[str]]:
     try:
         result, output = controller.run_tests()
-        test_summary = controller.get_test_summary(result)
-        return result.wasSuccessful(), test_summary or output
-    except Exception:
+        test_summary = controller.get_test_summary(result).strip()
+        rendered_output = output.strip()
+        summary = test_summary or rendered_output
+        if not summary:
+            summary = "Tests Passed" if result.wasSuccessful() else "Tests Failed"
+        details = rendered_output if rendered_output and rendered_output != summary else None
+        return result.wasSuccessful(), summary, details
+    except Exception as ex:
         logger.exception("Error occurred when running tests")
-        return False, traceback.format_exc()
+        return False, f"**Error:** {ex}", traceback.format_exc().strip()
 
 
-def _run_linter(controller: GitLabController) -> t.Tuple[bool, str]:
+def _consume_linter_output(controller: GitLabController) -> str:
+    return (
+        f"{controller._console.consume_captured_warnings()}"
+        f"{controller._console.consume_captured_errors()}"
+        f"{controller._console.consume_captured_output()}"
+    ).strip()
+
+
+def _run_linter(controller: GitLabController) -> t.Tuple[bool, str, t.Optional[str]]:
     try:
         controller.run_linter()
-        linter_output = (
-            f"{controller._console.consume_captured_warnings()}"
-            f"{controller._console.consume_captured_output()}"
-        ).strip()
-        return True, linter_output
+        linter_output = _consume_linter_output(controller)
+        return True, linter_output or "Linter Success", None
     except LinterError:
         logger.exception("Error occurred when running linter")
-        return False, controller._console.consume_captured_errors() or "Linter failed."
-    except Exception:
+        return False, _consume_linter_output(controller) or "Linter failed.", None
+    except Exception as ex:
         logger.exception("Unexpected error occurred when running linter")
-        return False, traceback.format_exc()
+        linter_output = _consume_linter_output(controller)
+        summary = f"{linter_output}\n\n**Error:** {ex}" if linter_output else f"**Error:** {ex}"
+        return (
+            False,
+            summary,
+            traceback.format_exc().strip(),
+        )
 
 
 def _run_linter_stage(controller: GitLabController) -> bool:
     _update_note(controller, RUN_LINTER_NOTE, stage_statuses={LINTER_STAGE: "in_progress"})
-    linter_passed, linter_output = _run_linter(controller)
+    linter_passed, linter_summary, linter_details = _run_linter(controller)
     stage_statuses = {LINTER_STAGE: "success" if linter_passed else "failure"}
-    detail_updates: t.Dict[str, t.Optional[str]] = {
-        LINTER_STAGE: linter_output.strip() if linter_output else None
-    }
     _update_note(
         controller,
         RUN_LINTER_NOTE,
         stage_statuses=stage_statuses,
-        summary="",
-        details=detail_updates,
+        summary=linter_summary,
+        details={LINTER_STAGE: linter_details},
     )
     return linter_passed
 
 
 def _run_tests_stage(controller: GitLabController) -> bool:
     _update_note(controller, RUN_TESTS_NOTE, stage_statuses={UNIT_TESTS_STAGE: "in_progress"})
-    tests_passed, test_output = _run_tests(controller)
+    tests_passed, test_summary, test_details = _run_tests(controller)
     stage_statuses = {UNIT_TESTS_STAGE: "success" if tests_passed else "failure"}
-    detail_updates: t.Dict[str, t.Optional[str]] = {
-        UNIT_TESTS_STAGE: None if tests_passed else test_output.strip()
-    }
     _update_note(
         controller,
         RUN_TESTS_NOTE,
         stage_statuses=stage_statuses,
-        summary="",
-        details=detail_updates,
+        summary=test_summary,
+        details={UNIT_TESTS_STAGE: test_details},
     )
     return tests_passed
 
@@ -166,7 +176,7 @@ def _update_mr_environment(controller: GitLabController) -> bool:
             UPDATE_MR_ENVIRONMENT_NOTE,
             stage_statuses={MR_ENVIRONMENT_STAGE: "skipped"},
             summary=controller.get_merge_request_environment_summary(exception=ex),
-            details={MR_ENVIRONMENT_STAGE: str(ex)},
+            details={MR_ENVIRONMENT_STAGE: None},
         )
         return True
     except StalePipelineError as ex:
@@ -174,8 +184,8 @@ def _update_mr_environment(controller: GitLabController) -> bool:
             controller,
             UPDATE_MR_ENVIRONMENT_NOTE,
             stage_statuses={MR_ENVIRONMENT_STAGE: "skipped"},
-            summary="",
-            details={MR_ENVIRONMENT_STAGE: str(ex)},
+            summary=str(ex),
+            details={MR_ENVIRONMENT_STAGE: None},
         )
         return True
     except Exception as ex:
@@ -184,7 +194,7 @@ def _update_mr_environment(controller: GitLabController) -> bool:
             UPDATE_MR_ENVIRONMENT_NOTE,
             stage_statuses={MR_ENVIRONMENT_STAGE: "failure"},
             summary=controller.get_merge_request_environment_summary(exception=ex),
-            details={MR_ENVIRONMENT_STAGE: str(ex)},
+            details={MR_ENVIRONMENT_STAGE: None},
         )
         return False
 
@@ -211,7 +221,7 @@ def _gen_prod_plan(controller: GitLabController) -> bool:
             GEN_PROD_PLAN_NOTE,
             stage_statuses={PROD_PLAN_PREVIEW_STAGE: "failure"},
             summary=str(ex),
-            details={PROD_PLAN_PREVIEW_STAGE: str(ex)},
+            details={PROD_PLAN_PREVIEW_STAGE: None},
         )
         return False
 

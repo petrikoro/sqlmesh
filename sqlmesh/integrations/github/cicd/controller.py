@@ -18,6 +18,7 @@ from sqlglot.helper import seq_get
 
 from sqlmesh.cicd.summary import (
     generate_plan_flags_section,
+    generate_prod_plan_preview_summary,
     generate_request_environment_summary_intro,
     generate_request_environment_summary_list,
     get_plan_summary,
@@ -1050,10 +1051,11 @@ class GithubController:
                 conclusion, f"Got an unexpected conclusion: {conclusion.value}"
             )
             if conclusion == GithubCheckConclusion.SUCCESS and summary:
-                summary = (
-                    f"This is a preview that shows the differences between this PR environment `{self.pr_environment_name}` and `prod`.\n\n"
-                    "These are the changes that would be deployed.\n\n"
-                ) + summary
+                summary = generate_prod_plan_preview_summary(
+                    plan_summary=summary,
+                    environment_name=self.pr_environment_name,
+                    request_term="PR",
+                )
 
             return conclusion, title, summary
 

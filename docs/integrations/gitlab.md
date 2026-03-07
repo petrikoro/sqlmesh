@@ -58,11 +58,11 @@ The GitLab bot maintains up to four sticky SQLMesh merge request notes, one per 
 The notes are:
 
 * `Run Linter`: tracks the `Linter` stage and includes captured warnings or failures
-* `Run Tests`: tracks the `Unit Tests` stage and includes failure details when tests fail
+* `Run Tests`: tracks the `Unit Tests` stage and preserves the rendered SQLMesh test summary
 * `Update MR Environment`: tracks the `MR Environment` stage and includes the MR environment summary, affected models, and loaded or missing intervals
-* `Generate Prod Plan`: tracks the `Prod Plan Preview` stage and includes a GitHub-style diff and backfill preview for what would change in `prod`
+* `Generate Prod Plan`: tracks the `Prod Plan Preview` stage and reuses the same markdown-rich diff and backfill preview shown by the GitHub bot for what would change in `prod`
 
-Each note uses lightweight markdown tables for merge request metadata and stage status. The MR environment and prod plan notes reuse the same underlying SQLMesh diff and backfill summaries as the GitHub integration, so the two bots stay aligned on the substantive preview information even though their note layouts differ.
+Each note uses lightweight markdown tables for merge request metadata and stage status, followed by explicit `Summary` and `Details` sections when content is available. The linter, test, MR environment, and prod plan commands all keep the primary human-readable output in the summary section so the sticky note mirrors the GitHub checks more closely, while still preserving parser-safe note updates behind the scenes. The MR environment and prod plan notes reuse the same underlying SQLMesh diff and backfill summaries as the GitHub integration, so the two bots stay aligned on the substantive preview information even though their delivery surfaces differ.
 
 The simplest way to keep all four notes current is to run `sqlmesh_cicd gitlab ... run-all`. `run-all` just runs the same command behaviors in order: `run-linter`, `run-tests`, `update-mr-environment`, and `gen-prod-plan`. It does not create a separate overview note or pre-seed downstream note state.
 Each split command updates only its matching note. `run-linter` updates only `Run Linter`, `run-tests` updates only `Run Tests`, `update-mr-environment` updates only `Update MR Environment`, and `gen-prod-plan` updates only `Generate Prod Plan`.
