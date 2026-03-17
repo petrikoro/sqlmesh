@@ -247,6 +247,100 @@ def test_evaluate(mocker: MockerFixture, adapter_mock, make_snapshot):
     )
 
 
+def test_evaluate_full_existing_table_replace_query_runs_outside_outer_transaction(
+    mocker: MockerFixture, adapter_mock: Mock, make_snapshot: t.Callable[..., Snapshot]
+):
+    evaluator = SnapshotEvaluator(adapter_mock)
+    adapter_mock.dialect = "postgres"
+    adapter_mock.HAS_VIEW_BINDING = True
+    adapter_mock.needs_isolated_replace_query_transactions.return_value = True
+    adapter_mock.columns.return_value = {"id": exp.DataType.build("int")}
+
+    transaction_depth = 0
+
+    @contextlib.contextmanager
+    def transaction() -> t.Iterator[None]:
+        nonlocal transaction_depth
+        transaction_depth += 1
+        try:
+            yield
+        finally:
+            transaction_depth -= 1
+
+    adapter_mock.transaction.side_effect = transaction
+
+    def assert_replace_query_outside_transaction(*args: t.Any, **kwargs: t.Any) -> None:
+        assert transaction_depth == 0
+
+    adapter_mock.replace_query.side_effect = assert_replace_query_outside_transaction
+
+    model = SqlModel(
+        name="test_schema.test_model",
+        kind=FullKind(),
+        query=parse_one("SELECT 1::INT AS id"),
+    )
+    snapshot = make_snapshot(model)
+    snapshot.categorize_as(SnapshotChangeCategory.BREAKING)
+
+    evaluator.evaluate(
+        snapshot,
+        start="2023-01-01",
+        end="2023-01-01",
+        execution_time="2023-01-01",
+        snapshots={},
+        target_table_exists=True,
+    )
+
+    adapter_mock.replace_query.assert_called_once()
+
+
+def test_evaluate_full_existing_table_replace_query_stays_in_outer_transaction_without_capability(
+    mocker: MockerFixture, adapter_mock: Mock, make_snapshot: t.Callable[..., Snapshot]
+):
+    evaluator = SnapshotEvaluator(adapter_mock)
+    adapter_mock.dialect = "postgres"
+    adapter_mock.HAS_VIEW_BINDING = True
+    adapter_mock.needs_isolated_replace_query_transactions.return_value = False
+    adapter_mock.columns.return_value = {"id": exp.DataType.build("int")}
+
+    transaction_depth = 0
+
+    @contextlib.contextmanager
+    def transaction() -> t.Iterator[None]:
+        nonlocal transaction_depth
+        transaction_depth += 1
+        try:
+            yield
+        finally:
+            transaction_depth -= 1
+
+    adapter_mock.transaction.side_effect = transaction
+
+    def assert_replace_query_inside_transaction(*args: t.Any, **kwargs: t.Any) -> None:
+        assert transaction_depth == 1
+
+    adapter_mock.replace_query.side_effect = assert_replace_query_inside_transaction
+
+    model = SqlModel(
+        name="test_schema.test_model",
+        kind=FullKind(),
+        query=parse_one("SELECT 1::INT AS id"),
+    )
+    snapshot = make_snapshot(model)
+    snapshot.categorize_as(SnapshotChangeCategory.BREAKING)
+
+    evaluator.evaluate(
+        snapshot,
+        start="2023-01-01",
+        end="2023-01-01",
+        execution_time="2023-01-01",
+        snapshots={},
+        target_table_exists=True,
+    )
+
+    adapter_mock.replace_query.assert_called_once()
+
+
 def test_runtime_stages(capsys, mocker, adapter_mock, make_snapshot):
     evaluator = SnapshotEvaluator(adapter_mock)
 

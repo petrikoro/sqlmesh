@@ -1,5 +1,6 @@
 import typing as t
 from contextlib import contextmanager
+import threading
 import pytest
 from pytest import FixtureRequest
 from pathlib import Path
@@ -498,6 +499,94 @@ def test_grants_plan_full_refresh_model_via_replace(
             exp.to_table(dev_view_name, dialect=engine_adapter.dialect)
         )
         assert dev_grants == {"SELECT": [roles["reader"]["username"]]}
+
+
+def test_full_model_rerun_with_concurrent_view_reader_does_not_deadlock(
+    ctx: TestContext, tmp_path: Path
+):
+    (tmp_path / "models").mkdir(exist_ok=True)
+    model_name = "deadlock_full_model"
+    model_path = tmp_path / "models" / f"{model_name}.sql"
+    model_path.write_text(
+        f"""
+        MODEL (
+            name test_schema.{model_name},
+            kind FULL
+        );
+        SELECT 1 as id
+        """
+    )
+
+    with time_machine.travel("2020-01-01 00:00:00+00:00"):
+        context = ctx.create_context(path=tmp_path)
+        context.plan("prod", auto_apply=True, no_prompts=True)
+
+    connection = context.config.gateways[ctx.gateway].connection
+    assert connection is not None
+    reader_adapter = t.cast(
+        PostgresEngineAdapter,
+        connection.create_engine_adapter(),
+    )
+    view_sql = exp.to_table(f"test_schema.{model_name}", dialect=reader_adapter.dialect).sql(
+        dialect=reader_adapter.dialect
+    )
+    reader_holds_view_lock = threading.Event()
+    reader_errors: t.List[Exception] = []
+    reader_results: t.List[int] = []
+    reader_threads: t.List[threading.Thread] = []
+    reader_started = False
+    original_recreate = PostgresEngineAdapter._recreate_dependent_views
+
+    def _reader_query() -> None:
+        try:
+            with reader_adapter.transaction():
+                reader_adapter.cursor.execute("SET LOCAL statement_timeout = '5000ms'")
+                reader_adapter.cursor.execute(f"LOCK TABLE {view_sql} IN ACCESS SHARE MODE")
+                reader_holds_view_lock.set()
+                reader_adapter.cursor.execute(f"SELECT COUNT(*) FROM {view_sql}")
+                count, *_ = reader_adapter.cursor.fetchone()
+                reader_results.append(count)
+                reader_adapter.cursor.execute("SELECT pg_sleep(0.5)")
+        except Exception as ex:
+            reader_errors.append(ex)
+
+    def _recreate_with_reader(
+        self: PostgresEngineAdapter,
+        dependent_views: t.List[t.Tuple[str, str, str, bool]],
+    ) -> None:
+        nonlocal reader_started
+        if not reader_started:
+            reader_started = True
+            reader_thread = threading.Thread(target=_reader_query)
+            reader_thread.start()
+            reader_threads.append(reader_thread)
+            assert reader_holds_view_lock.wait(timeout=10)
+        return original_recreate(self, dependent_views)
+
+    try:
+        from unittest.mock import patch
+
+        with patch.object(
+            PostgresEngineAdapter,
+            "_recreate_dependent_views",
+            autospec=True,
+            side_effect=_recreate_with_reader,
+        ):
+            with time_machine.travel("2020-01-02 00:00:00+00:00"):
+                context.run(
+                    "prod",
+                    ignore_cron=True,
+                    skip_janitor=True,
+                    select_models=[f"test_schema.{model_name}"],
+                )
+    finally:
+        for reader_thread in reader_threads:
+            reader_thread.join(timeout=10)
+            assert not reader_thread.is_alive()
+        reader_adapter.close()
+
+    assert reader_errors == []
+    assert reader_results == [1]
 
 
 def test_grants_plan_incremental_model(

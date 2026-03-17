@@ -778,15 +778,8 @@ class SnapshotEvaluator:
             render_kwargs={**render_statements_kwargs, "inside_transaction": False},
         )
 
-        with (
-            adapter.transaction(),
-            adapter.session(snapshot.model.render_session_properties(**render_statements_kwargs)),
-        ):
-            evaluation_strategy.run_pre_statements(
-                snapshot=snapshot,
-                render_kwargs={**render_statements_kwargs, "inside_transaction": True},
-            )
-
+        def _evaluate_snapshot_body() -> t.Optional[str]:
+            nonlocal runtime_stage, target_table_exists, target_table_name
             if not target_table_exists or (model.is_seed and not snapshot.intervals):
                 # Only create the empty table if the columns were provided explicitly by the user
                 should_create_empty_table = (
@@ -855,10 +848,44 @@ class SnapshotEvaluator:
                 batch_index=batch_index,
             )
 
-            evaluation_strategy.run_post_statements(
-                snapshot=snapshot,
-                render_kwargs={**render_statements_kwargs, "inside_transaction": True},
-            )
+            return wap_id
+
+        session_properties = snapshot.model.render_session_properties(**render_statements_kwargs)
+        needs_isolated_replace_query = adapter.needs_isolated_replace_query_transactions(
+            model, target_table_exists
+        )
+
+        if needs_isolated_replace_query:
+            with adapter.session(session_properties):
+                with adapter.transaction():
+                    evaluation_strategy.run_pre_statements(
+                        snapshot=snapshot,
+                        render_kwargs={**render_statements_kwargs, "inside_transaction": True},
+                    )
+
+                wap_id = _evaluate_snapshot_body()
+
+                with adapter.transaction():
+                    evaluation_strategy.run_post_statements(
+                        snapshot=snapshot,
+                        render_kwargs={**render_statements_kwargs, "inside_transaction": True},
+                    )
+        else:
+            with (
+                adapter.transaction(),
+                adapter.session(session_properties),
+            ):
+                evaluation_strategy.run_pre_statements(
+                    snapshot=snapshot,
+                    render_kwargs={**render_statements_kwargs, "inside_transaction": True},
+                )
+
+                wap_id = _evaluate_snapshot_body()
+
+                evaluation_strategy.run_post_statements(
+                    snapshot=snapshot,
+                    render_kwargs={**render_statements_kwargs, "inside_transaction": True},
+                )
 
         evaluation_strategy.run_post_statements(
             snapshot=snapshot,
