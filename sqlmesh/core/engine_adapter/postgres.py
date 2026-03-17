@@ -20,6 +20,7 @@ from sqlmesh.utils import random_id
 if t.TYPE_CHECKING:
     from sqlmesh.core._typing import TableName
     from sqlmesh.core.engine_adapter._typing import DF, QueryOrDF
+    from sqlmesh.core.model import Model
 
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,14 @@ class PostgresEngineAdapter(
         },
         "drop_cascade": True,
     }
+
+    def needs_isolated_replace_query_transactions(
+        self, model: Model, target_table_exists: bool
+    ) -> bool:
+        # Existing FULL-table refreshes rename the physical table and then rebuild bound views.
+        # The swap and view rewrite must commit independently to avoid holding the table lock
+        # while we acquire view DDL locks.
+        return target_table_exists and model.kind.is_full and not model.depends_on_self
 
     def _fetch_native_df(
         self, query: t.Union[exp.Expr, str], quote_identifiers: bool = False
@@ -664,14 +673,19 @@ class PostgresEngineAdapter(
             raise
 
         # Recreate dependent views (PostgreSQL views store OIDs referencing the table).
+        can_restore_after_view_recreation_failure = (
+            self.SUPPORTS_TRANSACTIONS and not self._connection_pool.is_transaction_active
+        )
         try:
             if dependent_views:
                 with self.transaction():
                     self._recreate_dependent_views(dependent_views)
         except Exception:
-            # Restore state after failed view recreation: rollback failed txn, then
-            # drop new table and rename old table back to target so views stay consistent.
-            self._connection_pool.rollback()
+            # Only attempt the manual restore when this method owned the view recreation transaction.
+            # If an outer caller owns the transaction, its rollback restores the pre-swap state and
+            # running recovery DDL here can target the canonical table name incorrectly.
+            if not can_restore_after_view_recreation_failure:
+                raise
             try:
                 with self.transaction():
                     self.drop_table(target_table, exists=True)

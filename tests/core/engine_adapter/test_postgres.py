@@ -1024,6 +1024,64 @@ def test_replace_query_error_during_view_recreation_restores_original_state(
     assert len(rename_calls) == 3
 
 
+def test_replace_query_error_during_view_recreation_does_not_double_rollback(
+    make_mocked_engine_adapter: t.Callable,
+    make_temp_table_name: t.Callable,
+    mocker: MockerFixture,
+):
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+    rollback = mocker.patch.object(adapter._connection_pool, "rollback")
+
+    _setup_replace_query_mocks(adapter, make_temp_table_name, mocker)
+    mocker.patch.object(
+        adapter,
+        "_get_dependent_views",
+        return_value=[("test_schema", "broken_view", "SELECT * FROM test_table", False)],
+    )
+    mocker.patch.object(
+        adapter, "_recreate_dependent_views", side_effect=Exception("View recreation failed")
+    )
+
+    with pytest.raises(Exception, match="View recreation failed"):
+        adapter.replace_query("test_schema.test_table", parse_one("SELECT 1 as id"))
+
+    rollback.assert_called_once()
+
+
+def test_replace_query_error_during_view_recreation_skips_manual_recovery_in_outer_transaction(
+    make_mocked_engine_adapter: t.Callable,
+    make_temp_table_name: t.Callable,
+    mocker: MockerFixture,
+):
+    adapter = make_mocked_engine_adapter(PostgresEngineAdapter)
+    mocker.patch.object(
+        type(adapter._connection_pool),
+        "is_transaction_active",
+        PropertyMock(return_value=True),
+    )
+    rollback = mocker.patch.object(adapter._connection_pool, "rollback")
+
+    _setup_replace_query_mocks(adapter, make_temp_table_name, mocker)
+    mocker.patch.object(
+        adapter,
+        "_get_dependent_views",
+        return_value=[("test_schema", "broken_view", "SELECT * FROM test_table", False)],
+    )
+    mocker.patch.object(
+        adapter, "_recreate_dependent_views", side_effect=Exception("View recreation failed")
+    )
+
+    with pytest.raises(Exception, match="View recreation failed"):
+        adapter.replace_query("test_schema.test_table", parse_one("SELECT 1 as id"))
+
+    sql_calls = to_sql_calls(adapter)
+    rename_calls = [sql for sql in sql_calls if "ALTER TABLE" in sql and "RENAME" in sql]
+
+    assert len(rename_calls) == 2
+    assert not any("DROP TABLE" in sql and "test_table" in sql for sql in sql_calls)
+    rollback.assert_not_called()
+
+
 # Tests for atomic swap table logic in replace_query
 
 

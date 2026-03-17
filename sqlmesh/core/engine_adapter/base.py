@@ -60,6 +60,7 @@ if t.TYPE_CHECKING:
     import pandas as pd
 
     from sqlmesh.core._typing import SchemaName, SessionProperties, TableName
+    from sqlmesh.core.model import Model
     from sqlmesh.core.engine_adapter._typing import (
         DF,
         BigframeSession,
@@ -2486,6 +2487,12 @@ class EngineAdapter:
 
     def wap_supported(self, table_name: TableName) -> bool:
         """Returns whether WAP for the target table is supported."""
+        return False
+
+    def needs_isolated_replace_query_transactions(
+        self, model: Model, target_table_exists: bool
+    ) -> bool:
+        """Whether `replace_query` needs isolated transaction boundaries for this model."""
         return False
 
     def wap_table_name(self, table_name: TableName, wap_id: str) -> str:
