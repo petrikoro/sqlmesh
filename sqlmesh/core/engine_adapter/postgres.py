@@ -641,12 +641,12 @@ class PostgresEngineAdapter(
                 **kwargs,
             )
 
+            if hypertable_config:
+                self._recreate_timescaledb_hypertable(temp_table, hypertable_config)
             if indexes:
                 self._recreate_indexes(indexes, temp_table)
             if grants:
                 self._apply_table_grants(temp_table, grants)
-            if hypertable_config:
-                self._recreate_timescaledb_hypertable(temp_table, hypertable_config)
 
             self.execute(
                 exp.Command(this="ANALYZE", expression=temp_table.sql(dialect=self.dialect))
