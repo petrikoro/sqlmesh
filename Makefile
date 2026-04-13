@@ -256,3 +256,34 @@ vscode-generate-openapi:
 
 benchmark-ci:
 	python benchmarks/lsp_render_model_bench.py --debug-single-value
+
+################
+# Docker Build #
+################
+
+.PHONY: docker-build docker-build-push
+
+DOCKER_IMAGE ?= sqlmesh
+DOCKER_TAG ?= latest
+DOCKER_PLATFORMS ?= linux/amd64,linux/arm64
+DOCKER_PYTHON_VERSION ?= 3.13
+EXTRAS ?=
+VERSION ?= $(shell git describe --tags --match 'v*' 2>/dev/null | sed 's/^v//' || echo 0.0.0dev0)
+
+docker-build:
+	docker buildx build \
+		--build-arg PYTHON_VERSION=$(DOCKER_PYTHON_VERSION) \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg EXTRAS=$(EXTRAS) \
+		-t $(DOCKER_IMAGE):$(DOCKER_TAG) --load .
+
+docker-build-%:
+	$(MAKE) docker-build EXTRAS=$* DOCKER_TAG=$(DOCKER_TAG)-$*
+
+docker-build-push:
+	docker buildx build \
+		--platform $(DOCKER_PLATFORMS) \
+		--build-arg PYTHON_VERSION=$(DOCKER_PYTHON_VERSION) \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg EXTRAS=$(EXTRAS) \
+		-t $(DOCKER_IMAGE):$(DOCKER_TAG) --push .
