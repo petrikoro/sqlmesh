@@ -50,6 +50,7 @@ variables:
 
 .python-job:
   before_script:
+    - apt-get update && apt-get install -y --no-install-recommends make
     - pip install uv
     - uv venv .venv
     - source .venv/bin/activate
@@ -81,7 +82,7 @@ variables:
 
 py-style:
   stage: lint
-  image: python:3.11-slim
+  image: python:3.13-slim
   extends: .python-job
   script:
     - make install-dev
