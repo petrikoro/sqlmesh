@@ -1,0 +1,275 @@
+default:
+  interruptible: true
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
+
+stages:
+  - lint
+  - test
+  - engine-test
+  - build
+
+variables:
+  UV: "1"
+  UV_CACHE_DIR: "$CI_PROJECT_DIR/.uv-cache"
+  SQLMESH__DISABLE_ANONYMIZED_ANALYTICS: "1"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+
+# ---------------------------------------------------------------------------
+# Rule templates
+# ---------------------------------------------------------------------------
+
+.rules-python-or-ci:
+  rules: &rules-python-or-ci
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        paths:
+          - sqlmesh/**/*
+          - tests/**/*
+          - examples/**/*
+          - web/server/**/*
+          - pytest.ini
+          - setup.cfg
+          - pyproject.toml
+          - Makefile
+          - .pre-commit-config.yaml
+          - .gitlab/.gitlab-ci.yml
+
+.rules-release-tag:
+  rules: &rules-release-tag
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
+
+# ---------------------------------------------------------------------------
+# Job templates
+# ---------------------------------------------------------------------------
+
+.python-job:
+  before_script:
+    - pip install uv
+    - uv venv .venv
+    - source .venv/bin/activate
+  cache:
+    key:
+      files:
+        - pyproject.toml
+      prefix: pip-$CI_JOB_NAME_SLUG
+    paths:
+      - .pip-cache/
+      - .uv-cache/
+
+.node-job:
+  before_script:
+    - npm install -g pnpm@10
+    - pnpm config set store-dir "$CI_PROJECT_DIR/.pnpm-store"
+    - pnpm install
+  cache:
+    key:
+      files:
+        - pnpm-lock.yaml
+      prefix: pnpm-$CI_JOB_NAME_SLUG
+    paths:
+      - .pnpm-store/
+
+# ===========================================================================
+# LINT
+# ===========================================================================
+
+py-style:
+  stage: lint
+  image: python:3.11-slim
+  extends: .python-job
+  script:
+    - make install-dev
+    - make py-style
+  rules: *rules-python-or-ci
+
+# ===========================================================================
+# TEST
+# ===========================================================================
+
+doc-tests:
+  stage: test
+  image: python:3.10-slim
+  extends: .python-job
+  script:
+    - make install-dev install-doc
+    - make doc-test
+  rules: *rules-python-or-ci
+
+cicd-tests:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  extends: .python-job
+  parallel:
+    matrix:
+      - PYTHON_VERSION: ["3.9", "3.10", "3.11", "3.12"]
+  variables:
+    PYTEST_XDIST_AUTO_NUM_WORKERS: "2"
+    GIT_DEPTH: 0
+  script:
+    - apt-get update && apt-get install -y --no-install-recommends default-jdk unixodbc-dev
+    - make install-dev
+    - |
+      if [ "$PYTHON_VERSION" != "3.9" ]; then
+        make benchmark-ci
+      fi
+    - make cicd-test
+  artifacts:
+    when: always
+    reports:
+      junit: test-results/junit-*.xml
+    paths:
+      - test-results/
+    expire_in: 7 days
+  rules: *rules-python-or-ci
+
+cicd-tests-py313:
+  extends: cicd-tests
+  allow_failure: true
+  parallel:
+    matrix:
+      - PYTHON_VERSION: ["3.13"]
+
+migration-test:
+  stage: test
+  image: python:3.10-slim
+  extends: .python-job
+  variables:
+    GIT_DEPTH: 0
+  script:
+    - apt-get update && apt-get install -y --no-install-recommends git
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+    - make install-dev
+    - ./.github/scripts/test_migration.sh sushi "--gateway duckdb_persistent"
+    - ./.github/scripts/test_migration.sh sushi_dbt "--config migration_test_config"
+  rules: *rules-python-or-ci
+
+vscode-tests:
+  stage: test
+  image: node:22
+  extends: .node-job
+  variables:
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+  script:
+    - pnpm run ci
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+dbt-version-tests:
+  stage: test
+  image: python:3.10-slim
+  extends: .python-job
+  parallel:
+    matrix:
+      - DBT_VERSION: ["1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10"]
+  script:
+    - UV=1 make install-dev-dbt-${DBT_VERSION}
+    - .gitlab/scripts/dbt-version-test.sh "$DBT_VERSION"
+  rules: *rules-python-or-ci
+
+# ===========================================================================
+# ENGINE TESTS (Docker-in-Docker)
+# ===========================================================================
+
+engine-tests:
+  stage: engine-test
+  image: python:3.12
+  services:
+    - name: docker:27-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "/certs/client"
+    DOCKER_HOSTNAME: docker
+    PYTEST_XDIST_AUTO_NUM_WORKERS: "2"
+  parallel:
+    matrix:
+      - ENGINE:
+          - duckdb
+          - postgres
+          - mysql
+          - mssql
+          - trino
+          - spark
+          - clickhouse
+          - risingwave
+          - starrocks
+  timeout: 25 minutes
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  cache:
+    key:
+      files:
+        - pyproject.toml
+      prefix: pip-engine-$ENGINE
+    paths:
+      - .pip-cache/
+      - .uv-cache/
+  before_script:
+    - .gitlab/scripts/install-docker-tools.sh
+    - pip install uv
+    - uv venv .venv
+    - source .venv/bin/activate
+    - make install-dev
+    - ./.github/scripts/install-prerequisites.sh "$ENGINE"
+  script:
+    - make ${ENGINE}-test
+  artifacts:
+    when: always
+    reports:
+      junit: test-results/junit-*.xml
+    paths:
+      - test-results/
+    expire_in: 7 days
+  rules: *rules-python-or-ci
+
+# ===========================================================================
+# BUILD (multi-arch Docker image)
+# ===========================================================================
+
+docker-build:
+  stage: build
+  image: docker:27
+  services:
+    - name: docker:27-dind
+      alias: docker
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  parallel:
+    matrix:
+      - EXTRAS:
+          - ""
+          - starrocks
+          - postgres
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker run --privileged --rm tonistiigi/binfmt --install all
+    - docker buildx create --use --name multiarch --driver docker-container
+  script:
+    # VERSION and TAGS are consumed by the buildx command below (same shell session)
+    - |
+      VERSION="${CI_COMMIT_TAG#v}"
+      if [ -z "$EXTRAS" ]; then
+        TAGS="--tag ${CI_REGISTRY_IMAGE}:${VERSION} --tag ${CI_REGISTRY_IMAGE}:latest"
+      else
+        TAGS="--tag ${CI_REGISTRY_IMAGE}:${VERSION}-${EXTRAS} --tag ${CI_REGISTRY_IMAGE}:latest-${EXTRAS}"
+      fi
+    - >-
+      docker buildx build
+      --platform linux/amd64,linux/arm64
+      --build-arg VERSION="$VERSION"
+      --build-arg EXTRAS="$EXTRAS"
+      $TAGS
+      --push .
+  rules: *rules-release-tag
