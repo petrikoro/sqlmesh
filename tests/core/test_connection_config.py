@@ -1249,6 +1249,8 @@ def test_starrocks(make_config):
         charset="utf8",
         collation="utf8_general_ci",
         ssl_disabled=True,
+        schema_change_timeout=120,
+        schema_change_poll_interval=0.25,
         concurrent_tasks=8,
         check_import=False,
     )
@@ -1261,7 +1263,13 @@ def test_starrocks(make_config):
     assert config.charset == "utf8"
     assert config.collation == "utf8_general_ci"
     assert config.ssl_disabled is True
+    assert config.schema_change_timeout == 120
+    assert config.schema_change_poll_interval == 0.25
     assert config.concurrent_tasks == 8
+    assert config._extra_engine_config == {
+        "schema_change_timeout": 120,
+        "schema_change_poll_interval": 0.25,
+    }
 
 
 def test_starrocks_dynamic_overwrite(make_config):
