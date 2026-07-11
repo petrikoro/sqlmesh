@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import typing as t
 
 from sqlglot import exp
@@ -23,6 +24,7 @@ from sqlmesh.core.engine_adapter.shared import (
     InsertOverwriteStrategy,
     set_catalog,
 )
+from sqlmesh.core.schema_diff import TableAlterChangeColumnTypeOperation, TableAlterOperation
 from sqlmesh.utils.errors import SQLMeshError
 
 logger = logging.getLogger(__name__)
@@ -66,6 +68,57 @@ class StarRocksEngineAdapter(
     # See https://docs.starrocks.io/docs/sql-reference/System_limit/
     MAX_IDENTIFIER_LENGTH = 256
     CASE_SENSITIVE_GRANTEES = True
+    SCHEMA_DIFFER_KWARGS = {
+        "compatible_types": {
+            exp.DataType.build("TINYINT", dialect="starrocks"): {
+                exp.DataType.build("SMALLINT", dialect="starrocks"),
+                exp.DataType.build("INT", dialect="starrocks"),
+                exp.DataType.build("BIGINT", dialect="starrocks"),
+                exp.DataType.build("DOUBLE", dialect="starrocks"),
+                exp.DataType.build("STRING", dialect="starrocks"),
+                exp.DataType.build("VARCHAR(65533)", dialect="starrocks"),
+            },
+            exp.DataType.build("SMALLINT", dialect="starrocks"): {
+                exp.DataType.build("INT", dialect="starrocks"),
+                exp.DataType.build("BIGINT", dialect="starrocks"),
+                exp.DataType.build("DOUBLE", dialect="starrocks"),
+                exp.DataType.build("STRING", dialect="starrocks"),
+                exp.DataType.build("VARCHAR(65533)", dialect="starrocks"),
+            },
+            exp.DataType.build("INT", dialect="starrocks"): {
+                exp.DataType.build("BIGINT", dialect="starrocks"),
+                exp.DataType.build("DOUBLE", dialect="starrocks"),
+                exp.DataType.build("STRING", dialect="starrocks"),
+                exp.DataType.build("VARCHAR(65533)", dialect="starrocks"),
+            },
+            exp.DataType.build("BIGINT", dialect="starrocks"): {
+                exp.DataType.build("STRING", dialect="starrocks"),
+                exp.DataType.build("VARCHAR(65533)", dialect="starrocks"),
+            },
+            exp.DataType.build("LARGEINT", dialect="starrocks"): {
+                exp.DataType.build("STRING", dialect="starrocks"),
+                exp.DataType.build("VARCHAR(65533)", dialect="starrocks"),
+            },
+            exp.DataType.build("FLOAT", dialect="starrocks"): {
+                exp.DataType.build("DOUBLE", dialect="starrocks"),
+                exp.DataType.build("STRING", dialect="starrocks"),
+                exp.DataType.build("VARCHAR(65533)", dialect="starrocks"),
+            },
+            exp.DataType.build("DOUBLE", dialect="starrocks"): {
+                exp.DataType.build("STRING", dialect="starrocks"),
+                exp.DataType.build("VARCHAR(65533)", dialect="starrocks"),
+            },
+            exp.DataType.build("DATE", dialect="starrocks"): {
+                exp.DataType.build("DATETIME", dialect="starrocks"),
+            },
+        },
+        "types_with_unlimited_length": {
+            # STRING is an alias for VARCHAR(65533).
+            exp.DataType.build("STRING", dialect="starrocks").this: {
+                exp.DataType.build("VARCHAR", dialect="starrocks").this,
+            },
+        },
+    }
 
     VIEW_SUPPORTED_PRIVILEGES: t.FrozenSet[str] = frozenset({"SELECT"})
     _TABLE_TYPE_MAP = {
@@ -87,6 +140,118 @@ class StarRocksEngineAdapter(
 
     def ping(self) -> None:
         self._connection_pool.get().ping(reconnect=False)
+
+    def alter_table(
+        self,
+        alter_expressions: t.Union[t.List[exp.Alter], t.List[TableAlterOperation]],
+    ) -> None:
+        if not alter_expressions or isinstance(alter_expressions[0], exp.Alter):
+            super().alter_table(t.cast(t.List[exp.Alter], alter_expressions))
+            return
+
+        full_columns: t.Optional[t.Dict[str, t.Tuple[t.Any, ...]]] = None
+        alter_statements: t.List[exp.Alter] = []
+
+        for alter_operation in t.cast(t.List[TableAlterOperation], alter_expressions):
+            if not (
+                isinstance(alter_operation, TableAlterChangeColumnTypeOperation)
+                and len(alter_operation.column_parts) == 1
+                and alter_operation.column_parts[0].is_primitive
+            ):
+                alter_statements.append(alter_operation.expression)
+                continue
+
+            if full_columns is None:
+                full_columns = self._get_full_columns(alter_operation.target_table)
+
+            alter_statements.append(
+                self._build_modify_column_expression(
+                    alter_operation,
+                    full_columns[alter_operation.column_parts[0].name],
+                )
+            )
+
+        for alter_statement in alter_statements:
+            table = exp.to_table(alter_statement.this)
+            latest_job = self._get_latest_schema_change_job(table)
+            previous_job_id = int(latest_job[0]) if latest_job else None
+
+            super().alter_table([alter_statement])
+            self._wait_for_schema_change(table, previous_job_id)
+
+    def _get_latest_schema_change_job(self, table: exp.Table) -> t.Optional[t.Tuple[t.Any, ...]]:
+        database = (
+            f" FROM {exp.to_identifier(table.db).sql(dialect=self.dialect, identify=True)}"
+            if table.db
+            else ""
+        )
+        rows = self.fetchall(
+            f"SHOW ALTER TABLE COLUMN{database} "
+            f"WHERE TableName = {exp.Literal.string(table.name).sql(dialect=self.dialect)} "
+            "ORDER BY JobId DESC LIMIT 1"
+        )
+        return rows[0] if rows else None
+
+    def _wait_for_schema_change(self, table: exp.Table, previous_job_id: t.Optional[int]) -> None:
+        timeout = float(self._extra_config.get("schema_change_timeout", 3600))
+        poll_interval = float(self._extra_config.get("schema_change_poll_interval", 1))
+        deadline = time.monotonic() + timeout
+        state = progress = None
+
+        while True:
+            job = self._get_latest_schema_change_job(table)
+            if job and (previous_job_id is None or int(job[0]) > previous_job_id):
+                job_id = int(job[0])
+                state = str(job[9]).upper()
+                progress = job[11]
+                if state == "FINISHED":
+                    return
+                if state in {"CANCELLED", "CANCELED", "FAILED"}:
+                    raise SQLMeshError(
+                        f"StarRocks schema change job {job_id} for {table} failed: {job[10]}"
+                    )
+
+            if time.monotonic() >= deadline:
+                details = f" Last state: {state}, progress: {progress}." if state else ""
+                raise SQLMeshError(
+                    f"Timed out after {timeout:g} seconds waiting for a StarRocks schema "
+                    f"change on {table}.{details}"
+                )
+            time.sleep(poll_interval)
+
+    def _get_full_columns(self, table: exp.Table) -> t.Dict[str, t.Tuple[t.Any, ...]]:
+        table = table.copy()
+        table.set("catalog", None)
+        return {
+            str(row[0]): row
+            for row in self.fetchall(
+                f"SHOW FULL COLUMNS FROM {table.sql(dialect=self.dialect, identify=True)}"
+            )
+        }
+
+    def _build_modify_column_expression(
+        self,
+        operation: TableAlterChangeColumnTypeOperation,
+        column_metadata: t.Tuple[t.Any, ...],
+    ) -> exp.Alter:
+        _, _, _, nullable, key, default, extra, _, comment = column_metadata
+        definition = [
+            operation.column.sql(dialect=self.dialect, identify=True),
+            operation.column_type.sql(dialect=self.dialect),
+            "KEY" if str(key).upper() == "YES" else str(extra or ""),
+            "NULL" if str(nullable).upper() == "YES" else "NOT NULL",
+        ]
+        for keyword, value in (("DEFAULT", default), ("COMMENT", comment)):
+            if value is not None:
+                definition.extend(
+                    [keyword, exp.Literal.string(str(value)).sql(dialect=self.dialect)]
+                )
+
+        return exp.Alter(
+            this=operation.target_table,
+            kind="TABLE",
+            actions=[exp.Command(this=f"MODIFY COLUMN {' '.join(filter(None, definition))}")],
+        )
 
     def create_schema(
         self,

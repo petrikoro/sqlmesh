@@ -2485,6 +2485,8 @@ class StarRocksConnectionConfig(ConnectionConfig):
     charset: t.Optional[str] = None
     collation: t.Optional[str] = None
     ssl_disabled: t.Optional[bool] = None
+    schema_change_timeout: float = Field(default=3600, gt=0)
+    schema_change_poll_interval: float = Field(default=1, gt=0)
 
     concurrent_tasks: int = 1
     register_comments: bool = True
@@ -2532,6 +2534,13 @@ class StarRocksConnectionConfig(ConnectionConfig):
     def _static_connection_kwargs(self) -> t.Dict[str, t.Any]:
         # Enable dynamic_overwrite for correct INSERT OVERWRITE behavior
         return {"init_command": "SET dynamic_overwrite = true"}
+
+    @property
+    def _extra_engine_config(self) -> t.Dict[str, t.Any]:
+        return {
+            "schema_change_timeout": self.schema_change_timeout,
+            "schema_change_poll_interval": self.schema_change_poll_interval,
+        }
 
 
 class RisingwaveConnectionConfig(ConnectionConfig):

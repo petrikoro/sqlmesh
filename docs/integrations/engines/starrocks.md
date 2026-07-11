@@ -18,18 +18,20 @@ pip install "sqlmesh[starrocks]"
 
 StarRocks uses the MySQL protocol for connections. Therefore, the connection parameters are similar to [MySQL](./mysql.md).
 
-| Option             | Description                                                      |  Type  | Required |
-|--------------------|------------------------------------------------------------------|:------:|:--------:|
-| `type`             | Engine type name - must be `starrocks`                           | string |    Y     |
-| `host`             | The hostname of the StarRocks FE (Frontend) server               | string |    Y     |
-| `user`             | The username to use for authentication with the StarRocks server | string |    Y     |
-| `password`         | The password to use for authentication with the StarRocks server | string |    Y     |
-| `port`             | The port number of the StarRocks server (default: 9030)          | int    |    N     |
-| `database`         | The target database                                              | string |    N     |
-| `charset`          | The character set used for the connection                        | string |    N     |
-| `collation`        | The collation used for the connection                            | string |    N     |
-| `ssl_disabled`     | Whether SSL is disabled                                          | bool   |    N     |
-| `concurrent_tasks` | The maximum number of concurrent tasks              | int    |    N     |
+| Option                        | Description                                                                  |  Type  | Required |
+|-------------------------------|------------------------------------------------------------------------------|:------:|:--------:|
+| `type`                        | Engine type name - must be `starrocks`                                       | string |    Y     |
+| `host`                        | The hostname of the StarRocks FE (Frontend) server                           | string |    Y     |
+| `user`                        | The username to use for authentication with the StarRocks server             | string |    Y     |
+| `password`                    | The password to use for authentication with the StarRocks server             | string |    Y     |
+| `port`                        | The port number of the StarRocks server (default: 9030)                      | int    |    N     |
+| `database`                    | The target database                                                          | string |    N     |
+| `charset`                     | The character set used for the connection                                    | string |    N     |
+| `collation`                   | The collation used for the connection                                        | string |    N     |
+| `ssl_disabled`                | Whether SSL is disabled                                                      | bool   |    N     |
+| `concurrent_tasks`            | The maximum number of concurrent tasks                                       | int    |    N     |
+| `schema_change_timeout`       | Seconds to wait for an asynchronous schema change (default: 3600)            | float  |    N     |
+| `schema_change_poll_interval` | Seconds between asynchronous schema change status checks (default: 1)        | float  |    N     |
 
 ## Model Configuration
 
