@@ -1237,6 +1237,7 @@ def test_starrocks(make_config):
     )
     assert isinstance(config, StarRocksConnectionConfig)
     assert config.is_recommended_for_state_sync is False
+    assert config.get_catalog() == "default_catalog"
 
     # Test with all optional parameters
     config = make_config(
@@ -1266,6 +1267,7 @@ def test_starrocks(make_config):
     assert config.schema_change_timeout == 120
     assert config.schema_change_poll_interval == 0.25
     assert config.concurrent_tasks == 8
+    assert config.get_catalog() == "default_catalog"
     assert config._extra_engine_config == {
         "schema_change_timeout": 120,
         "schema_change_poll_interval": 0.25,
