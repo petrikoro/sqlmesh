@@ -2542,6 +2542,8 @@ class StarRocksConnectionConfig(ConnectionConfig):
             "schema_change_poll_interval": self.schema_change_poll_interval,
         }
 
+    def get_catalog(self) -> str:
+        return "default_catalog"
 
 class RisingwaveConnectionConfig(ConnectionConfig):
     host: str
