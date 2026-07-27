@@ -521,7 +521,8 @@ def test_intervals_with_end_date_on_model(
     assert len(snapshot_to_batches) == 0
 
 
-def test_external_model_audit(mocker, make_snapshot):
+@pytest.mark.parametrize(("skip_audits", "expected_audit_count"), [(False, 1), (True, 0)])
+def test_external_model_audit(mocker, make_snapshot, skip_audits, expected_audit_count):
     model = load_sql_based_model(
         parse(  # type: ignore
             """
@@ -541,12 +542,14 @@ def test_external_model_audit(mocker, make_snapshot):
     snapshot.categorize_as(SnapshotChangeCategory.BREAKING)
 
     evaluator = SnapshotEvaluator(adapters=mocker.MagicMock())
+    evaluator.adapter.fetchone.return_value = (0,)
     spy = mocker.spy(evaluator, "_audit")
+    state_sync = mocker.MagicMock()
 
     scheduler = Scheduler(
         snapshots=[snapshot],
         snapshot_evaluator=evaluator,
-        state_sync=mocker.MagicMock(),
+        state_sync=state_sync,
         max_workers=2,
         default_catalog=None,
     )
@@ -556,9 +559,11 @@ def test_external_model_audit(mocker, make_snapshot):
         "2022-01-01",
         "2022-01-01",
         "2022-01-30",
+        skip_audits=skip_audits,
     )
 
-    spy.assert_called_once()
+    assert spy.call_count == expected_audit_count
+    state_sync.add_interval.assert_called_once()
 
 
 def test_audit_failure_notifications(

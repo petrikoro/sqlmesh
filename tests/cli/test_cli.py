@@ -759,6 +759,16 @@ def test_run_no_prod(runner, tmp_path):
     assert "Error: Environment 'prod' was not found." in result.output
 
 
+def test_run_skip_audits_option(runner, mocker):
+    context = mocker.MagicMock()
+    context.run.return_value.is_failure = False
+
+    result = runner.invoke(cli.commands["run"], ["--skip-audits"], obj=context)
+
+    assert result.exit_code == 0
+    assert context.run.call_args.kwargs["skip_audits"] is True
+
+
 @pytest.mark.parametrize("flag", ["--skip-backfill", "--dry-run"])
 @time_machine.travel(FREEZE_TIME)
 def test_run_dev(runner, tmp_path, flag):

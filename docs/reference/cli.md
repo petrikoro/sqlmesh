@@ -505,6 +505,7 @@ Options:
   -e, --end TEXT                The end datetime of the interval for which
                                 this command will be applied.
   --skip-janitor                Skip the janitor task.
+  --skip-audits                 Skip audits during model evaluation.
   --ignore-cron                 Run for all missing intervals, ignoring
                                 individual cron schedules.
   --select-model TEXT           Select specific models to run. Note: this

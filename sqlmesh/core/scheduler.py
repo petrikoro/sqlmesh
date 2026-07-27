@@ -200,6 +200,7 @@ class Scheduler:
         allow_destructive_snapshots: t.Optional[t.Set[str]] = None,
         allow_additive_snapshots: t.Optional[t.Set[str]] = None,
         target_table_exists: t.Optional[bool] = None,
+        skip_audits: bool = False,
         **kwargs: t.Any,
     ) -> t.List[AuditResult]:
         """Evaluate a snapshot and add the processed interval to the state sync.
@@ -215,6 +216,7 @@ class Scheduler:
             batch_index: If the snapshot is part of a batch of related snapshots; which index in the batch is it
             auto_restatement_enabled: Whether to enable auto restatements.
             target_table_exists: Whether the target table exists. If None, the table will be checked for existence.
+            skip_audits: Whether to skip audits during model evaluation.
             kwargs: Additional kwargs to pass to the renderer.
 
         Returns:
@@ -248,6 +250,7 @@ class Scheduler:
             snapshots=snapshots,
             deployability_index=deployability_index,
             wap_id=wap_id,
+            skip_audits=skip_audits,
             **kwargs,
         )
 
@@ -272,6 +275,7 @@ class Scheduler:
         deployability_index: t.Optional[DeployabilityIndex] = None,
         auto_restatement_enabled: bool = False,
         run_environment_statements: bool = False,
+        skip_audits: bool = False,
     ) -> CompletionStatus:
         return self._run_or_audit(
             environment=environment,
@@ -288,6 +292,7 @@ class Scheduler:
             deployability_index=deployability_index,
             auto_restatement_enabled=auto_restatement_enabled,
             run_environment_statements=run_environment_statements,
+            skip_audits=skip_audits,
             is_run=True,
         )
 
@@ -438,6 +443,7 @@ class Scheduler:
         auto_restatement_triggers: t.Dict[SnapshotId, t.List[SnapshotId]] = {},
         is_restatement: bool = False,
         is_run: bool = False,
+        skip_audits: bool = False,
     ) -> t.Tuple[t.List[NodeExecutionFailedError[SchedulingUnit]], t.List[SchedulingUnit]]:
         """Runs precomputed batches of missing intervals.
 
@@ -567,6 +573,7 @@ class Scheduler:
                             target_table_exists=target_table_exists,
                             selected_models=selected_models,
                             is_run=is_run,
+                            skip_audits=skip_audits,
                         )
 
                     evaluation_duration_ms = now_timestamp() - execution_start_ts
@@ -792,6 +799,7 @@ class Scheduler:
         run_environment_statements: bool = False,
         audit_only: bool = False,
         is_run: bool = False,
+        skip_audits: bool = False,
     ) -> CompletionStatus:
         """Concurrently runs or audits all snapshots in topological order.
 
@@ -884,6 +892,7 @@ class Scheduler:
             run_environment_statements=run_environment_statements,
             audit_only=audit_only,
             auto_restatement_triggers=auto_restatement_triggers,
+            skip_audits=skip_audits,
             selected_models={
                 s.node.dbt_unique_id for s in merged_intervals if s.node.dbt_unique_id
             },

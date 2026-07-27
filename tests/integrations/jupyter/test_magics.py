@@ -317,10 +317,17 @@ def test_plan(
 @pytest.mark.slow
 @time_machine.travel("2023-01-03 00:00:00 UTC")
 def test_run_dag(
-    notebook, loaded_sushi_context, convert_all_html_output_to_text, get_all_html_output
+    notebook,
+    loaded_sushi_context,
+    convert_all_html_output_to_text,
+    get_all_html_output,
+    mocker,
 ):
+    run_spy = mocker.spy(loaded_sushi_context, "run")
     with capture_output() as output:
-        notebook.run_line_magic(magic_name="run_dag", line="")
+        notebook.run_line_magic(magic_name="run_dag", line="--skip-audits")
+
+    assert run_spy.call_args.kwargs["skip_audits"] is True
 
     assert not output.stdout.startswith(
         "'Executing model batches ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100.0% • 18/18"
