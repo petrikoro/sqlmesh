@@ -563,6 +563,11 @@ class SQLMeshMagics(Magics):
     @argument("--end", "-e", type=str, help="End date to evaluate.")
     @argument("--skip-janitor", action="store_true", help="Skip the janitor task.")
     @argument(
+        "--skip-audits",
+        action="store_true",
+        help="Skip audits during model evaluation.",
+    )
+    @argument(
         "--ignore-cron",
         action="store_true",
         help="Run for all missing intervals, ignoring individual cron schedules.",
@@ -594,6 +599,7 @@ class SQLMeshMagics(Magics):
             start=args.start,
             end=args.end,
             skip_janitor=args.skip_janitor,
+            skip_audits=args.skip_audits,
             ignore_cron=args.ignore_cron,
             select_models=args.select_model,
             exit_on_env_update=args.exit_on_env_update,

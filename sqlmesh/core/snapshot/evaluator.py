@@ -574,6 +574,7 @@ class SnapshotEvaluator:
         deployability_index: t.Optional[DeployabilityIndex] = None,
         wap_id: t.Optional[str] = None,
         is_run: bool = False,
+        skip_audits: bool = False,
         **kwargs: t.Any,
     ) -> t.List[AuditResult]:
         """Execute a snapshot's node's audit queries.
@@ -587,6 +588,7 @@ class SnapshotEvaluator:
             deployability_index: Determines snapshots that are deployable in the context of this evaluation.
             wap_id: The WAP ID if applicable, None otherwise.
             is_run: Whether this audit is being executed as part of `sqlmesh run` (as opposed to `plan/apply`).
+            skip_audits: Whether to skip all audit queries.
             kwargs: Additional kwargs to pass to the renderer.
         """
         deployability_index = deployability_index or DeployabilityIndex.all_deployable()
@@ -616,7 +618,7 @@ class SnapshotEvaluator:
 
         results = []
 
-        audits_with_args = snapshot.node.audits_with_args
+        audits_with_args = [] if skip_audits else snapshot.node.audits_with_args
 
         force_non_blocking = False
 

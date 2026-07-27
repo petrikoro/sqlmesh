@@ -159,7 +159,7 @@ options:
 
 #### run_dag
 ```
-%run_dag [--start START] [--end END] [--skip-janitor] [--ignore-cron]
+%run_dag [--start START] [--end END] [--skip-janitor] [--skip-audits] [--ignore-cron]
                [environment]
 
 Evaluate the DAG of models using the built-in scheduler.
@@ -172,6 +172,7 @@ options:
                         Start date to evaluate.
   --end END, -e END     End date to evaluate.
   --skip-janitor        Skip the janitor task.
+  --skip-audits         Skip audits during model evaluation.
   --ignore-cron         Run for all missing intervals, ignoring individual
                         cron schedules.
 ```

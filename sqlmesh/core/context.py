@@ -776,6 +776,7 @@ class GenericContext(BaseContext, t.Generic[C]):
         end: t.Optional[TimeLike] = None,
         execution_time: t.Optional[TimeLike] = None,
         skip_janitor: bool = False,
+        skip_audits: bool = False,
         ignore_cron: bool = False,
         select_models: t.Optional[t.Collection[str]] = None,
         exit_on_env_update: t.Optional[int] = None,
@@ -789,6 +790,7 @@ class GenericContext(BaseContext, t.Generic[C]):
             end: The end of the interval to render.
             execution_time: The date/time time reference to use for execution time. Defaults to now.
             skip_janitor: Whether to skip the janitor task.
+            skip_audits: Whether to skip audits during model evaluation.
             ignore_cron: Whether to ignore the model's cron schedule and run all available missing intervals.
             select_models: A list of model selection expressions to filter models that should run. Note that
                 upstream dependencies of selected models will also be evaluated.
@@ -860,6 +862,7 @@ class GenericContext(BaseContext, t.Generic[C]):
                     end=end,
                     execution_time=execution_time,
                     ignore_cron=ignore_cron,
+                    skip_audits=skip_audits,
                     select_models=select_models,
                     circuit_breaker=_has_environment_changed,
                     no_auto_upstream=no_auto_upstream,
@@ -2601,6 +2604,7 @@ class GenericContext(BaseContext, t.Generic[C]):
         end: t.Optional[TimeLike],
         execution_time: t.Optional[TimeLike],
         ignore_cron: bool,
+        skip_audits: bool,
         select_models: t.Optional[t.Collection[str]],
         circuit_breaker: t.Optional[t.Callable[[], bool]],
         no_auto_upstream: bool,
@@ -2619,6 +2623,7 @@ class GenericContext(BaseContext, t.Generic[C]):
             end=end,
             execution_time=execution_time,
             ignore_cron=ignore_cron,
+            skip_audits=skip_audits,
             circuit_breaker=circuit_breaker,
             selected_snapshots=select_models,
             auto_restatement_enabled=environment.lower() == c.PROD,

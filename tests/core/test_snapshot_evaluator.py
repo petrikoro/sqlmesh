@@ -3344,6 +3344,10 @@ def test_standalone_audit(mocker: MockerFixture, adapter_mock, make_snapshot):
         select("COUNT(*)").from_(query.subquery("audit")), quote_identifiers=True
     )
 
+    adapter_mock.reset_mock()
+    assert evaluator.audit(snapshot=snapshot, snapshots={}, skip_audits=True) == []
+    adapter_mock.fetchone.assert_not_called()
+
     # Promote
     adapter_mock.reset_mock()
 
@@ -3421,6 +3425,29 @@ def test_audit_wap(adapter_mock: Mock, make_snapshot: t.Callable[..., Snapshot])
     )
 
     adapter_mock.wap_table_name.assert_called_once_with(snapshot.table_name(), wap_id)
+    adapter_mock.wap_publish.assert_called_once_with(snapshot.table_name(), wap_id)
+
+
+def test_skip_audits_wap(adapter_mock: Mock, make_snapshot: t.Callable[..., Snapshot]) -> None:
+    evaluator = SnapshotEvaluator(adapter_mock)
+
+    model = SqlModel(
+        name="test_schema.test_table",
+        kind=FullKind(),
+        query=parse_one("SELECT a::int FROM tbl"),
+        audits=[("not_null", {"columns": exp.to_column("a")})],
+    )
+    snapshot = make_snapshot(model)
+    snapshot.categorize_as(SnapshotChangeCategory.BREAKING)
+
+    wap_id = "test_wap_id"
+    adapter_mock.wap_table_name.return_value = (
+        f"spark_catalog.test_schema.test_table.branch_wap_{wap_id}"
+    )
+
+    assert evaluator.audit(snapshot, snapshots={}, wap_id=wap_id, skip_audits=True) == []
+
+    adapter_mock.fetchone.assert_not_called()
     adapter_mock.wap_publish.assert_called_once_with(snapshot.table_name(), wap_id)
 
 

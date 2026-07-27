@@ -593,6 +593,7 @@ def plan(
 @opt.start_time
 @opt.end_time
 @click.option("--skip-janitor", is_flag=True, help="Skip the janitor task.")
+@click.option("--skip-audits", is_flag=True, help="Skip audits during model evaluation.")
 @click.option(
     "--ignore-cron",
     is_flag=True,
