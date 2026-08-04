@@ -677,6 +677,15 @@ SELECT * FROM sqlmesh.sushi__items__1836721418_83893210 WHERE ds BETWEEN '2022-0
 Done.
 ```
 
+To run blocking and non-blocking audits separately, select the type with `--audit-type`:
+
+```bash
+sqlmesh -p project audit --audit-type blocking
+sqlmesh -p project audit --audit-type non-blocking
+```
+
+When `--audit-type` is omitted, all audits run. The model-level `blocking` argument takes precedence over the audit definition, and the command uses that effective value when selecting audits.
+
 ### Automated auditing
 When you apply a plan, SQLMesh will automatically run each model's audits.
 
@@ -726,7 +735,7 @@ MODEL (
 ### Run-only audits
 Some audits are only meaningful during scheduled `sqlmesh run` executions and would produce false failures during `plan` -- for example, data freshness checks. A freshness audit verifies that data has been recently updated, but during local development or plan application the target table may not have up-to-date data, causing the audit to fail unnecessarily.
 
-Setting `run_only` to `true` causes the audit to be **completely skipped** during `plan` and only executed during `sqlmesh run`:
+Setting `run_only` to `true` causes the audit to be **completely skipped** during `plan`. It is executed during `sqlmesh run` and when explicitly invoked with `sqlmesh audit`:
 
 ```sql linenums="1" hl_lines="4"
 AUDIT (

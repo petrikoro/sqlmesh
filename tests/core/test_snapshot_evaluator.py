@@ -3542,6 +3542,47 @@ def test_audit_set_blocking_at_use_site(adapter_mock, make_snapshot):
     assert results[0].blocking
 
 
+@pytest.mark.parametrize(
+    ("audit_type", "expected_audit_names"),
+    [
+        ("blocking", ["blocking_default", "non_blocking_overridden"]),
+        ("non-blocking", ["non_blocking_default", "blocking_overridden"]),
+    ],
+)
+def test_audit_type(adapter_mock, make_snapshot, audit_type, expected_audit_names):
+    evaluator = SnapshotEvaluator(adapter_mock)
+    audits = {
+        "blocking_default": ModelAudit(name="blocking_default", query="SELECT 1"),
+        "non_blocking_default": ModelAudit(
+            name="non_blocking_default", query="SELECT 1", blocking=False
+        ),
+        "blocking_overridden": ModelAudit(name="blocking_overridden", query="SELECT 1"),
+        "non_blocking_overridden": ModelAudit(
+            name="non_blocking_overridden", query="SELECT 1", blocking=False
+        ),
+    }
+    model = SqlModel(
+        name="test_schema.test_table",
+        kind=FullKind(),
+        query=parse_one("SELECT 1 AS value"),
+        audits=[
+            ("blocking_default", {}),
+            ("non_blocking_default", {}),
+            ("blocking_overridden", {"blocking": exp.false()}),
+            ("non_blocking_overridden", {"blocking": exp.true()}),
+        ],
+        audit_definitions=audits,
+    )
+    snapshot = make_snapshot(model)
+    snapshot.categorize_as(SnapshotChangeCategory.BREAKING)
+    adapter_mock.fetchone.return_value = (0,)
+
+    results = evaluator.audit(snapshot, snapshots={}, audit_type=audit_type)
+
+    assert [result.audit.name for result in results] == expected_audit_names
+    assert adapter_mock.fetchone.call_count == 2
+
+
 def test_audit_run_only_skipped_during_plan(adapter_mock, make_snapshot):
     """Audits with run_only=True should be skipped when is_run=False (plan path)."""
     evaluator = SnapshotEvaluator(adapter_mock)

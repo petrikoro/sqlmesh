@@ -575,6 +575,7 @@ class SnapshotEvaluator:
         wap_id: t.Optional[str] = None,
         is_run: bool = False,
         skip_audits: bool = False,
+        audit_type: t.Optional[t.Literal["blocking", "non-blocking"]] = None,
         **kwargs: t.Any,
     ) -> t.List[AuditResult]:
         """Execute a snapshot's node's audit queries.
@@ -587,8 +588,10 @@ class SnapshotEvaluator:
             execution_time: The date/time time reference to use for execution time.
             deployability_index: Determines snapshots that are deployable in the context of this evaluation.
             wap_id: The WAP ID if applicable, None otherwise.
-            is_run: Whether this audit is being executed as part of `sqlmesh run` (as opposed to `plan/apply`).
+            is_run: Whether this audit is being executed as part of `sqlmesh run` or an explicit
+                audit command (as opposed to `plan/apply`).
             skip_audits: Whether to skip all audit queries.
+            audit_type: The type of audits to execute. All audit types execute if not set.
             kwargs: Additional kwargs to pass to the renderer.
         """
         deployability_index = deployability_index or DeployabilityIndex.all_deployable()
@@ -637,6 +640,13 @@ class SnapshotEvaluator:
                 audit_args.pop("blocking", None)
                 # so that we can fall back to the audit's setting, which we override to blocking: False
                 audit = audit.model_copy(update={"blocking": False})
+
+            blocking_override = audit_args.get("blocking")
+            is_blocking = (
+                blocking_override == exp.true() if blocking_override else audit.blocking
+            )
+            if audit_type is not None and is_blocking != (audit_type == "blocking"):
+                continue
 
             results.append(
                 self._audit(
