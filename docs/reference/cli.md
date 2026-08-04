@@ -60,13 +60,16 @@ Usage: sqlmesh audit [OPTIONS]
   Run audits for the target model(s).
 
 Options:
-  --model TEXT           A model to audit. Multiple models can be audited.
-  -s, --start TEXT       The start datetime of the interval for which this
-                         command will be applied.
-  -e, --end TEXT         The end datetime of the interval for which this
-                         command will be applied.
-  --execution-time TEXT  The execution time (defaults to now).
-  --help                 Show this message and exit.
+  --model TEXT                    A model to audit. Multiple models can be
+                                  audited.
+  --audit-type [blocking|non-blocking]
+                                  Only run audits of the selected type.
+  -s, --start TEXT                The start datetime of the interval for which
+                                  this command will be applied.
+  -e, --end TEXT                  The end datetime of the interval for which
+                                  this command will be applied.
+  --execution-time TEXT           The execution time (defaults to now).
+  --help                          Show this message and exit.
 ```
 
 ## check_intervals

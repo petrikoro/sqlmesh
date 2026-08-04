@@ -3212,6 +3212,25 @@ def test_audit():
     assert context.audit(models=["dummy"], start="2020-01-01", end="2020-01-01") is True
 
 
+def test_audit_type(mocker):
+    context = Context(config=Config())
+    snapshot = mocker.MagicMock()
+    snapshot.node.audits_with_args = []
+    mocker.patch.object(context, "get_snapshot", return_value=snapshot)
+    snapshot_evaluator = mocker.MagicMock()
+    snapshot_evaluator.audit.return_value = []
+    context._snapshot_evaluator = snapshot_evaluator
+
+    assert context.audit(
+        models=["dummy"],
+        audit_type="non-blocking",
+        start="2020-01-01",
+        end="2020-01-01",
+    )
+    assert snapshot_evaluator.audit.call_args.kwargs["audit_type"] == "non-blocking"
+    assert snapshot_evaluator.audit.call_args.kwargs["is_run"] is True
+
+
 def test_prompt_if_uncategorized_snapshot(mocker: MockerFixture, tmp_path: Path) -> None:
     init_example_project(tmp_path, engine_type="duckdb")
 

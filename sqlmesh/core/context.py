@@ -2339,6 +2339,7 @@ class GenericContext(BaseContext, t.Generic[C]):
         end: TimeLike,
         *,
         models: t.Optional[t.Iterator[str]] = None,
+        audit_type: t.Optional[t.Literal["blocking", "non-blocking"]] = None,
         execution_time: t.Optional[TimeLike] = None,
     ) -> bool:
         """Audit models.
@@ -2347,6 +2348,7 @@ class GenericContext(BaseContext, t.Generic[C]):
             start: The start of the interval to audit.
             end: The end of the interval to audit.
             models: The models to audit. All models will be audited if not specified.
+            audit_type: The type of audits to run. All audit types will run if not specified.
             execution_time: The date/time time reference to use for execution time. Defaults to now.
 
         Returns:
@@ -2371,6 +2373,8 @@ class GenericContext(BaseContext, t.Generic[C]):
                 end=end,
                 execution_time=execution_time,
                 snapshots=self.snapshots,
+                audit_type=audit_type,
+                is_run=True,
             ):
                 audit_id = f"{audit_result.audit.name}"
                 if audit_result.model:

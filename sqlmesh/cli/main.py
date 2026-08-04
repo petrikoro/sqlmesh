@@ -824,6 +824,11 @@ def test(
     multiple=True,
     help="A model to audit. Multiple models can be audited.",
 )
+@click.option(
+    "--audit-type",
+    type=click.Choice(["blocking", "non-blocking"], case_sensitive=False),
+    help="Only run audits of the selected type.",
+)
 @opt.start_time
 @opt.end_time
 @opt.execution_time
@@ -833,12 +838,19 @@ def test(
 def audit(
     obj: Context,
     models: t.Iterator[str],
+    audit_type: t.Optional[t.Literal["blocking", "non-blocking"]],
     start: TimeLike,
     end: TimeLike,
     execution_time: t.Optional[TimeLike] = None,
 ) -> None:
     """Run audits for the target model(s)."""
-    if not obj.audit(models=models, start=start, end=end, execution_time=execution_time):
+    if not obj.audit(
+        models=models,
+        audit_type=audit_type,
+        start=start,
+        end=end,
+        execution_time=execution_time,
+    ):
         exit(1)
 
 

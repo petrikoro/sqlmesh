@@ -769,6 +769,32 @@ def test_run_skip_audits_option(runner, mocker):
     assert context.run.call_args.kwargs["skip_audits"] is True
 
 
+@pytest.mark.parametrize("audit_type", ["blocking", "non-blocking"])
+def test_audit_type_option(runner, mocker, audit_type):
+    context = mocker.MagicMock()
+    context.audit.return_value = True
+
+    result = runner.invoke(
+        cli.commands["audit"],
+        ["--audit-type", audit_type],
+        obj=context,
+    )
+
+    assert result.exit_code == 0
+    assert context.audit.call_args.kwargs["audit_type"] == audit_type
+
+
+def test_audit_type_option_rejects_invalid_value(runner, mocker):
+    result = runner.invoke(
+        cli.commands["audit"],
+        ["--audit-type", "invalid"],
+        obj=mocker.MagicMock(),
+    )
+
+    assert result.exit_code == 2
+    assert "Invalid value for '--audit-type'" in result.output
+
+
 @pytest.mark.parametrize("flag", ["--skip-backfill", "--dry-run"])
 @time_machine.travel(FREEZE_TIME)
 def test_run_dev(runner, tmp_path, flag):
