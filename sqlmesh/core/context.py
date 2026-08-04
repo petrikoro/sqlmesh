@@ -2345,8 +2345,8 @@ class GenericContext(BaseContext, t.Generic[C]):
         """Audit models.
 
         Args:
-            start: The start of the interval to audit.
-            end: The end of the interval to audit.
+            start: The start value available to audit date macros. Does not implicitly filter the model table.
+            end: The end value available to audit date macros. Does not implicitly filter the model table.
             models: The models to audit. All models will be audited if not specified.
             audit_type: The type of audits to run. All audit types will run if not specified.
             execution_time: The date/time time reference to use for execution time. Defaults to now.

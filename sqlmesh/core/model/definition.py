@@ -495,22 +495,6 @@ class _Model(ModelMeta, frozen=True):
             else self.fqn
         )
 
-        columns_to_types: t.Optional[t.Dict[str, t.Any]] = None
-        if "engine_adapter" in kwargs:
-            try:
-                columns_to_types = kwargs["engine_adapter"].columns(this_model)
-            except Exception:
-                pass
-
-        if self.time_column:
-            low, high = [
-                self.convert_to_time_column(dt, columns_to_types)
-                for dt in make_inclusive(start or c.EPOCH, end or c.EPOCH, self.dialect)
-            ]
-            where = self.time_column.column.between(low, high)
-        else:
-            where = None
-
         # The model's name is already normalized, but in case of snapshots we also prepend a
         # case-sensitive physical schema name, so we quote here to ensure that we won't have
         # a broken schema reference after the resulting query is normalized in `render`.
@@ -537,9 +521,7 @@ class _Model(ModelMeta, frozen=True):
             deployability_index=deployability_index,
             **{
                 **audit.defaults,
-                "this_model": exp.select("*").from_(quoted_model_name).where(where).subquery()
-                if where is not None
-                else quoted_model_name,
+                "this_model": quoted_model_name,
                 **kwargs,
             },  # type: ignore
         )

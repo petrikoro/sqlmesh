@@ -3067,7 +3067,7 @@ def create_log_view(evaluator, view_name):
     assert log_schema["my_schema"][0] == "db__dev"
 
 
-def test_plan_audit_intervals(tmp_path: pathlib.Path, caplog):
+def test_plan_audits_use_full_table(tmp_path: pathlib.Path, caplog):
     ctx = Context(
         paths=tmp_path, config=Config(model_defaults=ModelDefaultsConfig(dialect="duckdb"))
     )
@@ -3128,15 +3128,13 @@ def test_plan_audit_intervals(tmp_path: pathlib.Path, caplog):
     date_snapshot = next(s for s in plan.new_snapshots if "date_example" in s.name)
     timestamp_snapshot = next(s for s in plan.new_snapshots if "timestamp_example" in s.name)
 
-    # Case 1: The timestamp audit should be in the inclusive range ['2025-02-01 00:00:00', '2025-02-01 23:59:59.999999']
+    # Audits target the complete materialized tables without an implicit interval predicate.
     assert (
-        f"""SELECT COUNT(*) FROM (SELECT "timestamp_id" AS "timestamp_id" FROM (SELECT * FROM "sqlmesh__sqlmesh_audit"."sqlmesh_audit__timestamp_example__{timestamp_snapshot.version}" AS "sqlmesh_audit__timestamp_example__{timestamp_snapshot.version}" WHERE "timestamp_id" BETWEEN CAST('2025-02-01 00:00:00' AS TIMESTAMP) AND CAST('2025-02-01 23:59:59.999999' AS TIMESTAMP)) AS "_0" WHERE TRUE GROUP BY "timestamp_id" HAVING COUNT(*) > 1) AS "audit\""""
+        f"""SELECT COUNT(*) FROM (SELECT "timestamp_id" AS "timestamp_id" FROM "sqlmesh__sqlmesh_audit"."sqlmesh_audit__timestamp_example__{timestamp_snapshot.version}" AS "sqlmesh_audit__timestamp_example__{timestamp_snapshot.version}" WHERE TRUE GROUP BY "timestamp_id" HAVING COUNT(*) > 1) AS "audit\""""
         in caplog.text
     )
-
-    # Case 2: The date audit should be in the inclusive range ['2025-02-01', '2025-02-01']
     assert (
-        f"""SELECT COUNT(*) FROM (SELECT "date_id" AS "date_id" FROM (SELECT * FROM "sqlmesh__sqlmesh_audit"."sqlmesh_audit__date_example__{date_snapshot.version}" AS "sqlmesh_audit__date_example__{date_snapshot.version}" WHERE "date_id" BETWEEN CAST('2025-02-01' AS DATE) AND CAST('2025-02-01' AS DATE)) AS "_0" WHERE TRUE GROUP BY "date_id" HAVING COUNT(*) > 1) AS "audit\""""
+        f"""SELECT COUNT(*) FROM (SELECT "date_id" AS "date_id" FROM "sqlmesh__sqlmesh_audit"."sqlmesh_audit__date_example__{date_snapshot.version}" AS "sqlmesh_audit__date_example__{date_snapshot.version}" WHERE TRUE GROUP BY "date_id" HAVING COUNT(*) > 1) AS "audit\""""
         in caplog.text
     )
 

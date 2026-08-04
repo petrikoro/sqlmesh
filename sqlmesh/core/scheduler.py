@@ -21,6 +21,7 @@ from sqlmesh.core.snapshot import (
     Snapshot,
     SnapshotId,
     SnapshotIdBatch,
+    SnapshotIntervals,
     SnapshotEvaluator,
     apply_auto_restatements,
     earliest_start_date,
@@ -36,7 +37,7 @@ from sqlmesh.core.snapshot.definition import (
     parent_snapshots_by_name,
 )
 from sqlmesh.core.state_sync import StateSync
-from sqlmesh.utils import CompletionStatus
+from sqlmesh.utils import CompletionStatus, random_id
 from sqlmesh.utils.concurrency import concurrent_apply_to_dag, NodeExecutionFailedError
 from sqlmesh.utils.dag import DAG
 from sqlmesh.utils.date import (
@@ -88,6 +89,11 @@ class EvaluateNode(SchedulingUnit):
 
 @dataclass(frozen=True)
 class CreateNode(SchedulingUnit):
+    snapshot_name: str
+
+
+@dataclass(frozen=True)
+class AuditNode(SchedulingUnit):
     snapshot_name: str
 
 
@@ -224,16 +230,13 @@ class Scheduler:
         """
         validate_date_range(start, end)
 
-        snapshots = parent_snapshots_by_name(snapshot, self.snapshots)
-
         is_deployable = deployability_index.is_deployable(snapshot)
-
-        wap_id = self.snapshot_evaluator.evaluate(
-            snapshot,
+        snapshots = parent_snapshots_by_name(snapshot, self.snapshots)
+        wap_id = self._evaluate_batch(
+            snapshot=snapshot,
             start=start,
             end=end,
             execution_time=execution_time,
-            snapshots=snapshots,
             allow_destructive_snapshots=allow_destructive_snapshots,
             allow_additive_snapshots=allow_additive_snapshots,
             deployability_index=deployability_index,
@@ -258,6 +261,35 @@ class Scheduler:
             snapshot, start, end, is_dev=not is_deployable, last_altered_ts=now_timestamp()
         )
         return audit_results
+
+    def _evaluate_batch(
+        self,
+        snapshot: Snapshot,
+        start: TimeLike,
+        end: TimeLike,
+        execution_time: TimeLike,
+        deployability_index: DeployabilityIndex,
+        batch_index: int,
+        allow_destructive_snapshots: t.Optional[t.Set[str]] = None,
+        allow_additive_snapshots: t.Optional[t.Set[str]] = None,
+        target_table_exists: t.Optional[bool] = None,
+        wap_id: t.Optional[str] = None,
+        **kwargs: t.Any,
+    ) -> t.Optional[str]:
+        return self.snapshot_evaluator.evaluate(
+            snapshot,
+            start=start,
+            end=end,
+            execution_time=execution_time,
+            snapshots=parent_snapshots_by_name(snapshot, self.snapshots),
+            allow_destructive_snapshots=allow_destructive_snapshots,
+            allow_additive_snapshots=allow_additive_snapshots,
+            deployability_index=deployability_index,
+            batch_index=batch_index,
+            target_table_exists=target_table_exists,
+            wap_id=wap_id,
+            **kwargs,
+        )
 
     def run(
         self,
@@ -483,6 +515,32 @@ class Scheduler:
             dag=snapshot_dag,
             is_restatement=is_restatement,
         )
+
+        terminal_audit_snapshots = {
+            snapshot.name
+            for snapshot in batched_intervals
+            if snapshot.is_model and snapshot.node.audits_with_args and not skip_audits
+        }
+        if audit_only:
+            batched_intervals = {
+                snapshot: (
+                    [(intervals[0][0], intervals[-1][1])]
+                    if snapshot.name in terminal_audit_snapshots and intervals
+                    else intervals
+                )
+                for snapshot, intervals in batched_intervals.items()
+            }
+
+        materialization_wap_ids = {
+            snapshot.name: random_id(short=True)
+            for snapshot in batched_intervals
+            if not audit_only
+            and snapshot.name in terminal_audit_snapshots
+            and self.snapshot_evaluator.get_adapter(snapshot.model_gateway).wap_enabled
+        }
+        active_wap_ids: t.Dict[str, t.Optional[str]] = {}
+        deferred_progress: t.Dict[str, t.Tuple[t.Optional[int], t.Any]] = {}
+
         self.console.start_evaluation_progress(
             batched_intervals,
             environment_naming_info,
@@ -522,7 +580,12 @@ class Scheduler:
         }
 
         dag = self._dag(
-            batched_intervals, snapshot_dag=snapshot_dag, snapshots_to_create=snapshots_to_create
+            batched_intervals,
+            snapshot_dag=snapshot_dag,
+            snapshots_to_create=snapshots_to_create,
+            terminal_audit_snapshots=terminal_audit_snapshots,
+            audit_only=audit_only,
+            serial_snapshots=set(materialization_wap_ids),
         )
 
         def run_node(node: SchedulingUnit) -> None:
@@ -538,6 +601,7 @@ class Scheduler:
                 execution_start_ts = now_timestamp()
                 evaluation_duration_ms: t.Optional[int] = None
                 start, end = node.interval
+                evaluation_completed = False
 
                 audit_results: t.List[AuditResult] = []
                 try:
@@ -560,23 +624,40 @@ class Scheduler:
                         target_table_exists = (
                             snapshot.snapshot_id not in snapshots_to_create or node.batch_index > 0
                         )
-                        audit_results = self.evaluate(
-                            snapshot=snapshot,
-                            environment_naming_info=environment_naming_info,
-                            start=start,
-                            end=end,
-                            execution_time=execution_time,
-                            deployability_index=deployability_index,
-                            batch_index=node.batch_index,
-                            allow_destructive_snapshots=allow_destructive_snapshots,
-                            allow_additive_snapshots=allow_additive_snapshots,
-                            target_table_exists=target_table_exists,
-                            selected_models=selected_models,
-                            is_run=is_run,
-                            skip_audits=skip_audits,
-                        )
+                        if snapshot.name in terminal_audit_snapshots:
+                            active_wap_ids[snapshot.name] = self._evaluate_batch(
+                                snapshot=snapshot,
+                                start=start,
+                                end=end,
+                                execution_time=execution_time,
+                                deployability_index=deployability_index,
+                                batch_index=node.batch_index,
+                                allow_destructive_snapshots=allow_destructive_snapshots,
+                                allow_additive_snapshots=allow_additive_snapshots,
+                                target_table_exists=target_table_exists,
+                                wap_id=materialization_wap_ids.get(snapshot.name),
+                                selected_models=selected_models,
+                                is_run=is_run,
+                            )
+                        else:
+                            audit_results = self.evaluate(
+                                snapshot=snapshot,
+                                environment_naming_info=environment_naming_info,
+                                start=start,
+                                end=end,
+                                execution_time=execution_time,
+                                deployability_index=deployability_index,
+                                batch_index=node.batch_index,
+                                allow_destructive_snapshots=allow_destructive_snapshots,
+                                allow_additive_snapshots=allow_additive_snapshots,
+                                target_table_exists=target_table_exists,
+                                selected_models=selected_models,
+                                is_run=is_run,
+                                skip_audits=skip_audits,
+                            )
 
                     evaluation_duration_ms = now_timestamp() - execution_start_ts
+                    evaluation_completed = True
                 finally:
                     num_audits = len(audit_results)
                     num_audits_failed = sum(1 for result in audit_results if result.count)
@@ -586,14 +667,99 @@ class Scheduler:
                         SnapshotIdBatch(snapshot_id=snapshot.snapshot_id, batch_id=node.batch_index)
                     )
 
+                    is_deferred_final_batch = (
+                        snapshot.name in terminal_audit_snapshots
+                        and node.batch_index == len(batched_intervals[snapshot]) - 1
+                        and evaluation_completed
+                    )
+                    if is_deferred_final_batch:
+                        deferred_progress[snapshot.name] = (
+                            evaluation_duration_ms,
+                            execution_stats,
+                        )
+                    else:
+                        self.console.update_snapshot_evaluation_progress(
+                            snapshot,
+                            batched_intervals[snapshot][node.batch_index],
+                            node.batch_index,
+                            evaluation_duration_ms,
+                            num_audits - num_audits_failed - num_audits_skipped,
+                            num_audits_failed,
+                            num_audits_skipped,
+                            execution_stats=execution_stats,
+                            auto_restatement_triggers=auto_restatement_triggers.get(
+                                snapshot.snapshot_id
+                            ),
+                        )
+            elif isinstance(node, AuditNode):
+                self.console.start_snapshot_evaluation_progress(snapshot, audit_only=audit_only)
+                intervals = batched_intervals[snapshot]
+                audit_start, audit_end = intervals[0][0], intervals[-1][1]
+                audit_start_ts = now_timestamp()
+                terminal_audit_results: t.List[AuditResult] = []
+                try:
+                    terminal_audit_results = self._audit_snapshot(
+                        snapshot=snapshot,
+                        environment_naming_info=environment_naming_info,
+                        deployability_index=deployability_index,
+                        snapshots=self.snapshots_by_name,
+                        start=audit_start,
+                        end=audit_end,
+                        execution_time=execution_time,
+                        wap_id=active_wap_ids.get(snapshot.name),
+                        publish_wap=False,
+                        is_run=is_run,
+                    )
+
+                    if wap_id := active_wap_ids.get(snapshot.name):
+                        self.snapshot_evaluator.wap_publish_snapshot(
+                            snapshot, wap_id, deployability_index
+                        )
+
+                    if not audit_only:
+                        is_dev = not deployability_index.is_deployable(snapshot)
+                        committed_intervals = [
+                            snapshot.inclusive_exclusive(
+                                interval_start,
+                                interval_end,
+                                strict=False,
+                                expand=False,
+                            )
+                            for interval_start, interval_end in intervals
+                        ]
+                        self.state_sync.add_snapshots_intervals(
+                            [
+                                SnapshotIntervals(
+                                    name=snapshot.name,
+                                    identifier=snapshot.identifier,
+                                    version=snapshot.version,
+                                    dev_version=snapshot.dev_version,
+                                    intervals=[] if is_dev else committed_intervals,
+                                    dev_intervals=committed_intervals if is_dev else [],
+                                    last_altered_ts=None if is_dev else now_timestamp(),
+                                    dev_last_altered_ts=now_timestamp() if is_dev else None,
+                                )
+                            ]
+                        )
+                finally:
+                    num_audits = len(terminal_audit_results)
+                    num_audits_failed = sum(1 for result in terminal_audit_results if result.count)
+                    num_audits_skipped = sum(
+                        1 for result in terminal_audit_results if result.skipped
+                    )
+                    audit_duration_ms = now_timestamp() - audit_start_ts
+                    evaluation_duration_ms, execution_stats = deferred_progress.get(
+                        snapshot.name, (0, None)
+                    )
                     self.console.update_snapshot_evaluation_progress(
                         snapshot,
-                        batched_intervals[snapshot][node.batch_index],
-                        node.batch_index,
-                        evaluation_duration_ms,
+                        (audit_start, audit_end),
+                        len(intervals) - 1,
+                        (evaluation_duration_ms or 0) + audit_duration_ms,
                         num_audits - num_audits_failed - num_audits_skipped,
                         num_audits_failed,
                         num_audits_skipped,
+                        audit_only=audit_only,
                         execution_stats=execution_stats,
                         auto_restatement_triggers=auto_restatement_triggers.get(
                             snapshot.snapshot_id
@@ -655,6 +821,9 @@ class Scheduler:
         batches: SnapshotToIntervals,
         snapshot_dag: t.Optional[DAG[SnapshotId]] = None,
         snapshots_to_create: t.Optional[t.Set[SnapshotId]] = None,
+        terminal_audit_snapshots: t.Optional[t.Set[str]] = None,
+        audit_only: bool = False,
+        serial_snapshots: t.Optional[t.Set[str]] = None,
     ) -> DAG[SchedulingUnit]:
         """Builds a DAG of snapshot intervals to be evaluated.
 
@@ -662,6 +831,9 @@ class Scheduler:
             batches: The batches of snapshots and intervals to evaluate.
             snapshot_dag: The DAG of all snapshots.
             snapshots_to_create: The snapshots with missing physical tables.
+            terminal_audit_snapshots: Model snapshots that must be audited after all batches.
+            audit_only: Whether this DAG only executes audits.
+            serial_snapshots: Snapshots whose batches must execute sequentially.
 
         Returns:
             A DAG of snapshot intervals to be evaluated.
@@ -671,6 +843,8 @@ class Scheduler:
             snapshot.name: intervals for snapshot, intervals in batches.items()
         }
         snapshots_to_create = snapshots_to_create or set()
+        terminal_audit_snapshots = terminal_audit_snapshots or set()
+        serial_snapshots = serial_snapshots or set()
         original_snapshots_to_create = snapshots_to_create.copy()
         upstream_dependencies_cache: t.Dict[SnapshotId, t.Set[SchedulingUnit]] = {}
 
@@ -693,17 +867,24 @@ class Scheduler:
                         intervals_per_snapshot,
                         original_snapshots_to_create,
                         upstream_dependencies_cache,
+                        terminal_audit_snapshots,
                     )
                 )
 
+            if audit_only and snapshot.name in terminal_audit_snapshots:
+                if intervals:
+                    dag.add(AuditNode(snapshot_name=snapshot.name), upstream_dependencies)
+                continue
+
             batch_concurrency = snapshot.node.batch_concurrency
             batch_size = snapshot.node.batch_size
-            if snapshot.depends_on_past:
+            if snapshot.depends_on_past or snapshot.name in serial_snapshots:
                 batch_concurrency = 1
 
             create_node: t.Optional[CreateNode] = None
             if snapshot.snapshot_id in original_snapshots_to_create and (
                 snapshot.is_incremental_by_time_range
+                or snapshot.name in serial_snapshots
                 or ((not batch_concurrency or batch_concurrency > 1) and batch_size)
                 or not intervals
             ):
@@ -736,6 +917,18 @@ class Scheduler:
                             ),
                         ],
                     )
+
+            if intervals and snapshot.name in terminal_audit_snapshots:
+                terminal_dependency: SchedulingUnit
+                if len(intervals) > 1:
+                    terminal_dependency = DummyNode(snapshot_name=snapshot.name)
+                else:
+                    terminal_dependency = EvaluateNode(
+                        snapshot_name=snapshot.name,
+                        interval=intervals[0],
+                        batch_index=0,
+                    )
+                dag.add(AuditNode(snapshot_name=snapshot.name), [terminal_dependency])
         return dag
 
     def _find_upstream_dependencies(
@@ -744,6 +937,7 @@ class Scheduler:
         intervals_per_snapshot: t.Dict[str, Intervals],
         snapshots_to_create: t.Set[SnapshotId],
         cache: t.Dict[SnapshotId, t.Set[SchedulingUnit]],
+        terminal_audit_snapshots: t.Set[str],
     ) -> t.Set[SchedulingUnit]:
         if parent_sid not in self.snapshots:
             return set()
@@ -754,7 +948,9 @@ class Scheduler:
 
         parent_node: t.Optional[SchedulingUnit] = None
         if p_intervals:
-            if len(p_intervals) > 1:
+            if parent_sid.name in terminal_audit_snapshots:
+                parent_node = AuditNode(snapshot_name=parent_sid.name)
+            elif len(p_intervals) > 1:
                 parent_node = DummyNode(snapshot_name=parent_sid.name)
             else:
                 interval = p_intervals[0]
@@ -775,7 +971,11 @@ class Scheduler:
         for grandparent_sid in parent_snapshot.parents:
             transitive_deps.update(
                 self._find_upstream_dependencies(
-                    grandparent_sid, intervals_per_snapshot, snapshots_to_create, cache
+                    grandparent_sid,
+                    intervals_per_snapshot,
+                    snapshots_to_create,
+                    cache,
+                    terminal_audit_snapshots,
                 )
             )
         cache[parent_sid] = transitive_deps

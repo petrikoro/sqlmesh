@@ -7,7 +7,7 @@ By default, SQLMesh will halt plan application when an audit fails so potentiall
 
 A comprehensive suite of audits can identify data issues upstream, whether they are from your vendors or other teams. Audits also empower your data engineers and analysts to work with confidence by catching problems early as they work on new features or make updates to your models.
 
-**NOTE**: For incremental by time range models, audits are only applied to intervals being processed - not for the entire underlying table.
+Attached model audits run once after all of the model's batches have been materialized. The `@this_model` macro represents the entire materialized table, including for incremental models. To audit only the intervals processed by the current run, add an explicit predicate using a [date macro](./macros/sqlmesh_macros.md#date-macros).
 
 ## Blocking audits
 A failed blocking audit halts the execution of a `plan` or `run` to prevent invalid data from propagating to downstream models. The impact of a failure depends on whether you are running a `plan` or a `run`.
@@ -15,7 +15,7 @@ A failed blocking audit halts the execution of a `plan` or `run` to prevent inva
 SQLMesh's blocking audit process is:
 
 1. Evaluate the model (e.g., insert new data or rebuild the table)
-2. Run the audit query against the newly updated model table. For incremental models, the audit only runs on the processed time intervals.
+2. After all batches for the model finish, run the audit query once against the complete newly updated model table.
 3. If the query returns any rows, the audit fails, halting the `plan` or `run`.
 
 ### Plan vs. Run
@@ -81,7 +81,9 @@ SELECT * FROM @this_model
 WHERE @column >= @threshold;
 ```
 
-This example utilizes [macros](./macros/overview.md) to parameterize the audit. `@this_model` is a special macro which refers to the model that is being audited. For incremental models, this macro also ensures that only relevant data intervals are affected.
+This example utilizes [macros](./macros/overview.md) to parameterize the audit. `@this_model` is a special macro which refers to the complete model table being audited. SQLMesh does not automatically restrict it to the intervals processed by an incremental model.
+
+Auditing the complete table is required for rules that span batches, such as uniqueness. It can also be expensive for large tables. Audits whose rules are safe to apply only to newly processed data can opt into that behavior explicitly with conditions that reference `@start_ds`, `@end_ds`, or the other [date macros](./macros/sqlmesh_macros.md#date-macros).
 
 `@column` and `@threshold` are parameters whose values are specified in a model definition's `MODEL` statement.
 
@@ -676,6 +678,8 @@ Got 3 results, expected 0.
 SELECT * FROM sqlmesh.sushi__items__1836721418_83893210 WHERE ds BETWEEN '2022-01-01' AND '2022-01-02' AND price IS NULL
 Done.
 ```
+
+The `--start` and `--end` values are available to audit macros, but they do not implicitly filter `@this_model`.
 
 To run blocking and non-blocking audits separately, select the type with `--audit-type`:
 
