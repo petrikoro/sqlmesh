@@ -160,6 +160,7 @@ class SnapshotEvaluator:
         deployability_index: t.Optional[DeployabilityIndex] = None,
         batch_index: int = 0,
         target_table_exists: t.Optional[bool] = None,
+        wap_id: t.Optional[str] = None,
         **kwargs: t.Any,
     ) -> t.Optional[str]:
         """Renders the snapshot's model, executes it and stores the result in the snapshot's physical table.
@@ -175,6 +176,7 @@ class SnapshotEvaluator:
             deployability_index: Determines snapshots that are deployable in the context of this evaluation.
             batch_index: If the snapshot is part of a batch of related snapshots; which index in the batch is it
             target_table_exists: Whether the target table exists. If None, the table will be checked for existence.
+            wap_id: A materialization-scoped WAP ID. A new ID is generated when omitted.
             kwargs: Additional kwargs to pass to the renderer.
 
         Returns:
@@ -194,6 +196,7 @@ class SnapshotEvaluator:
                 deployability_index=deployability_index,
                 batch_index=batch_index,
                 target_table_exists=target_table_exists,
+                wap_id=wap_id,
                 **kwargs,
             )
         if result is None or isinstance(result, str):
@@ -576,6 +579,7 @@ class SnapshotEvaluator:
         is_run: bool = False,
         skip_audits: bool = False,
         audit_type: t.Optional[t.Literal["blocking", "non-blocking"]] = None,
+        publish_wap: bool = True,
         **kwargs: t.Any,
     ) -> t.List[AuditResult]:
         """Execute a snapshot's node's audit queries.
@@ -592,6 +596,7 @@ class SnapshotEvaluator:
                 audit command (as opposed to `plan/apply`).
             skip_audits: Whether to skip all audit queries.
             audit_type: The type of audits to execute. All audit types execute if not set.
+            publish_wap: Whether to publish WAP results after audits complete.
             kwargs: Additional kwargs to pass to the renderer.
         """
         deployability_index = deployability_index or DeployabilityIndex.all_deployable()
@@ -663,7 +668,7 @@ class SnapshotEvaluator:
                 )
             )
 
-        if wap_id is not None:
+        if wap_id is not None and publish_wap:
             logger.info(
                 "Publishing evaluation results for snapshot %s, WAP ID '%s'",
                 snapshot.snapshot_id,
@@ -720,6 +725,7 @@ class SnapshotEvaluator:
         deployability_index: t.Optional[DeployabilityIndex],
         batch_index: int,
         target_table_exists: t.Optional[bool],
+        wap_id: t.Optional[str],
         **kwargs: t.Any,
     ) -> t.Optional[str]:
         """Renders the snapshot's model and executes it. The return value depends on whether the limit was specified.
@@ -735,6 +741,7 @@ class SnapshotEvaluator:
             deployability_index: Determines snapshots that are deployable in the context of this evaluation.
             batch_index: If the snapshot is part of a batch of related snapshots; which index in the batch is it
             target_table_exists: Whether the target table exists. If None, the table will be checked for existence.
+            wap_id: A materialization-scoped WAP ID. A new ID is generated when omitted.
             kwargs: Additional kwargs to pass to the renderer.
         """
         if not snapshot.is_model:
@@ -834,16 +841,22 @@ class SnapshotEvaluator:
                 "snapshot_table_exists": target_table_exists,
             }
 
-            wap_id: t.Optional[str] = None
+            active_wap_id: t.Optional[str] = None
             if (
                 snapshot.is_materialized
                 and target_table_exists
                 and adapter.wap_enabled
                 and (model.wap_supported or adapter.wap_supported(target_table_name))
             ):
-                wap_id = random_id()[0:8]
-                logger.info("Using WAP ID '%s' for snapshot %s", wap_id, snapshot.snapshot_id)
-                target_table_name = adapter.wap_prepare(target_table_name, wap_id)
+                active_wap_id = wap_id or random_id()[0:8]
+                logger.info(
+                    "Using WAP ID '%s' for snapshot %s", active_wap_id, snapshot.snapshot_id
+                )
+                target_table_name = (
+                    adapter.wap_prepare(target_table_name, active_wap_id)
+                    if wap_id is None or batch_index == 0
+                    else adapter.wap_table_name(target_table_name, active_wap_id)
+                )
 
             self._render_and_insert_snapshot(
                 start=start,
@@ -860,7 +873,7 @@ class SnapshotEvaluator:
                 batch_index=batch_index,
             )
 
-            return wap_id
+            return active_wap_id
 
         session_properties = snapshot.model.render_session_properties(**render_statements_kwargs)
         needs_isolated_replace_query = adapter.needs_isolated_replace_query_transactions(

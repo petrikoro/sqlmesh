@@ -201,8 +201,8 @@ MODEL (
 
   -- How do I test this data?
   --   Validate that the `transaction_id` primary key values are both unique
-  --   and non-null. Data audit tests only run for the processed intervals,
-  --   not for the entire table.
+  --   and non-null. Data audits run once against the complete table after
+  --   all of this model's batches finish.
   audits (
     UNIQUE_VALUES(columns = (transaction_id)),
     NOT_NULL(columns = (transaction_id))

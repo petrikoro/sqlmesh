@@ -22,6 +22,43 @@ from tests.utils.test_filesystem import create_temp_file
 pytestmark = pytest.mark.slow
 
 
+def test_incremental_audit_runs_once_against_all_batches(tmp_path: Path):
+    models_dir = tmp_path / "models"
+    models_dir.mkdir()
+    create_temp_file(
+        tmp_path,
+        models_dir / "incremental.sql",
+        dedent("""
+            MODEL (
+                name test.incremental,
+                kind INCREMENTAL_BY_TIME_RANGE (
+                    time_column ds,
+                    batch_size 1
+                ),
+                start '2024-01-01',
+                cron '@daily',
+                audits (unique_values(columns := [id]))
+            );
+
+            SELECT 1 AS id, CAST(@start_ds AS DATE) AS ds
+        """),
+    )
+    context = Context(
+        paths=tmp_path,
+        config=Config(model_defaults=ModelDefaultsConfig(dialect="duckdb")),
+    )
+
+    # Each batch is unique in isolation, but the complete table contains duplicate IDs.
+    with pytest.raises(PlanError):
+        context.plan(
+            "prod",
+            start="2024-01-01",
+            end="2024-01-02",
+            no_prompts=True,
+            auto_apply=True,
+        )
+
+
 @time_machine.travel("2023-01-08 15:00:00 UTC")
 @use_terminal_console
 def test_audit_only_metadata_change(init_and_plan_context: t.Callable):

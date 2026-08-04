@@ -2,7 +2,7 @@ import typing as t
 
 import pytest
 from pytest_mock.plugin import MockerFixture
-from sqlglot import parse_one, parse
+from sqlglot import exp, parse_one, parse
 from sqlglot.helper import first
 
 from sqlmesh.core.context import Context, ExecutionContext
@@ -22,6 +22,7 @@ from sqlmesh.core.scheduler import (
     interval_diff,
     compute_interval_params,
     SnapshotToIntervals,
+    AuditNode,
     EvaluateNode,
     SchedulingUnit,
     DummyNode,
@@ -563,7 +564,7 @@ def test_external_model_audit(mocker, make_snapshot, skip_audits, expected_audit
     )
 
     assert spy.call_count == expected_audit_count
-    state_sync.add_interval.assert_called_once()
+    assert state_sync.add_interval.call_count + state_sync.add_snapshots_intervals.call_count == 1
 
 
 def test_audit_failure_notifications(
@@ -1076,6 +1077,202 @@ def test_dag_transitive_deps(mocker: MockerFixture, make_snapshot):
             )
         },
     }
+
+
+def test_dag_audits_after_all_batches_and_before_downstream(mocker: MockerFixture, make_snapshot):
+    parent = make_snapshot(
+        SqlModel(
+            name="parent",
+            kind=IncrementalByTimeRangeKind(time_column=TimeColumn(column="ds"), batch_size=1),
+            query=parse_one("SELECT 1 AS id, @end_ds AS ds"),
+            audits=[("not_null", {"columns": exp.to_column("id")})],
+        )
+    )
+    child = make_snapshot(SqlModel(name="child", query=parse_one("SELECT * FROM parent")))
+    child = child.model_copy(update={"parents": (parent.snapshot_id,)})
+
+    scheduler = Scheduler(
+        snapshots=[parent, child],
+        snapshot_evaluator=mocker.Mock(),
+        state_sync=mocker.Mock(),
+        default_catalog=None,
+    )
+    first_interval = (to_timestamp("2023-01-01"), to_timestamp("2023-01-02"))
+    second_interval = (to_timestamp("2023-01-02"), to_timestamp("2023-01-03"))
+    child_interval = (to_timestamp("2023-01-01"), to_timestamp("2023-01-03"))
+
+    dag = scheduler._dag(
+        {parent: [first_interval, second_interval], child: [child_interval]},
+        terminal_audit_snapshots={parent.name},
+    )
+
+    parent_batch_0 = EvaluateNode(parent.name, first_interval, 0)
+    parent_batch_1 = EvaluateNode(parent.name, second_interval, 1)
+    parent_batches_complete = DummyNode(parent.name)
+    parent_audit = AuditNode(parent.name)
+    child_batch = EvaluateNode(child.name, child_interval, 0)
+    assert dag.graph == {
+        parent_batch_0: set(),
+        parent_batch_1: set(),
+        parent_batches_complete: {parent_batch_0, parent_batch_1},
+        parent_audit: {parent_batches_complete},
+        child_batch: {parent_audit},
+    }
+
+
+def test_audit_only_dag_skips_audit_when_signal_removes_all_intervals(
+    mocker: MockerFixture, make_snapshot
+):
+    snapshot = make_snapshot(
+        SqlModel(
+            name="model",
+            query=parse_one("SELECT 1 AS id"),
+            audits=[("not_null", {"columns": exp.to_column("id")})],
+        )
+    )
+    scheduler = Scheduler(
+        snapshots=[snapshot],
+        snapshot_evaluator=mocker.Mock(),
+        state_sync=mocker.Mock(),
+        default_catalog=None,
+    )
+
+    dag = scheduler._dag(
+        {snapshot: []},
+        terminal_audit_snapshots={snapshot.name},
+        audit_only=True,
+    )
+
+    assert not dag.graph
+
+
+@pytest.mark.parametrize("blocking_failure", [False, True])
+def test_audits_run_once_after_materialization_and_gate_intervals(
+    mocker: MockerFixture, make_snapshot, blocking_failure: bool
+):
+    snapshot = make_snapshot(
+        SqlModel(
+            name="model",
+            kind=IncrementalByTimeRangeKind(time_column=TimeColumn(column="ds"), batch_size=1),
+            query=parse_one("SELECT 1 AS id, @end_ds AS ds"),
+            audits=[("not_null", {"columns": exp.to_column("id")})],
+        )
+    )
+    snapshot.categorize_as(SnapshotChangeCategory.BREAKING)
+
+    events: t.List[str] = []
+    evaluator = mocker.MagicMock()
+    evaluator.get_snapshots_to_create.return_value = []
+    evaluator.get_adapter.return_value.wap_enabled = False
+    evaluator.evaluate.side_effect = lambda *args, **kwargs: events.append("evaluate")
+    audit, audit_args = snapshot.node.audits_with_args[0]
+    audit_result = AuditResult(
+        audit=audit,
+        audit_args=audit_args,
+        model=snapshot.model,
+        query=parse_one("SELECT 1"),
+        count=1 if blocking_failure else 0,
+        blocking=True,
+    )
+
+    def run_audit(*args, **kwargs):
+        events.append("audit")
+        return [audit_result]
+
+    evaluator.audit.side_effect = run_audit
+    state_sync = mocker.MagicMock()
+    state_sync.add_snapshots_intervals.side_effect = lambda *args, **kwargs: events.append("commit")
+    scheduler = Scheduler(
+        snapshots=[snapshot],
+        snapshot_evaluator=evaluator,
+        state_sync=state_sync,
+        console=mocker.MagicMock(),
+        max_workers=2,
+        default_catalog=None,
+    )
+    start = to_timestamp("2023-01-01")
+    middle = to_timestamp("2023-01-02")
+    end = to_timestamp("2023-01-03")
+
+    errors, _ = scheduler.run_merged_intervals(
+        merged_intervals={snapshot: [(start, end)]},
+        deployability_index=DeployabilityIndex.all_deployable(),
+        environment_naming_info=EnvironmentNamingInfo(),
+        execution_time=end,
+    )
+
+    assert evaluator.evaluate.call_count == 2
+    assert evaluator.audit.call_count == 1
+    assert events[:2] == ["evaluate", "evaluate"]
+    assert events[2] == "audit"
+    assert evaluator.audit.call_args.kwargs["start"] == start
+    assert evaluator.audit.call_args.kwargs["end"] == end
+    if blocking_failure:
+        assert len(errors) == 1
+        state_sync.add_snapshots_intervals.assert_not_called()
+        assert events == ["evaluate", "evaluate", "audit"]
+    else:
+        assert not errors
+        state_sync.add_snapshots_intervals.assert_called_once()
+        assert events == ["evaluate", "evaluate", "audit", "commit"]
+        committed = state_sync.add_snapshots_intervals.call_args.args[0][0]
+        assert committed.intervals == [(start, middle), (middle, end)]
+
+
+def test_materialization_uses_one_wap_branch(mocker: MockerFixture, make_snapshot):
+    snapshot = make_snapshot(
+        SqlModel(
+            name="model",
+            kind=IncrementalByUniqueKeyKind(unique_key=["id"], batch_size=1),
+            query=parse_one("SELECT 1 AS id"),
+            audits=[("not_null", {"columns": exp.to_column("id")})],
+        )
+    )
+    snapshot.categorize_as(SnapshotChangeCategory.BREAKING)
+
+    events: t.List[str] = []
+    evaluator = mocker.MagicMock()
+    evaluator.get_snapshots_to_create.return_value = [snapshot]
+    evaluator.get_adapter.return_value.wap_enabled = True
+    evaluator.create_snapshot.side_effect = lambda *args, **kwargs: events.append("create")
+
+    def evaluate(*args, **kwargs):
+        events.append("evaluate")
+        return kwargs["wap_id"]
+
+    evaluator.evaluate.side_effect = evaluate
+    evaluator.audit.side_effect = lambda *args, **kwargs: events.append("audit") or []
+    evaluator.wap_publish_snapshot.side_effect = lambda *args, **kwargs: events.append("publish")
+    scheduler = Scheduler(
+        snapshots=[snapshot],
+        snapshot_evaluator=evaluator,
+        state_sync=mocker.MagicMock(),
+        console=mocker.MagicMock(),
+        max_workers=2,
+        default_catalog=None,
+    )
+    start = to_timestamp("2023-01-01")
+    end = to_timestamp("2023-01-03")
+
+    errors, _ = scheduler.run_merged_intervals(
+        merged_intervals={snapshot: [(start, end)]},
+        deployability_index=DeployabilityIndex.all_deployable(),
+        environment_naming_info=EnvironmentNamingInfo(),
+        execution_time=end,
+    )
+
+    assert not errors
+    assert events == ["create", "evaluate", "evaluate", "audit", "publish"]
+    evaluator.create_snapshot.assert_called_once()
+    first_batch, second_batch = evaluator.evaluate.call_args_list
+    assert first_batch.kwargs["target_table_exists"] is True
+    assert second_batch.kwargs["target_table_exists"] is True
+    assert first_batch.kwargs["wap_id"] == second_batch.kwargs["wap_id"]
+    assert evaluator.audit.call_args.kwargs["wap_id"] == first_batch.kwargs["wap_id"]
+    assert evaluator.audit.call_args.kwargs["publish_wap"] is False
+    evaluator.wap_publish_snapshot.assert_called_once_with(
+        snapshot, first_batch.kwargs["wap_id"], DeployabilityIndex.all_deployable()
+    )
 
 
 def test_dag_multiple_chain_transitive_deps(mocker: MockerFixture, make_snapshot):
