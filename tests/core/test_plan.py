@@ -48,6 +48,140 @@ from sqlmesh.utils.errors import PlanError, NoChangesPlanError
 from sqlmesh.utils.rich import strip_ansi_codes
 
 
+def _schema_change_context_diff(
+    *modified: t.Tuple[Snapshot, Snapshot],
+) -> ContextDiff:
+    snapshots = {new.snapshot_id: new for new, _ in modified}
+    return ContextDiff(
+        environment="prod",
+        is_new_environment=False,
+        is_unfinalized_environment=False,
+        normalize_environment_name=True,
+        create_from="prod",
+        create_from_env_exists=True,
+        added=set(),
+        removed_snapshots={},
+        modified_snapshots={new.name: (new, old) for new, old in modified},
+        snapshots=snapshots,
+        new_snapshots=snapshots,
+        previous_plan_id=None,
+        previously_promoted_snapshot_ids=set(),
+        previous_finalized_snapshots=None,
+        previous_gateway_managed_virtual_layer=False,
+        gateway_managed_virtual_layer=False,
+        environment_statements=[],
+    )
+
+
+def _direct_schema_change(make_snapshot: t.Callable, *, forward_only: bool = False) -> ContextDiff:
+    kind = (
+        IncrementalUnmanagedKind(on_destructive_change=OnDestructiveChange.ALLOW)
+        if forward_only
+        else FullKind()
+    )
+    old_snapshot = make_snapshot(
+        SqlModel(
+            name="schema_change",
+            dialect="duckdb",
+            kind=kind,
+            query=parse_one("SELECT CAST(1 AS INT) AS id"),
+            columns={"id": exp.DataType.build("INT")},
+        )
+    )
+    old_snapshot.categorize_as(SnapshotChangeCategory.BREAKING)
+    new_snapshot = make_snapshot(
+        SqlModel(
+            name="schema_change",
+            dialect="duckdb",
+            kind=kind,
+            query=parse_one("SELECT CAST(1 AS BIGINT) AS id"),
+            columns={"id": exp.DataType.build("BIGINT")},
+        )
+    )
+    new_snapshot.previous_versions = old_snapshot.all_versions
+
+    return _schema_change_context_diff((new_snapshot, old_snapshot))
+
+
+def _indirect_schema_change(make_snapshot: t.Callable) -> ContextDiff:
+    parent_old = make_snapshot(
+        SqlModel(name="parent", kind=FullKind(), query=parse_one("SELECT 1 AS id"))
+    )
+    parent_old.categorize_as(SnapshotChangeCategory.BREAKING)
+    child_old = make_snapshot(
+        SqlModel(name="child", kind=FullKind(), query=parse_one("SELECT id FROM parent")),
+        nodes={parent_old.name: parent_old.model},
+    )
+    child_old.categorize_as(SnapshotChangeCategory.BREAKING)
+
+    parent_new = make_snapshot(
+        SqlModel(name="parent", kind=FullKind(), query=parse_one("SELECT 1 AS id, 2 AS added"))
+    )
+    parent_new.previous_versions = parent_old.all_versions
+    child_new = make_snapshot(child_old.model, nodes={parent_new.name: parent_new.model})
+    child_new.previous_versions = child_old.all_versions
+
+    return _schema_change_context_diff(
+        (parent_new, parent_old),
+        (child_new, child_old),
+    )
+
+
+def test_forward_only_plan_rejects_unsupported_in_place_schema_change(
+    make_snapshot: t.Callable, mocker: MockerFixture
+):
+    context_diff = _direct_schema_change(make_snapshot)
+    check = mocker.Mock(return_value=False)
+
+    with pytest.raises(PlanError, match="requires a new physical table"):
+        PlanBuilder(
+            context_diff,
+            forward_only=True,
+            can_apply_schema_change_in_place=check,
+        ).build()
+
+
+def test_standard_plan_recategorizes_unsupported_in_place_schema_change(
+    make_snapshot: t.Callable, mocker: MockerFixture
+):
+    context_diff = _indirect_schema_change(make_snapshot)
+    check = mocker.Mock(return_value=False)
+
+    new, old = context_diff.modified_snapshots['"child"']
+    builder = PlanBuilder(context_diff, can_apply_schema_change_in_place=check)
+    parent, _ = context_diff.modified_snapshots['"parent"']
+    builder.set_choice(parent, SnapshotChangeCategory.NON_BREAKING).build()
+
+    assert new.change_category == SnapshotChangeCategory.INDIRECT_BREAKING
+    assert new.version != old.version
+
+
+def test_uncategorized_forward_only_schema_change_is_validated_after_choice(
+    make_snapshot: t.Callable, mocker: MockerFixture
+):
+    context_diff = _direct_schema_change(make_snapshot, forward_only=True)
+    check = mocker.Mock(return_value=False)
+    builder = PlanBuilder(
+        context_diff,
+        auto_categorization_enabled=False,
+        can_apply_schema_change_in_place=check,
+    )
+    snapshot, _ = context_diff.modified_snapshots['"schema_change"']
+
+    plan = builder.build()
+
+    assert plan.uncategorized == [snapshot]
+    assert not snapshot.categorized
+    check.assert_not_called()
+
+    builder.set_choice(snapshot, SnapshotChangeCategory.NON_BREAKING)
+    with pytest.raises(PlanError, match="requires a new physical table"):
+        builder.build()
+
+    assert snapshot.is_forward_only
+    check.assert_called_once()
+
+
 def test_forward_only_plan_sets_version(make_snapshot, mocker: MockerFixture):
     snapshot_a = make_snapshot(
         SqlModel(name="a", query=parse_one("select 1, ds"), dialect="duckdb")

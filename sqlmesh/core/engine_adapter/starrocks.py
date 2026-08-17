@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 import typing as t
 
-from sqlglot import exp
+from sqlglot import exp, parse_one
+from sqlglot.errors import SqlglotError
 from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
 
 from sqlmesh.core.dialect import to_schema
@@ -24,14 +26,21 @@ from sqlmesh.core.engine_adapter.shared import (
     InsertOverwriteStrategy,
     set_catalog,
 )
-from sqlmesh.core.schema_diff import TableAlterChangeColumnTypeOperation, TableAlterOperation
-from sqlmesh.utils.errors import SQLMeshError
+from sqlmesh.core.schema_diff import (
+    TableAlterChangeColumnTypeOperation,
+    TableAlterColumnOperation,
+    TableAlterDropColumnOperation,
+    TableAlterOperation,
+)
+from sqlmesh.utils import columns_to_types_all_known, columns_to_types_to_struct
+from sqlmesh.utils.errors import MigrationNotSupportedError, SQLMeshError
 
 logger = logging.getLogger(__name__)
 
 if t.TYPE_CHECKING:
     from sqlmesh.core._typing import SchemaName, TableName
     from sqlmesh.core.engine_adapter._typing import DCL, GrantsConfig
+    from sqlmesh.core.model import Model
     from sqlmesh.core.node import IntervalUnit
 
 
@@ -149,35 +158,71 @@ class StarRocksEngineAdapter(
             super().alter_table(t.cast(t.List[exp.Alter], alter_expressions))
             return
 
-        full_columns: t.Optional[t.Dict[str, t.Tuple[t.Any, ...]]] = None
-        alter_statements: t.List[exp.Alter] = []
+        alter_operations = t.cast(t.List[TableAlterColumnOperation], alter_expressions)
+        table_definition = self._get_table_definition(alter_operations[0].target_table)
+        column_restrictions = self._column_change_restrictions(table_definition)
+        column_definitions = {
+            column.name.lower(): column
+            for column in table_definition.this.expressions
+            if isinstance(column, exp.ColumnDef)
+        }
+        prepared_changes: t.List[t.Tuple[TableAlterColumnOperation, exp.Alter]] = []
 
-        for alter_operation in t.cast(t.List[TableAlterOperation], alter_expressions):
-            if not (
-                isinstance(alter_operation, TableAlterChangeColumnTypeOperation)
-                and len(alter_operation.column_parts) == 1
-                and alter_operation.column_parts[0].is_primitive
-            ):
-                alter_statements.append(alter_operation.expression)
+        for alter_operation in alter_operations:
+            # Operations without top-level column roles use the schema differ's native expression.
+            if not self._requires_column_role_check(alter_operation):
+                prepared_changes.append((alter_operation, alter_operation.expression))
                 continue
 
-            if full_columns is None:
-                full_columns = self._get_full_columns(alter_operation.target_table)
+            column_name = alter_operation.column.name.lower()
 
-            alter_statements.append(
-                self._build_modify_column_expression(
+            # StarRocks rejects changes to columns used by these table properties.
+            if reason := self._unsupported_column_change_reason(
+                alter_operation,
+                column_restrictions,
+            ):
+                raise MigrationNotSupportedError(
+                    f"{reason} "
+                    "A new physical table version is required; use a non-forward-only plan "
+                    "and disable the model's 'forward_only' setting if it is configured."
+                )
+
+            # Drops and non-primitive type changes use the schema differ's native expression.
+            if (
+                not isinstance(alter_operation, TableAlterChangeColumnTypeOperation)
+                or not alter_operation.column_parts[0].is_primitive
+            ):
+                prepared_changes.append((alter_operation, alter_operation.expression))
+                continue
+
+            column_definition = column_definitions.get(column_name)
+            if column_definition is None:
+                raise MigrationNotSupportedError(
+                    f"Unable to reconstruct column '{column_name}' from the live StarRocks "
+                    "table definition."
+                )
+
+            prepared_changes.append(
+                (
                     alter_operation,
-                    full_columns[alter_operation.column_parts[0].name],
+                    self._build_modify_column_expression(
+                        alter_operation,
+                        column_definition,
+                    ),
                 )
             )
 
-        for alter_statement in alter_statements:
-            table = exp.to_table(alter_statement.this)
+        for alter_operation, alter_statement in prepared_changes:
+            table = alter_operation.target_table
             latest_job = self._get_latest_schema_change_job(table)
             previous_job_id = int(latest_job[0]) if latest_job else None
 
             super().alter_table([alter_statement])
-            self._wait_for_schema_change(table, previous_job_id)
+            self._wait_for_schema_change(
+                table,
+                previous_job_id,
+                alter_operation.expected_table_struct,
+            )
 
     def _get_latest_schema_change_job(self, table: exp.Table) -> t.Optional[t.Tuple[t.Any, ...]]:
         database = (
@@ -192,7 +237,12 @@ class StarRocksEngineAdapter(
         )
         return rows[0] if rows else None
 
-    def _wait_for_schema_change(self, table: exp.Table, previous_job_id: t.Optional[int]) -> None:
+    def _wait_for_schema_change(
+        self,
+        table: exp.Table,
+        previous_job_id: t.Optional[int],
+        expected_table_struct: exp.DataType,
+    ) -> None:
         timeout = float(self._extra_config.get("schema_change_timeout", 3600))
         poll_interval = float(self._extra_config.get("schema_change_poll_interval", 1))
         deadline = time.monotonic() + timeout
@@ -210,6 +260,9 @@ class StarRocksEngineAdapter(
                     raise SQLMeshError(
                         f"StarRocks schema change job {job_id} for {table} failed: {job[10]}"
                     )
+            # Fast schema evolution can update the live schema without creating an ALTER job.
+            elif columns_to_types_to_struct(self.columns(table)) == expected_table_struct:
+                return
 
             if time.monotonic() >= deadline:
                 details = f" Last state: {state}, progress: {progress}." if state else ""
@@ -219,38 +272,221 @@ class StarRocksEngineAdapter(
                 )
             time.sleep(poll_interval)
 
-    def _get_full_columns(self, table: exp.Table) -> t.Dict[str, t.Tuple[t.Any, ...]]:
+    def _get_table_definition(self, table: exp.Table) -> exp.Create:
         table = table.copy()
         table.set("catalog", None)
-        return {
-            str(row[0]): row
-            for row in self.fetchall(
-                f"SHOW FULL COLUMNS FROM {table.sql(dialect=self.dialect, identify=True)}"
+        table_sql = table.sql(dialect=self.dialect, identify=True)
+        row = self.fetchone(f"SHOW CREATE TABLE {table_sql}")
+        if not row or len(row) < 2 or not isinstance(row[1], str):
+            raise MigrationNotSupportedError(
+                f"Unable to read the live StarRocks table definition for {table_sql}."
             )
+        definition_sql = row[1]
+
+        # Aggregate Key schema changes require key and aggregation metadata that generic schema
+        # operations don't preserve, so these tables must be rebuilt instead.
+        if re.search(
+            r"^\s*AGGREGATE\s+KEY\s*\(",
+            definition_sql,
+            re.IGNORECASE | re.MULTILINE,
+        ):
+            raise MigrationNotSupportedError(
+                f"In-place schema changes are not supported for the Aggregate Key table "
+                f"{table_sql}."
+            )
+
+        try:
+            table_definition = parse_one(definition_sql, dialect=self.dialect)
+        except SqlglotError as ex:
+            raise MigrationNotSupportedError(
+                f"Unable to parse the live StarRocks table definition for {table_sql}."
+            ) from ex
+
+        if not isinstance(table_definition, exp.Create) or not isinstance(
+            table_definition.this, exp.Schema
+        ):
+            raise MigrationNotSupportedError(
+                f"Unable to parse the live StarRocks table definition for {table_sql} "
+                "into a complete CREATE TABLE statement."
+            )
+
+        return table_definition
+
+    def can_apply_schema_change_in_place(
+        self,
+        current: Model,
+        target: Model,
+        current_table: TableName,
+        **render_kwargs: t.Any,
+    ) -> bool:
+        # SQLMesh does not update partitioning or physical properties during schema migration.
+        if current.partitioned_by != target.partitioned_by:
+            return False
+
+        current_properties = current.render_physical_properties(**render_kwargs)
+        target_properties = target.render_physical_properties(**render_kwargs)
+        if current_properties != target_properties:
+            return False
+
+        target_columns = target.columns_to_types
+        if not target_columns or not columns_to_types_all_known(target_columns):
+            return False
+
+        current_columns = self.columns(current_table)
+        if not current_columns or not columns_to_types_all_known(current_columns):
+            return False
+
+        operations = self.schema_differ.compare_columns(
+            "_schema_change_check",
+            current_columns,
+            target_columns,
+            ignore_destructive=target.on_destructive_change.is_ignore,
+            ignore_additive=target.on_additive_change.is_ignore,
+        )
+
+        if not operations:
+            return True
+
+        # Every executable migration requires a complete live definition.
+        try:
+            table_definition = self._get_table_definition(exp.to_table(current_table))
+        except MigrationNotSupportedError:
+            return False
+
+        # Only top-level drops and type changes need validation against StarRocks column roles.
+        column_operations = [
+            operation for operation in operations if self._requires_column_role_check(operation)
+        ]
+
+        # Additive changes need no further column-role validation.
+        if not column_operations:
+            return True
+
+        column_restrictions = self._column_change_restrictions(table_definition)
+
+        # Reuse the execution-time decision so planning cannot accept a rejected operation.
+        return not any(
+            self._unsupported_column_change_reason(operation, column_restrictions)
+            for operation in column_operations
+        )
+
+    @staticmethod
+    def _requires_column_role_check(
+        operation: TableAlterColumnOperation,
+    ) -> bool:
+        return (
+            isinstance(
+                operation,
+                (TableAlterDropColumnOperation, TableAlterChangeColumnTypeOperation),
+            )
+            and len(operation.column_parts) == 1
+        )
+
+    @classmethod
+    def _column_change_restrictions(cls, expression: exp.Expr) -> t.Dict[str, t.Set[str]]:
+        primary_key = expression.find(exp.PrimaryKey)
+        unique_key = expression.find(exp.UniqueKeyProperty)
+        duplicate_key = expression.find(exp.DuplicateKeyProperty)
+        distributed_by = expression.find(exp.DistributedByProperty)
+        order = expression.find(exp.Order)
+        rollup = expression.find(exp.RollupProperty)
+
+        partition = expression.find(
+            exp.PartitionedByProperty,
+            exp.PartitionByRangeProperty,
+            exp.PartitionByListProperty,
+        )
+        if isinstance(partition, exp.PartitionedByProperty):
+            partition_expressions = partition.this.expressions
+        else:
+            partition_expressions = (
+                partition.args.get("partition_expressions", []) if partition else []
+            )
+        partition_columns = cls._column_names(partition_expressions)
+        auto_increment_columns = {
+            column.name.lower()
+            for column in expression.find_all(exp.ColumnDef)
+            if column.find(exp.AutoIncrementColumnConstraint)
         }
+        vector_index_columns = cls._column_names(
+            column
+            for index in expression.find_all(exp.IndexColumnConstraint)
+            if any(option.args.get("using") == "VECTOR" for option in index.args.get("options", ()))
+            for column in index.expressions
+        )
+
+        return {
+            "primary key": cls._column_names(primary_key.expressions if primary_key else ()),
+            "unique key": cls._column_names(unique_key.expressions if unique_key else ()),
+            "duplicate key": cls._column_names(duplicate_key.expressions if duplicate_key else ()),
+            "partitioning": partition_columns,
+            "distribution": cls._column_names(distributed_by.expressions if distributed_by else ()),
+            "sort key": cls._column_names(order.expressions if order else ()),
+            "rollup": cls._column_names(
+                column
+                for index in (rollup.expressions if rollup else ())
+                for column in index.expressions
+            ),
+            "generated column expression": cls._column_names(
+                constraint.this for constraint in expression.find_all(exp.ComputedColumnConstraint)
+            ),
+            "auto increment": auto_increment_columns,
+            "vector index": vector_index_columns,
+        }
+
+    def _unsupported_column_change_reason(
+        self,
+        operation: TableAlterColumnOperation,
+        column_restrictions: t.Dict[str, t.Set[str]],
+    ) -> t.Optional[str]:
+        column_name = operation.column.name
+
+        # A column can have multiple roles, so report every restriction in a stable order.
+        restrictions = sorted(
+            restriction
+            for restriction, columns in column_restrictions.items()
+            if column_name.lower() in columns
+        )
+
+        if not restrictions:
+            return None
+
+        # Render the schema-diff operation so the error matches the attempted StarRocks SQL.
+        operation_sql = operation.expression.sql(dialect=self.dialect, identify=True)
+
+        return (
+            f"StarRocks cannot apply {operation_sql} because column '{column_name}' is used by "
+            "the following table constraints or properties: "
+            f"{', '.join(restrictions)}."
+        )
+
+    @staticmethod
+    def _column_names(expressions: t.Iterable[exp.Expr]) -> t.Set[str]:
+        names: t.Set[str] = set()
+        for expression in expressions:
+            if isinstance(expression, exp.Identifier):
+                names.add(expression.name.lower())
+            else:
+                names.update(column.name.lower() for column in expression.find_all(exp.Column))
+        return names
 
     def _build_modify_column_expression(
         self,
         operation: TableAlterChangeColumnTypeOperation,
-        column_metadata: t.Tuple[t.Any, ...],
+        column_definition: exp.ColumnDef,
     ) -> exp.Alter:
-        _, _, _, nullable, key, default, extra, _, comment = column_metadata
-        definition = [
-            operation.column.sql(dialect=self.dialect, identify=True),
-            operation.column_type.sql(dialect=self.dialect),
-            "KEY" if str(key).upper() == "YES" else str(extra or ""),
-            "NULL" if str(nullable).upper() == "YES" else "NOT NULL",
-        ]
-        for keyword, value in (("DEFAULT", default), ("COMMENT", comment)):
-            if value is not None:
-                definition.extend(
-                    [keyword, exp.Literal.string(str(value)).sql(dialect=self.dialect)]
-                )
+        column_definition = column_definition.copy()
+        column_definition.set("this", operation.column.copy())
+        column_definition.set("kind", operation.column_type.copy())
 
         return exp.Alter(
             this=operation.target_table,
             kind="TABLE",
-            actions=[exp.Command(this=f"MODIFY COLUMN {' '.join(filter(None, definition))}")],
+            actions=[
+                exp.ModifyColumn(
+                    this=column_definition,
+                )
+            ],
         )
 
     def create_schema(
@@ -258,7 +494,7 @@ class StarRocksEngineAdapter(
         schema_name: SchemaName,
         ignore_if_exists: bool = True,
         warn_on_error: bool = True,
-        properties: t.Optional[t.List[exp.Expression]] = None,
+        properties: t.Optional[t.List[exp.Expr]] = None,
     ) -> None:
         # StarRocks uses databases instead of schemas
         return self._create_schema(
@@ -274,7 +510,7 @@ class StarRocksEngineAdapter(
         schema_name: SchemaName,
         ignore_if_not_exists: bool = True,
         cascade: bool = False,
-        **drop_args: t.Dict[str, exp.Expression],
+        **drop_args: t.Dict[str, exp.Expr],
     ) -> None:
         # StarRocks doesn't support CASCADE clause
         return self._drop_object(
@@ -339,16 +575,16 @@ class StarRocksEngineAdapter(
         catalog_name: t.Optional[str] = None,
         table_format: t.Optional[str] = None,
         storage_format: t.Optional[str] = None,
-        partitioned_by: t.Optional[t.List[exp.Expression]] = None,
+        partitioned_by: t.Optional[t.List[exp.Expr]] = None,
         partition_interval_unit: t.Optional[IntervalUnit] = None,
-        clustered_by: t.Optional[t.List[exp.Expression]] = None,
-        table_properties: t.Optional[t.Dict[str, exp.Expression]] = None,
+        clustered_by: t.Optional[t.List[exp.Expr]] = None,
+        table_properties: t.Optional[t.Dict[str, exp.Expr]] = None,
         target_columns_to_types: t.Optional[t.Dict[str, exp.DataType]] = None,
         table_description: t.Optional[str] = None,
         table_kind: t.Optional[str] = None,
         **kwargs: t.Any,
     ) -> t.Optional[exp.Properties]:
-        properties: t.List[exp.Expression] = []
+        properties: t.List[exp.Expr] = []
         props = {k.lower(): v for k, v in (table_properties or {}).items()}
 
         if table_description:
@@ -363,11 +599,11 @@ class StarRocksEngineAdapter(
         if distributed_by_expr := props.pop("distributed_by", None):
             properties.append(self._build_distributed_by_property(distributed_by_expr))
 
-        if rollup_expr := props.pop("rollup", None):
-            properties.append(self._build_rollup_property(rollup_expr))
-
         if order_by_expr := props.pop("order_by", None):
             properties.append(self._build_order_by_property(order_by_expr))
+
+        if rollup_expr := props.pop("rollup", None):
+            properties.append(self._build_rollup_property(rollup_expr))
 
         properties.extend(self._table_or_view_properties_to_expressions(props))
 
@@ -378,7 +614,7 @@ class StarRocksEngineAdapter(
 
     def _build_primary_key_property(
         self,
-        primary_key_expr: exp.Expression,
+        primary_key_expr: exp.Expr,
     ) -> exp.PrimaryKey:
         return exp.PrimaryKey(expressions=primary_key_expr.expressions)
 
@@ -391,14 +627,14 @@ class StarRocksEngineAdapter(
 
     def _build_partitioned_by_exp(
         self,
-        partitioned_by: t.List[exp.Expression],
+        partitioned_by: t.List[exp.Expr],
         **kwargs: t.Any,
     ) -> exp.PartitionedByProperty:
         return exp.PartitionedByProperty(this=exp.Schema(expressions=partitioned_by))
 
     def _build_distributed_by_property(
         self,
-        distributed_by_expr: exp.Expression,
+        distributed_by_expr: exp.Expr,
     ) -> exp.DistributedByProperty:
         if isinstance(distributed_by_expr, exp.Rand):
             buckets_prop = distributed_by_expr.args.get("this")
@@ -431,7 +667,7 @@ class StarRocksEngineAdapter(
             "Expected HASH(columns := (col1, col2, ...)) or RANDOM()."
         )
 
-    def _build_rollup_property(self, rollup_expr: exp.Expression) -> exp.RollupProperty:
+    def _build_rollup_property(self, rollup_expr: exp.Expr) -> exp.RollupProperty:
         return exp.RollupProperty(
             expressions=[
                 exp.Schema(this=expr.this, expressions=expr.expression.expressions)
@@ -439,7 +675,7 @@ class StarRocksEngineAdapter(
             ]
         )
 
-    def _build_order_by_property(self, order_by_expr: exp.Expression) -> exp.Order:
+    def _build_order_by_property(self, order_by_expr: exp.Expr) -> exp.Order:
         exprs = (
             order_by_expr.expressions
             if isinstance(order_by_expr, (exp.Tuple, exp.Array))
@@ -520,7 +756,7 @@ class StarRocksEngineAdapter(
         table: exp.Table,
         grants_config: "GrantsConfig",
         table_type: DataObjectType = DataObjectType.TABLE,
-    ) -> t.List[exp.Expression]:
+    ) -> t.List[exp.Expr]:
         # StarRocks doesn't support catalog in GRANT/REVOKE statements - strip it
         table_without_catalog = table.copy()
         table_without_catalog.set("catalog", None)
