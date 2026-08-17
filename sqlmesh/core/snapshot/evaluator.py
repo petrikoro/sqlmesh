@@ -647,9 +647,7 @@ class SnapshotEvaluator:
                 audit = audit.model_copy(update={"blocking": False})
 
             blocking_override = audit_args.get("blocking")
-            is_blocking = (
-                blocking_override == exp.true() if blocking_override else audit.blocking
-            )
+            is_blocking = blocking_override == exp.true() if blocking_override else audit.blocking
             if audit_type is not None and is_blocking != (audit_type == "blocking"):
                 continue
 
@@ -1271,19 +1269,24 @@ class SnapshotEvaluator:
         tmp_table.this.set("this", f"{tmp_table.name}_schema_tmp")
         tmp_table_name = tmp_table.sql()
 
-        if snapshot.is_materialized:
-            self._execute_create(
-                snapshot=snapshot,
-                table_name=tmp_table_name,
-                is_table_deployable=False,
-                deployability_index=deployability_index,
-                create_render_kwargs=render_kwargs,
-                rendered_physical_properties=rendered_physical_properties,
-                dry_run=False,
-                run_pre_post_statements=run_pre_post_statements,
-                skip_grants=True,  # skip grants for tmp table
-            )
         try:
+            if snapshot.is_materialized:
+                # A previous interrupted migration may have left this deterministic temp table
+                # behind. Since table creation uses IF NOT EXISTS, remove it first to ensure that
+                # the schema diff is based on the current model instead of a stale schema.
+                adapter.drop_table(tmp_table_name)
+                self._execute_create(
+                    snapshot=snapshot,
+                    table_name=tmp_table_name,
+                    is_table_deployable=False,
+                    deployability_index=deployability_index,
+                    create_render_kwargs=render_kwargs,
+                    rendered_physical_properties=rendered_physical_properties,
+                    dry_run=False,
+                    run_pre_post_statements=run_pre_post_statements,
+                    skip_grants=True,  # skip grants for tmp table
+                )
+
             evaluation_strategy = _evaluation_strategy(snapshot, adapter)
             logger.info(
                 "Migrating table schema from '%s' to '%s'",

@@ -78,6 +78,7 @@ from sqlmesh.utils.errors import (
     SQLMeshError,
     DestructiveChangeError,
     AdditiveChangeError,
+    MigrationNotSupportedError,
 )
 from sqlmesh.utils.metaprogramming import Executable
 from sqlmesh.utils.pydantic import list_of_fields_validator
@@ -2048,8 +2049,15 @@ def test_create_clone_in_dev(mocker: MockerFixture, adapter_mock, make_snapshot)
 
     adapter_mock.alter_table.assert_called_once_with([])
 
-    adapter_mock.drop_table.assert_called_once_with(
-        f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp"
+    adapter_mock.drop_table.assert_has_calls(
+        [
+            call(
+                f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp"
+            ),
+            call(
+                f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp"
+            ),
+        ]
     )
 
 
@@ -2099,6 +2107,9 @@ def test_drop_clone_in_dev_when_migration_fails(mocker: MockerFixture, adapter_m
 
     adapter_mock.drop_table.assert_has_calls(
         [
+            call(
+                f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp"
+            ),
             call(
                 f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp"
             ),
@@ -4603,6 +4614,44 @@ def test_migrate_snapshot(snapshot: Snapshot, mocker: MockerFixture, adapter_moc
         f"{new_snapshot.table_name()}_schema_tmp",
         ignore_destructive=False,
         ignore_additive=False,
+    )
+    adapter_mock.drop_table.assert_has_calls(
+        [
+            call(f"{new_snapshot.table_name()}_schema_tmp"),
+            call(f"{new_snapshot.table_name()}_schema_tmp"),
+        ]
+    )
+
+
+def test_migrate_target_table_cleans_up_when_temp_table_creation_fails(
+    snapshot: Snapshot, mocker: MockerFixture, adapter_mock
+):
+    evaluator = SnapshotEvaluator(adapter_mock)
+    tmp_table_name = f"{snapshot.table_name()}_schema_tmp"
+
+    def fail_creation(**kwargs):
+        adapter_mock.drop_table.assert_called_once_with(tmp_table_name)
+        raise MigrationNotSupportedError("Temp table creation failed")
+
+    mocker.patch.object(evaluator, "_execute_create", side_effect=fail_creation)
+
+    with pytest.raises(MigrationNotSupportedError, match="Temp table creation failed"):
+        evaluator._migrate_target_table(
+            target_table_name=snapshot.table_name(),
+            snapshot=snapshot,
+            snapshots={},
+            deployability_index=DeployabilityIndex.all_deployable(),
+            render_kwargs={},
+            rendered_physical_properties={},
+            allow_destructive_snapshots=set(),
+            allow_additive_snapshots=set(),
+        )
+
+    adapter_mock.drop_table.assert_has_calls(
+        [
+            call(tmp_table_name),
+            call(tmp_table_name),
+        ]
     )
 
 
