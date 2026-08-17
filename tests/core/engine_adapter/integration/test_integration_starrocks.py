@@ -1,8 +1,11 @@
 import typing as t
+
 import pytest
 from pytest import FixtureRequest
-from sqlglot import exp
+from sqlglot import exp, parse_one
 from sqlmesh.core.engine_adapter.starrocks import StarRocksEngineAdapter
+from sqlmesh.core.model import FullKind, SqlModel
+from sqlmesh.utils.errors import MigrationNotSupportedError, PlanError
 from tests.core.engine_adapter.integration import (
     TestContext,
     generate_pytest_params,
@@ -25,6 +28,30 @@ def engine_adapter(ctx: TestContext) -> StarRocksEngineAdapter:
     return ctx.engine_adapter
 
 
+def _schema_migration_model(
+    model_name: exp.Table,
+    value_type: str,
+    id_type: str = "INT",
+) -> SqlModel:
+    value_data_type = exp.DataType.build(value_type, dialect="starrocks")
+    id_data_type = exp.DataType.build(id_type, dialect="starrocks")
+
+    return SqlModel(
+        name=model_name.sql(dialect="starrocks"),
+        dialect="starrocks",
+        kind=FullKind(),
+        query=exp.select(
+            exp.cast(exp.Literal.number(1), id_data_type).as_("id"),
+            exp.cast(exp.Literal.string("42"), value_data_type).as_("value"),
+        ),
+        columns={"id": id_data_type, "value": value_data_type},
+        physical_properties={
+            "primary_key": exp.Tuple(expressions=[exp.column("id")]),
+            "distributed_by": parse_one("HASH(columns := id)", dialect="starrocks"),
+        },
+    )
+
+
 def test_engine_adapter(ctx: TestContext):
     """Test basic connectivity to StarRocks."""
     assert isinstance(ctx.engine_adapter, StarRocksEngineAdapter)
@@ -34,6 +61,71 @@ def test_engine_adapter(ctx: TestContext):
 def test_engine_adapter_dialect(ctx: TestContext):
     """Test that the dialect is correctly set to starrocks."""
     assert ctx.engine_adapter.dialect == "starrocks"
+
+
+def test_context_applies_forward_only_schema_migration(ctx: TestContext):
+    model_name = ctx.table("PLAN_SCHEMA_MIGRATION")
+    context = ctx.create_context()
+
+    context.upsert_model(_schema_migration_model(model_name, "SMALLINT"))
+    initial_plan = context.plan("prod", auto_apply=True, no_prompts=True)
+    initial_snapshot = initial_plan.new_snapshots[0]
+
+    context.upsert_model(_schema_migration_model(model_name, "BIGINT"))
+    supported_plan = context.plan(
+        "prod",
+        forward_only=True,
+        auto_apply=True,
+        no_prompts=True,
+    )
+    supported_snapshot = supported_plan.new_snapshots[0]
+
+    assert supported_snapshot.table_name() == initial_snapshot.table_name()
+    physical_table = exp.to_table(supported_snapshot.table_name())
+    assert context.engine_adapter.columns(physical_table)["value"].is_type(exp.DataType.Type.BIGINT)
+    assert context.engine_adapter.fetchall(
+        exp.select("id", "value").from_(physical_table), quote_identifiers=True
+    ) == ((1, 42),)
+
+
+def test_context_rebuilds_rejected_schema_migration(ctx: TestContext):
+    model_name = ctx.table("PLAN_REJECTED_SCHEMA_MIGRATION")
+    context = ctx.create_context()
+
+    context.upsert_model(_schema_migration_model(model_name, "INT"))
+    initial_plan = context.plan("prod", auto_apply=True, no_prompts=True)
+    initial_snapshot = initial_plan.new_snapshots[0]
+
+    context.upsert_model(_schema_migration_model(model_name, "INT", id_type="BIGINT"))
+    with pytest.raises(PlanError, match="requires a new physical table"):
+        context.plan("prod", forward_only=True, no_prompts=True)
+
+    rebuilt_plan = context.plan("prod", auto_apply=True, no_prompts=True)
+    rebuilt_snapshot = rebuilt_plan.new_snapshots[0]
+
+    assert rebuilt_snapshot.table_name() != initial_snapshot.table_name()
+    physical_table = exp.to_table(rebuilt_snapshot.table_name())
+    assert context.engine_adapter.columns(physical_table)["id"].is_type(exp.DataType.Type.BIGINT)
+
+
+def test_generated_column_table_definition_fails_closed(
+    engine_adapter: StarRocksEngineAdapter, ctx: TestContext
+):
+    table = ctx.table("GENERATED_COLUMN_SCHEMA_MIGRATION")
+    table_sql = table.sql(dialect="starrocks", identify=True)
+    engine_adapter.execute(
+        f"""CREATE TABLE {table_sql} (
+          `id` INT NOT NULL,
+          `source` INT NULL,
+          `generated` BIGINT NULL AS `source` * 2
+        ) ENGINE=OLAP
+        DUPLICATE KEY(`id`)
+        DISTRIBUTED BY HASH(`id`) BUCKETS 1
+        PROPERTIES ("replication_num" = "1")"""
+    )
+
+    with pytest.raises(MigrationNotSupportedError, match="Unable to parse"):
+        engine_adapter._get_table_definition(table)
 
 
 def test_create_database(ctx: TestContext):

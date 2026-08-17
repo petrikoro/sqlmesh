@@ -40,7 +40,7 @@ import sys
 import time
 import traceback
 import typing as t
-from functools import cached_property
+from functools import cached_property, partial
 from io import StringIO
 from itertools import chain
 from pathlib import Path
@@ -79,7 +79,7 @@ from sqlmesh.core.environment import Environment, EnvironmentNamingInfo, Environ
 from sqlmesh.core.loader import Loader
 from sqlmesh.core.linter.definition import AnnotatedRuleViolation, Linter
 from sqlmesh.core.linter.rules import BUILTIN_RULES
-from sqlmesh.core.macros import ExecutableOrMacro, macro
+from sqlmesh.core.macros import ExecutableOrMacro, RuntimeStage, macro
 from sqlmesh.core.metric import Metric, rewrite
 from sqlmesh.core.model import Model, update_model_schemas
 from sqlmesh.core.config.model import ModelDefaultsConfig
@@ -1811,6 +1811,11 @@ class GenericContext(BaseContext, t.Generic[C]):
             },
             explain=explain or False,
             ignore_cron=ignore_cron or False,
+            can_apply_schema_change_in_place=partial(
+                self._can_apply_schema_change_in_place,
+                snapshots=context_diff.snapshots_by_name,
+                execution_time=execution_time,
+            ),
         )
 
     def apply(
@@ -2926,6 +2931,25 @@ class GenericContext(BaseContext, t.Generic[C]):
                 "Environment catalog mapping is only supported for engine adapters that support multiple catalogs"
             )
         return self.config.environment_catalog_mapping
+
+    def _can_apply_schema_change_in_place(
+        self,
+        new: Snapshot,
+        old: Snapshot,
+        snapshots: t.Dict[str, Snapshot],
+        execution_time: t.Optional[TimeLike],
+    ) -> bool:
+        adapter = self._get_engine_adapter(new.model.gateway)
+        return adapter.can_apply_schema_change_in_place(
+            current=old.model,
+            target=new.model,
+            current_table=old.table_name(),
+            engine_adapter=adapter,
+            snapshots=snapshots,
+            execution_time=execution_time,
+            runtime_stage=RuntimeStage.CREATING,
+            deployability_index=DeployabilityIndex.all_deployable(),
+        )
 
     def _get_engine_adapter(self, gateway: t.Optional[str] = None) -> EngineAdapter:
         if gateway:

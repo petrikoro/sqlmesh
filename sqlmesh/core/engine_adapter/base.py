@@ -259,6 +259,20 @@ class EngineAdapter:
             }
         )
 
+    def can_apply_schema_change_in_place(
+        self,
+        current: Model,
+        target: Model,
+        current_table: TableName,
+        **render_kwargs: t.Any,
+    ) -> bool:
+        """Return whether the target model can reuse the current physical table.
+
+        This is an engine capability check for plans that retain the existing physical version.
+        It does not categorize the change or decide whether to create a new physical version.
+        """
+        return True
+
     @property
     def _catalog_type_overrides(self) -> t.Dict[str, str]:
         return self._extra_config.get("catalog_type_overrides") or {}

@@ -2415,6 +2415,7 @@ def test_init_project(ctx: TestContext, tmp_path: pathlib.Path):
         duration_ms,
         num_audits_passed,
         num_audits_failed,
+        num_audits_skipped,
         audit_only=False,
         execution_stats=None,
         auto_restatement_triggers=None,

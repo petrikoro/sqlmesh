@@ -98,6 +98,8 @@ class PlanBuilder:
         end_override_per_model: A mapping of model FQNs to target end dates.
         ignore_cron: Whether to ignore the node's cron schedule when computing missing intervals.
         explain: Whether to explain the plan instead of applying it.
+        can_apply_schema_change_in_place: Callback that determines whether an engine can apply a
+            schema change to an existing physical table.
     """
 
     def __init__(
@@ -138,6 +140,7 @@ class PlanBuilder:
         console: t.Optional[PlanBuilderConsole] = None,
         user_provided_flags: t.Optional[t.Dict[str, UserProvidedFlags]] = None,
         selected_models: t.Optional[t.Set[str]] = None,
+        can_apply_schema_change_in_place: t.Optional[t.Callable[[Snapshot, Snapshot], bool]] = None,
     ):
         self._context_diff = context_diff
         self._no_gaps = no_gaps
@@ -183,6 +186,7 @@ class PlanBuilder:
         self._choices: t.Dict[SnapshotId, SnapshotChangeCategory] = {}
         self._user_provided_flags = user_provided_flags
         self._selected_models = selected_models
+        self._can_apply_schema_change_in_place = can_apply_schema_change_in_place
         self._explain = explain
 
         self._start = start
@@ -672,12 +676,12 @@ class PlanBuilder:
 
             if s_id in self._choices:
                 snapshot.categorize_as(self._choices[s_id], forward_only)
-                continue
-
-            if s_id in self._context_diff.added:
+            elif s_id in self._context_diff.added:
                 snapshot.categorize_as(SnapshotChangeCategory.BREAKING, forward_only)
             elif s_id.name in self._context_diff.modified_snapshots:
                 self._categorize_snapshot(snapshot, forward_only, dag, indirectly_modified)
+
+            self._ensure_schema_change_can_be_applied_in_place(snapshot)
 
     def _categorize_snapshot(
         self,
@@ -758,6 +762,42 @@ class PlanBuilder:
         else:
             # Metadata updated.
             snapshot.categorize_as(SnapshotChangeCategory.METADATA, forward_only)
+
+    def _ensure_schema_change_can_be_applied_in_place(self, snapshot: Snapshot) -> None:
+        modified = self._context_diff.modified_snapshots.get(snapshot.name)
+        if (
+            modified is None
+            or not snapshot.categorized
+            or not snapshot.is_materialized
+            or not snapshot.requires_schema_migration_in_prod
+            or self._can_apply_schema_change_in_place is None
+        ):
+            return
+
+        _, old = modified
+        if self._can_apply_schema_change_in_place(snapshot, old):
+            return
+
+        if snapshot.is_forward_only:
+            raise PlanError(
+                f"The schema change for model '{snapshot.name}' requires a new physical table, "
+                "which is not supported by a forward-only plan. Run a non-forward-only plan "
+                "and disable the model's 'forward_only' setting if it is configured."
+            )
+
+        current_version = old.version_get_or_generate()
+        snapshot.categorize_as(
+            SnapshotChangeCategory.INDIRECT_BREAKING
+            if self._context_diff.indirectly_modified(snapshot.name)
+            else SnapshotChangeCategory.BREAKING
+        )
+        if current_version != snapshot.version:
+            return
+
+        raise PlanError(
+            f"The schema change for model '{snapshot.name}' requires a new physical table, but "
+            "the model configuration prevents the plan from using a new physical version."
+        )
 
     def _get_orphaned_indirect_change_category(
         self, indirect_snapshot: Snapshot
