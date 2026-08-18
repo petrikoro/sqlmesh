@@ -108,6 +108,8 @@ For more information, see the [StarRocks Dynamic overwrite documentation](https:
 
 ## Limitations
 
+- **Schema-migration baseline** — SQLMesh's in-place StarRocks schema-migration compatibility rules target StarRocks 4.1.3. Other server versions may have different conversion or constraint rules and are not a supported baseline for forward-only changes that reuse an existing physical table.
+- **Legacy DecimalV2 tables** — SQLMesh cannot detect legacy DecimalV2 columns automatically because StarRocks metadata does not distinguish DecimalV2 from DecimalV3. In-place migration of these columns is unsupported; rebuild the physical table before changing them.
 - **No transactions** — StarRocks supports only limited number of use cases for transactions, so SQLMesh runs operations non-transactionally. See: https://docs.starrocks.io/docs/loading/SQL_transaction/ for more details.
 - **Name length** — StarRocks allows table names up to 1024 characters, but database names are limited to 256. SQLMesh uses the stricter 256-character limit for all identifiers. See: https://docs.starrocks.io/docs/sql-reference/System_limit/ for more details.
 - **No materialized views** — StarRocks has support for materialized views, but SQLMesh doesn't support them yet. Use regular views or tables.

@@ -1274,6 +1274,27 @@ def test_starrocks(make_config):
     }
 
 
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [
+        ("schema_change_timeout", float("inf")),
+        ("schema_change_timeout", 0),
+        ("schema_change_poll_interval", float("nan")),
+        ("schema_change_poll_interval", -1),
+    ],
+)
+def test_starrocks_rejects_invalid_schema_change_settings(make_config, setting: str, value: float):
+    with pytest.raises(ConfigError):
+        make_config(
+            type="starrocks",
+            host="host",
+            user="user",
+            password="password",
+            check_import=False,
+            **{setting: value},
+        )
+
+
 def test_starrocks_dynamic_overwrite(make_config):
     # Test that dynamic_overwrite is always enabled
     config = make_config(

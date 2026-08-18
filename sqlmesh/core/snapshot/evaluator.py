@@ -1266,15 +1266,15 @@ class SnapshotEvaluator:
         adapter = self.get_adapter(snapshot.model.gateway)
 
         tmp_table = exp.to_table(target_table_name)
-        tmp_table.this.set("this", f"{tmp_table.name}_schema_tmp")
+        suffix = f"_schema_tmp_{random_id(short=True)}"
+        base_name = tmp_table.name
+        if adapter.MAX_IDENTIFIER_LENGTH is not None:
+            base_name = base_name[: adapter.MAX_IDENTIFIER_LENGTH - len(suffix)]
+        tmp_table.this.set("this", f"{base_name}{suffix}")
         tmp_table_name = tmp_table.sql()
 
         try:
             if snapshot.is_materialized:
-                # A previous interrupted migration may have left this deterministic temp table
-                # behind. Since table creation uses IF NOT EXISTS, remove it first to ensure that
-                # the schema diff is based on the current model instead of a stale schema.
-                adapter.drop_table(tmp_table_name)
                 self._execute_create(
                     snapshot=snapshot,
                     table_name=tmp_table_name,

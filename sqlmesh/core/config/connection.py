@@ -2485,8 +2485,8 @@ class StarRocksConnectionConfig(ConnectionConfig):
     charset: t.Optional[str] = None
     collation: t.Optional[str] = None
     ssl_disabled: t.Optional[bool] = None
-    schema_change_timeout: float = Field(default=3600, gt=0)
-    schema_change_poll_interval: float = Field(default=1, gt=0)
+    schema_change_timeout: float = Field(default=3600, gt=0, allow_inf_nan=False)
+    schema_change_poll_interval: float = Field(default=1, gt=0, allow_inf_nan=False)
 
     concurrent_tasks: int = 1
     register_comments: bool = True
@@ -2544,6 +2544,7 @@ class StarRocksConnectionConfig(ConnectionConfig):
 
     def get_catalog(self) -> str:
         return "default_catalog"
+
 
 class RisingwaveConnectionConfig(ConnectionConfig):
     host: str

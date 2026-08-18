@@ -104,6 +104,11 @@ def snapshot(duck_conn, make_snapshot) -> Snapshot:
 
 
 @pytest.fixture
+def schema_migration_temp_id(mocker: MockerFixture) -> None:
+    mocker.patch("sqlmesh.core.snapshot.evaluator.random_id", return_value="test_id")
+
+
+@pytest.fixture
 def date_kwargs() -> t.Dict[str, str]:
     return {
         "start": "2020-01-01",
@@ -129,6 +134,7 @@ def adapter_mock(mocker: MockerFixture):
     adapter_mock.transaction.return_value = transaction_mock
     adapter_mock.session.return_value = session_mock
     adapter_mock.dialect = "duckdb"
+    adapter_mock.MAX_IDENTIFIER_LENGTH = None
     adapter_mock.HAS_VIEW_BINDING = False
     adapter_mock.RESOLVE_TABLE_REFS_IN_PHYSICAL_PROPERTIES = frozenset()
     adapter_mock.wap_supported.return_value = False
@@ -156,6 +162,7 @@ def adapters(mocker: MockerFixture):
         adapter_mock.transaction.return_value = transaction_mock
         adapter_mock.session.return_value = session_mock
         adapter_mock.dialect = "duckdb"
+        adapter_mock.MAX_IDENTIFIER_LENGTH = None
         adapter_mock.HAS_VIEW_BINDING = False
         adapter_mock.RESOLVE_TABLE_REFS_IN_PHYSICAL_PROPERTIES = frozenset()
         adapter_mock.wap_supported.return_value = False
@@ -1267,6 +1274,7 @@ def test_create_tables_exist(
 ):
     adapter_mock = mocker.patch("sqlmesh.core.engine_adapter.EngineAdapter")
     adapter_mock.dialect = "duckdb"
+    adapter_mock.MAX_IDENTIFIER_LENGTH = None
     adapter_mock.with_settings.return_value = adapter_mock
     adapter_mock.RESOLVE_TABLE_REFS_IN_PHYSICAL_PROPERTIES = frozenset()
 
@@ -1995,7 +2003,9 @@ def test_snapshot_evaluator_yield_empty_pd(adapter_mock, make_snapshot):
     adapter_mock.insert_overwrite_by_time_partition.assert_not_called()
 
 
-def test_create_clone_in_dev(mocker: MockerFixture, adapter_mock, make_snapshot):
+def test_create_clone_in_dev(
+    mocker: MockerFixture, adapter_mock, make_snapshot, schema_migration_temp_id
+):
     adapter_mock.SUPPORTS_CLONING = True
     adapter_mock.get_alter_operations.return_value = []
     evaluator = SnapshotEvaluator(adapter_mock)
@@ -2022,7 +2032,7 @@ def test_create_clone_in_dev(mocker: MockerFixture, adapter_mock, make_snapshot)
     evaluator.create([snapshot], {}, deployability_index=DeployabilityIndex.none_deployable())
 
     adapter_mock.create_table.assert_called_once_with(
-        f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp",
+        f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp_test_id",
         target_columns_to_types={"a": exp.DataType.build("int"), "ds": exp.DataType.build("date")},
         table_format=None,
         storage_format=None,
@@ -2042,26 +2052,21 @@ def test_create_clone_in_dev(mocker: MockerFixture, adapter_mock, make_snapshot)
 
     adapter_mock.get_alter_operations.assert_called_once_with(
         f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev",
-        f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp",
+        f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp_test_id",
         ignore_destructive=False,
         ignore_additive=False,
     )
 
     adapter_mock.alter_table.assert_called_once_with([])
 
-    adapter_mock.drop_table.assert_has_calls(
-        [
-            call(
-                f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp"
-            ),
-            call(
-                f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp"
-            ),
-        ]
+    adapter_mock.drop_table.assert_called_once_with(
+        f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp_test_id"
     )
 
 
-def test_drop_clone_in_dev_when_migration_fails(mocker: MockerFixture, adapter_mock, make_snapshot):
+def test_drop_clone_in_dev_when_migration_fails(
+    mocker: MockerFixture, adapter_mock, make_snapshot, schema_migration_temp_id
+):
     adapter_mock.SUPPORTS_CLONING = True
     adapter_mock.get_alter_operations.return_value = []
     evaluator = SnapshotEvaluator(adapter_mock)
@@ -2098,7 +2103,7 @@ def test_drop_clone_in_dev_when_migration_fails(mocker: MockerFixture, adapter_m
 
     adapter_mock.get_alter_operations.assert_called_once_with(
         f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev",
-        f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp",
+        f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp_test_id",
         ignore_destructive=False,
         ignore_additive=False,
     )
@@ -2108,10 +2113,7 @@ def test_drop_clone_in_dev_when_migration_fails(mocker: MockerFixture, adapter_m
     adapter_mock.drop_table.assert_has_calls(
         [
             call(
-                f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp"
-            ),
-            call(
-                f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp"
+                f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp_test_id"
             ),
             call(f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev"),
         ]
@@ -2120,7 +2122,11 @@ def test_drop_clone_in_dev_when_migration_fails(mocker: MockerFixture, adapter_m
 
 @pytest.mark.parametrize("use_this_model", [True, False])
 def test_create_clone_in_dev_self_referencing(
-    mocker: MockerFixture, adapter_mock, make_snapshot, use_this_model: bool
+    mocker: MockerFixture,
+    adapter_mock,
+    make_snapshot,
+    use_this_model: bool,
+    schema_migration_temp_id,
 ):
     adapter_mock.SUPPORTS_CLONING = True
     adapter_mock.get_alter_operations.return_value = []
@@ -2149,7 +2155,7 @@ def test_create_clone_in_dev_self_referencing(
     evaluator.create([snapshot], {}, deployability_index=DeployabilityIndex.none_deployable())
 
     adapter_mock.create_table.assert_called_once_with(
-        f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp",
+        f"sqlmesh__test_schema.test_schema__test_model__{snapshot.version}__dev_schema_tmp_test_id",
         target_columns_to_types={"a": exp.DataType.build("int"), "ds": exp.DataType.build("date")},
         table_format=None,
         storage_format=None,
@@ -2165,12 +2171,12 @@ def test_create_clone_in_dev_self_referencing(
     table_alias = (
         "test_model"
         if not use_this_model
-        else f"test_schema__test_model__{snapshot.version}__dev_schema_tmp"
+        else f"test_schema__test_model__{snapshot.version}__dev_schema_tmp_test_id"
     )
     dry_run_query = adapter_mock.fetchall.call_args[0][0].sql()
     assert (
         dry_run_query
-        == f'SELECT CAST(1 AS INT) AS "a", CAST("ds" AS DATE) AS "ds" FROM "sqlmesh__test_schema"."test_schema__test_model__{snapshot.version}__dev_schema_tmp" AS "{table_alias}" /* test_schema.test_model */ WHERE FALSE LIMIT 0'
+        == f'SELECT CAST(1 AS INT) AS "a", CAST("ds" AS DATE) AS "ds" FROM "sqlmesh__test_schema"."test_schema__test_model__{snapshot.version}__dev_schema_tmp_test_id" AS "{table_alias}" /* test_schema.test_model */ WHERE FALSE LIMIT 0'
     )
 
 
@@ -4532,9 +4538,16 @@ def test_create_managed_forward_only_with_previous_version_doesnt_clone_for_dev_
     assert adapter_mock.ctas.call_args_list[0].args[0] == snapshot.table_name(is_deployable=False)
 
 
-def test_migrate_snapshot(snapshot: Snapshot, mocker: MockerFixture, adapter_mock, make_snapshot):
+def test_migrate_snapshot(
+    snapshot: Snapshot,
+    mocker: MockerFixture,
+    adapter_mock,
+    make_snapshot,
+    schema_migration_temp_id,
+):
     adapter_mock = mocker.patch("sqlmesh.core.engine_adapter.EngineAdapter")
     adapter_mock.dialect = "duckdb"
+    adapter_mock.MAX_IDENTIFIER_LENGTH = None
     adapter_mock.with_settings.return_value = adapter_mock
     adapter_mock.RESOLVE_TABLE_REFS_IN_PHYSICAL_PROPERTIES = frozenset()
     adapter_mock.adjust_physical_properties_for_incremental.side_effect = (
@@ -4585,7 +4598,7 @@ def test_migrate_snapshot(snapshot: Snapshot, mocker: MockerFixture, adapter_moc
                 **common_kwargs,
             ),
             call(
-                f"{new_snapshot.table_name()}_schema_tmp",
+                f"{new_snapshot.table_name()}_schema_tmp_test_id",
                 target_columns_to_types={
                     "a": exp.DataType.build("int"),
                     "b": exp.DataType.build("int"),
@@ -4611,26 +4624,23 @@ def test_migrate_snapshot(snapshot: Snapshot, mocker: MockerFixture, adapter_moc
 
     adapter_mock.get_alter_operations.assert_called_once_with(
         snapshot.table_name(),
-        f"{new_snapshot.table_name()}_schema_tmp",
+        f"{new_snapshot.table_name()}_schema_tmp_test_id",
         ignore_destructive=False,
         ignore_additive=False,
     )
-    adapter_mock.drop_table.assert_has_calls(
-        [
-            call(f"{new_snapshot.table_name()}_schema_tmp"),
-            call(f"{new_snapshot.table_name()}_schema_tmp"),
-        ]
+    adapter_mock.drop_table.assert_called_once_with(
+        f"{new_snapshot.table_name()}_schema_tmp_test_id"
     )
 
 
 def test_migrate_target_table_cleans_up_when_temp_table_creation_fails(
-    snapshot: Snapshot, mocker: MockerFixture, adapter_mock
+    snapshot: Snapshot, mocker: MockerFixture, adapter_mock, schema_migration_temp_id
 ):
     evaluator = SnapshotEvaluator(adapter_mock)
-    tmp_table_name = f"{snapshot.table_name()}_schema_tmp"
+    tmp_table_name = f"{snapshot.table_name()}_schema_tmp_test_id"
 
     def fail_creation(**kwargs):
-        adapter_mock.drop_table.assert_called_once_with(tmp_table_name)
+        adapter_mock.drop_table.assert_not_called()
         raise MigrationNotSupportedError("Temp table creation failed")
 
     mocker.patch.object(evaluator, "_execute_create", side_effect=fail_creation)
@@ -4647,12 +4657,83 @@ def test_migrate_target_table_cleans_up_when_temp_table_creation_fails(
             allow_additive_snapshots=set(),
         )
 
-    adapter_mock.drop_table.assert_has_calls(
-        [
-            call(tmp_table_name),
-            call(tmp_table_name),
-        ]
+    adapter_mock.drop_table.assert_called_once_with(tmp_table_name)
+
+
+def test_migrate_target_table_uses_unique_temp_tables(
+    snapshot: Snapshot, mocker: MockerFixture, adapter_mock
+):
+    evaluator = SnapshotEvaluator(adapter_mock)
+    evaluation_strategy = mocker.Mock()
+    mocker.patch(
+        "sqlmesh.core.snapshot.evaluator._evaluation_strategy",
+        return_value=evaluation_strategy,
     )
+    mocker.patch.object(evaluator, "_execute_create")
+    mocker.patch(
+        "sqlmesh.core.snapshot.evaluator.random_id",
+        side_effect=["first_id", "second_id"],
+    )
+
+    def migrate() -> None:
+        evaluator._migrate_target_table(
+            target_table_name=snapshot.table_name(),
+            snapshot=snapshot,
+            snapshots={},
+            deployability_index=DeployabilityIndex.all_deployable(),
+            render_kwargs={},
+            rendered_physical_properties={},
+            allow_destructive_snapshots=set(),
+            allow_additive_snapshots=set(),
+        )
+
+    migrate()
+    migrate()
+
+    expected_temp_tables = [
+        f"{snapshot.table_name()}_schema_tmp_first_id",
+        f"{snapshot.table_name()}_schema_tmp_second_id",
+    ]
+    assert [
+        migration.kwargs["source_table_name"]
+        for migration in evaluation_strategy.migrate.call_args_list
+    ] == expected_temp_tables
+    assert adapter_mock.drop_table.call_args_list == [
+        call(expected_temp_tables[0]),
+        call(expected_temp_tables[1]),
+    ]
+
+
+def test_migrate_target_table_limits_temp_table_identifier(
+    snapshot: Snapshot, mocker: MockerFixture, adapter_mock
+):
+    adapter_mock.MAX_IDENTIFIER_LENGTH = 256
+    evaluator = SnapshotEvaluator(adapter_mock)
+    evaluation_strategy = mocker.Mock()
+    mocker.patch(
+        "sqlmesh.core.snapshot.evaluator._evaluation_strategy",
+        return_value=evaluation_strategy,
+    )
+    mocker.patch.object(evaluator, "_execute_create")
+    mocker.patch("sqlmesh.core.snapshot.evaluator.random_id", return_value="abcdefgh")
+    target_table_name = f"test_schema.{'t' * 237}"
+
+    evaluator._migrate_target_table(
+        target_table_name=target_table_name,
+        snapshot=snapshot,
+        snapshots={},
+        deployability_index=DeployabilityIndex.all_deployable(),
+        render_kwargs={},
+        rendered_physical_properties={},
+        allow_destructive_snapshots=set(),
+        allow_additive_snapshots=set(),
+    )
+
+    temp_table_name = evaluation_strategy.migrate.call_args.kwargs["source_table_name"]
+    temp_table = exp.to_table(temp_table_name)
+    assert len(temp_table.name) == adapter_mock.MAX_IDENTIFIER_LENGTH
+    assert temp_table.name.startswith("t" * 236)
+    assert temp_table.name.endswith("_schema_tmp_abcdefgh")
 
 
 def test_migrate_only_processes_target_snapshots(
@@ -4909,7 +4990,11 @@ def test_multiple_engine_promotion(mocker: MockerFixture, adapter_mock, make_sna
 
 
 def test_multiple_engine_migration(
-    mocker: MockerFixture, adapter_mock, make_snapshot, make_mocked_engine_adapter
+    mocker: MockerFixture,
+    adapter_mock,
+    make_snapshot,
+    make_mocked_engine_adapter,
+    schema_migration_temp_id,
 ):
     adapter_one = make_mocked_engine_adapter(EngineAdapter)
     adapter_one.with_settings = lambda **kwargs: adapter_one  # type: ignore
@@ -4987,7 +5072,7 @@ def test_multiple_engine_migration(
     # The second mock adapter has to be called only for the gateway-specific model
     adapter_mock.get_alter_operations.assert_called_once_with(
         snapshot_2.table_name(True),
-        f"{snapshot_2.table_name(True)}_schema_tmp",
+        f"{snapshot_2.table_name(True)}_schema_tmp_test_id",
         ignore_destructive=False,
         ignore_additive=False,
     )
