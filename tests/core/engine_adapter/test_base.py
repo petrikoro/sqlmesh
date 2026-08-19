@@ -3522,6 +3522,19 @@ def test_pre_ping(mocker: MockerFixture, make_mocked_engine_adapter: t.Callable)
     adapter._connection_pool.get().close.assert_called_once()
 
 
+def test_with_settings_preserves_schema_differ_overrides(
+    make_mocked_engine_adapter: t.Callable,
+):
+    overrides = {"parameterized_type_defaults": {}}
+    adapter = make_mocked_engine_adapter(
+        EngineAdapter,
+        schema_differ_overrides=overrides,
+    )
+
+    assert adapter.with_settings()._schema_differ_overrides == overrides
+    assert adapter.with_settings(schema_differ_overrides=None)._schema_differ_overrides is None
+
+
 @pytest.mark.parametrize(
     "partitioned_by",
     [

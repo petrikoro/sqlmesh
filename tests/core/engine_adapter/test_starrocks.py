@@ -1955,6 +1955,7 @@ def test_get_alter_operations_uses_drop_add_for_unsupported_type_change(
                 ("VARCHAR(1048576)", "VARCHAR(65533)"),
                 ("VARCHAR(1048576)", "STRING"),
                 ("VARCHAR(32)", "VARCHAR"),
+                ("DECIMAL(38, 9)", "DOUBLE"),
             ]
         ),
     ],

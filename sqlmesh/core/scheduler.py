@@ -5,6 +5,7 @@ import logging
 import typing as t
 import time
 from datetime import datetime
+from threading import Lock
 from sqlglot import exp
 from sqlmesh.core import constants as c
 from sqlmesh.core.console import Console, get_console
@@ -540,6 +541,8 @@ class Scheduler:
         }
         active_wap_ids: t.Dict[str, t.Optional[str]] = {}
         deferred_progress: t.Dict[str, t.Tuple[t.Optional[int], t.Any]] = {}
+        completed_materializations: t.Dict[str, int] = {}
+        completed_materializations_lock = Lock()
 
         self.console.start_evaluation_progress(
             batched_intervals,
@@ -691,6 +694,20 @@ class Scheduler:
                                 snapshot.snapshot_id
                             ),
                         )
+
+                if snapshot.name in terminal_audit_snapshots and not audit_only:
+                    with completed_materializations_lock:
+                        completed_materializations[snapshot.name] = (
+                            completed_materializations.get(snapshot.name, 0) + 1
+                        )
+                        materialization_complete = completed_materializations[snapshot.name] == len(
+                            batched_intervals[snapshot]
+                        )
+
+                    if materialization_complete:
+                        # Keep the audit in the completing worker so it can't be queued behind
+                        # unrelated evaluations by the generic DAG executor.
+                        run_node(AuditNode(snapshot_name=snapshot.name))
             elif isinstance(node, AuditNode):
                 self.console.start_snapshot_evaluation_progress(snapshot, audit_only=audit_only)
                 intervals = batched_intervals[snapshot]
@@ -868,6 +885,7 @@ class Scheduler:
                         original_snapshots_to_create,
                         upstream_dependencies_cache,
                         terminal_audit_snapshots,
+                        audit_only,
                     )
                 )
 
@@ -918,17 +936,6 @@ class Scheduler:
                         ],
                     )
 
-            if intervals and snapshot.name in terminal_audit_snapshots:
-                terminal_dependency: SchedulingUnit
-                if len(intervals) > 1:
-                    terminal_dependency = DummyNode(snapshot_name=snapshot.name)
-                else:
-                    terminal_dependency = EvaluateNode(
-                        snapshot_name=snapshot.name,
-                        interval=intervals[0],
-                        batch_index=0,
-                    )
-                dag.add(AuditNode(snapshot_name=snapshot.name), [terminal_dependency])
         return dag
 
     def _find_upstream_dependencies(
@@ -938,6 +945,7 @@ class Scheduler:
         snapshots_to_create: t.Set[SnapshotId],
         cache: t.Dict[SnapshotId, t.Set[SchedulingUnit]],
         terminal_audit_snapshots: t.Set[str],
+        audit_only: bool,
     ) -> t.Set[SchedulingUnit]:
         if parent_sid not in self.snapshots:
             return set()
@@ -948,7 +956,7 @@ class Scheduler:
 
         parent_node: t.Optional[SchedulingUnit] = None
         if p_intervals:
-            if parent_sid.name in terminal_audit_snapshots:
+            if audit_only and parent_sid.name in terminal_audit_snapshots:
                 parent_node = AuditNode(snapshot_name=parent_sid.name)
             elif len(p_intervals) > 1:
                 parent_node = DummyNode(snapshot_name=parent_sid.name)
@@ -976,6 +984,7 @@ class Scheduler:
                     snapshots_to_create,
                     cache,
                     terminal_audit_snapshots,
+                    audit_only,
                 )
             )
         cache[parent_sid] = transitive_deps

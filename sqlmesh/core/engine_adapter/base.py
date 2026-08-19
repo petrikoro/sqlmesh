@@ -180,6 +180,9 @@ class EngineAdapter:
             "query_execution_tracker": kwargs.pop(
                 "query_execution_tracker", self._query_execution_tracker
             ),
+            "schema_differ_overrides": kwargs.pop(
+                "schema_differ_overrides", self._schema_differ_overrides
+            ),
             **self._extra_config,
             **kwargs,
         }

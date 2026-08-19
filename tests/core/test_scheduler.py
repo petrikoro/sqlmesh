@@ -22,7 +22,6 @@ from sqlmesh.core.scheduler import (
     interval_diff,
     compute_interval_params,
     SnapshotToIntervals,
-    AuditNode,
     EvaluateNode,
     SchedulingUnit,
     DummyNode,
@@ -1079,7 +1078,7 @@ def test_dag_transitive_deps(mocker: MockerFixture, make_snapshot):
     }
 
 
-def test_dag_audits_after_all_batches_and_before_downstream(mocker: MockerFixture, make_snapshot):
+def test_dag_materialization_completion_gates_downstream(mocker: MockerFixture, make_snapshot):
     parent = make_snapshot(
         SqlModel(
             name="parent",
@@ -1109,15 +1108,65 @@ def test_dag_audits_after_all_batches_and_before_downstream(mocker: MockerFixtur
     parent_batch_0 = EvaluateNode(parent.name, first_interval, 0)
     parent_batch_1 = EvaluateNode(parent.name, second_interval, 1)
     parent_batches_complete = DummyNode(parent.name)
-    parent_audit = AuditNode(parent.name)
     child_batch = EvaluateNode(child.name, child_interval, 0)
     assert dag.graph == {
         parent_batch_0: set(),
         parent_batch_1: set(),
         parent_batches_complete: {parent_batch_0, parent_batch_1},
-        parent_audit: {parent_batches_complete},
-        child_batch: {parent_audit},
+        child_batch: {parent_batches_complete},
     }
+
+
+def test_run_audits_completed_model_before_unrelated_evaluation_backlog(
+    mocker: MockerFixture, make_snapshot
+):
+    audited = make_snapshot(
+        SqlModel(
+            name="audited",
+            query=parse_one("SELECT 1 AS id"),
+            audits=[("not_null", {"columns": exp.to_column("id")})],
+        )
+    )
+    unrelated = make_snapshot(SqlModel(name="unrelated", query=parse_one("SELECT 1 AS id")))
+    audited.categorize_as(SnapshotChangeCategory.BREAKING)
+    unrelated.categorize_as(SnapshotChangeCategory.BREAKING)
+
+    events: t.List[str] = []
+    evaluator = mocker.MagicMock()
+    evaluator.get_snapshots_to_create.return_value = []
+    evaluator.get_adapter.return_value.wap_enabled = False
+    evaluator.evaluate.side_effect = lambda snapshot, **kwargs: events.append(
+        "audited" if snapshot.snapshot_id == audited.snapshot_id else "unrelated"
+    )
+
+    def run_audit(*args, **kwargs):
+        if kwargs["snapshot"].snapshot_id == audited.snapshot_id:
+            events.append("audit")
+        return []
+
+    evaluator.audit.side_effect = run_audit
+    scheduler = Scheduler(
+        snapshots=[audited, unrelated],
+        snapshot_evaluator=evaluator,
+        state_sync=mocker.MagicMock(),
+        console=mocker.MagicMock(),
+        max_workers=1,
+        default_catalog=None,
+    )
+    start = to_timestamp("2023-01-01")
+    end = to_timestamp("2023-01-02")
+
+    errors, skipped = scheduler.run_merged_intervals(
+        merged_intervals={audited: [(start, end)], unrelated: [(start, end)]},
+        deployability_index=DeployabilityIndex.all_deployable(),
+        environment_naming_info=EnvironmentNamingInfo(),
+        execution_time=end,
+        is_run=True,
+    )
+
+    assert not errors
+    assert not skipped
+    assert events == ["audited", "audit", "unrelated"]
 
 
 def test_audit_only_dag_skips_audit_when_signal_removes_all_intervals(
