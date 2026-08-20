@@ -1514,7 +1514,7 @@ class Snapshot(PydanticModel, SnapshotInfoMixin):
     @property
     def requires_schema_migration_in_prod(self) -> bool:
         """Returns whether or not this snapshot requires a schema migration when deployed to production."""
-        return self.supports_schema_migration_in_prod and (
+        return self.supports_schema_migration_in_prod and not self.is_metadata and (
             (self.previous_version and self.previous_version.version == self.version)
             or self.model.forward_only
             or bool(self.model.physical_version)

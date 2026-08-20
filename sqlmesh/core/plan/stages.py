@@ -283,6 +283,7 @@ class PlanStagesBuilder:
                 snapshots[s_id]
                 for s_id in dag.subdag(*snapshot_ids_with_schema_migration)
                 if snapshots[s_id].supports_schema_migration_in_prod
+                and not snapshots[s_id].is_metadata
             ]
 
         snapshots_to_intervals = self._missing_intervals(

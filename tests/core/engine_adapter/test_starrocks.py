@@ -207,25 +207,3 @@ def test_schema_change_in_place_allowlist(
         schema_migration_model({"id": exp.DataType.build("BIGINT")}),
         current_table="test_table",
     )
-
-
-def test_metadata_only_unknown_schema_reuses_physical_table(
-    adapter: StarRocksEngineAdapter,
-    mocker: MockerFixture,
-):
-    columns = {
-        "record_sk": exp.DataType.build("STRING", dialect="starrocks"),
-        "record_timestamp": exp.DataType.build("UNKNOWN"),
-        "record_metadata": exp.DataType.build("UNKNOWN"),
-    }
-    current = schema_migration_model(columns)
-    target = current.model_copy(update={"tags": ["changed"]})
-    live_columns = mocker.patch.object(adapter, "columns")
-
-    assert target.is_metadata_only_change(current)
-    assert adapter.can_apply_schema_change_in_place(
-        current,
-        target,
-        current_table="test_table",
-    )
-    live_columns.assert_not_called()

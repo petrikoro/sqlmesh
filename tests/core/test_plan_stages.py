@@ -1217,6 +1217,9 @@ def test_build_plan_stages_audit_only(
     new_snapshot_b.categorize_as(SnapshotChangeCategory.METADATA)
     new_snapshot_b.add_interval("2023-01-01", "2023-01-02")
 
+    assert not new_snapshot_a.requires_schema_migration_in_prod
+    assert not new_snapshot_b.requires_schema_migration_in_prod
+
     def _get_snapshots(snapshot_ids: t.List[SnapshotId]) -> t.Dict[SnapshotId, Snapshot]:
         if snapshot_a.snapshot_id in snapshot_ids and snapshot_b.snapshot_id in snapshot_ids:
             return {

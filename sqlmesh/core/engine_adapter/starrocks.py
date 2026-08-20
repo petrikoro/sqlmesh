@@ -256,14 +256,6 @@ class StarRocksEngineAdapter(
         current_table: TableName,
         **render_kwargs: t.Any,
     ) -> bool:
-        # A metadata-only change with an unchanged inferred schema cannot alter the physical
-        # table. Don't let unresolved types turn tag, schedule, or owner updates into rebuilds.
-        if (
-            target.is_metadata_only_change(current)
-            and target.columns_to_types == current.columns_to_types
-        ):
-            return True
-
         # SQLMesh does not update partitioning or physical properties during schema migration.
         if current.partitioned_by != target.partitioned_by:
             return False

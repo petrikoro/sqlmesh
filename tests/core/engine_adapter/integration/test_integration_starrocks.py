@@ -72,6 +72,21 @@ def _schema_migration_child_model(model_name: exp.Table, parent_name: exp.Table)
     )
 
 
+def _metadata_parent_model(model_name: exp.Table, with_audit: bool) -> SqlModel:
+    return SqlModel(
+        name=model_name.sql(dialect="starrocks"),
+        dialect="starrocks",
+        kind=FullKind(),
+        query=exp.select(
+            exp.cast(exp.Literal.string("vacancy"), "STRING").as_("vacancy_name")
+        ),
+        columns={"vacancy_name": exp.DataType.build("STRING", dialect="starrocks")},
+        audits=[("not_null", {"columns": exp.column("vacancy_name")})]
+        if with_audit
+        else [],
+    )
+
+
 def _alter_columns(
     engine_adapter: StarRocksEngineAdapter,
     table: exp.Table,
@@ -223,6 +238,47 @@ def test_non_forward_plan_rebuilds_indirect_duplicate_key_type_change(ctx: TestC
     assert engine_adapter.fetchall(
         f"SELECT vacancy_name FROM {rebuilt_table.sql(dialect='starrocks', identify=True)}"
     ) == (("vacancy",),)
+
+
+def test_metadata_only_plan_skips_schema_migration(ctx: TestContext):
+    parent_name = ctx.table("PLAN_METADATA_PARENT")
+    child_name = ctx.table("PLAN_METADATA_CHILD")
+    context = ctx.create_context()
+
+    context.upsert_model(_metadata_parent_model(parent_name, with_audit=False))
+    context.upsert_model(_schema_migration_child_model(child_name, parent_name))
+    initial_plan = context.plan("prod", auto_apply=True, no_prompts=True)
+    initial_child = next(
+        snapshot for snapshot in initial_plan.new_snapshots if snapshot.name == child_name.sql()
+    )
+    child_table = exp.to_table(initial_child.table_name())
+    child_table_sql = child_table.sql(dialect="starrocks", identify=True)
+
+    context.engine_adapter.drop_table(child_table)
+    context.engine_adapter.execute(
+        f"CREATE TABLE {child_table_sql} "
+        "(vacancy_name VARCHAR(1048576) NOT NULL) ENGINE=OLAP "
+        "DUPLICATE KEY(vacancy_name) DISTRIBUTED BY HASH(vacancy_name)"
+    )
+    context.engine_adapter.execute(f"INSERT INTO {child_table_sql} VALUES ('preserved')")
+
+    context.upsert_model(_metadata_parent_model(parent_name, with_audit=True))
+    metadata_plan = context.plan("prod", no_prompts=True)
+    metadata_child = next(
+        snapshot for snapshot in metadata_plan.new_snapshots if snapshot.name == child_name.sql()
+    )
+
+    assert metadata_child.change_category == SnapshotChangeCategory.METADATA
+    assert metadata_child.table_name() == initial_child.table_name()
+
+    context.apply(metadata_plan)
+
+    assert context.engine_adapter.columns(child_table)["vacancy_name"] == exp.DataType.build(
+        "VARCHAR(1048576)", dialect="starrocks"
+    )
+    assert context.engine_adapter.fetchall(f"SELECT vacancy_name FROM {child_table_sql}") == (
+        ("preserved",),
+    )
 
 
 def test_create_database(ctx: TestContext):

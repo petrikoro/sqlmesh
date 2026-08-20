@@ -138,6 +138,51 @@ def _indirect_schema_change(make_snapshot: t.Callable) -> ContextDiff:
     )
 
 
+def _indirect_metadata_schema_change(make_snapshot: t.Callable) -> ContextDiff:
+    parent_old = make_snapshot(
+        SqlModel(
+            name="parent",
+            kind=FullKind(),
+            query=parse_one("SELECT 1 AS id"),
+            audits=[("number_of_rows", {"threshold": exp.Literal.number(0)})],
+        )
+    )
+    parent_old.categorize_as(SnapshotChangeCategory.BREAKING)
+    child_old = make_snapshot(
+        SqlModel(name="child", kind=FullKind(), query=parse_one("SELECT id FROM parent")),
+        nodes={parent_old.name: parent_old.model},
+    )
+    child_old.categorize_as(SnapshotChangeCategory.BREAKING)
+    grandchild_old = make_snapshot(
+        SqlModel(name="grandchild", kind=FullKind(), query=parse_one("SELECT id FROM child")),
+        nodes={parent_old.name: parent_old.model, child_old.name: child_old.model},
+    )
+    grandchild_old.categorize_as(SnapshotChangeCategory.BREAKING)
+
+    parent_new = make_snapshot(
+        SqlModel(
+            name="parent",
+            kind=FullKind(),
+            query=parse_one("SELECT 1 AS id"),
+            audits=[("number_of_rows", {"threshold": exp.Literal.number(1)})],
+        )
+    )
+    parent_new.previous_versions = parent_old.all_versions
+    child_new = make_snapshot(child_old.model, nodes={parent_new.name: parent_new.model})
+    child_new.previous_versions = child_old.all_versions
+    grandchild_new = make_snapshot(
+        grandchild_old.model,
+        nodes={parent_new.name: parent_new.model, child_new.name: child_new.model},
+    )
+    grandchild_new.previous_versions = grandchild_old.all_versions
+
+    return _schema_change_context_diff(
+        (parent_new, parent_old),
+        (child_new, child_old),
+        (grandchild_new, grandchild_old),
+    )
+
+
 def test_forward_only_plan_rejects_unsupported_in_place_schema_change(
     make_snapshot: t.Callable, mocker: MockerFixture
 ):
@@ -168,6 +213,28 @@ def test_standard_plan_rebuilds_only_snapshot_with_unsupported_schema_change(
     assert new.version != old.version
     assert grandchild_new.change_category == SnapshotChangeCategory.INDIRECT_NON_BREAKING
     assert grandchild_new.version == grandchild_old.version
+
+
+def test_metadata_only_change_skips_schema_migration_check(
+    make_snapshot: t.Callable, mocker: MockerFixture
+):
+    context_diff = _indirect_metadata_schema_change(make_snapshot)
+    parent_new, _ = context_diff.modified_snapshots['"parent"']
+    child_new, child_old = context_diff.modified_snapshots['"child"']
+    grandchild_new, grandchild_old = context_diff.modified_snapshots['"grandchild"']
+    check = mocker.Mock(return_value=False)
+
+    assert child_new.fingerprint.to_version() == child_old.fingerprint.to_version()
+    assert child_new.identifier != child_old.identifier
+
+    PlanBuilder(context_diff, can_apply_schema_change_in_place=check).build()
+
+    assert parent_new.change_category == SnapshotChangeCategory.METADATA
+    assert child_new.change_category == SnapshotChangeCategory.METADATA
+    assert child_new.version == child_old.version
+    assert grandchild_new.change_category == SnapshotChangeCategory.METADATA
+    assert grandchild_new.version == grandchild_old.version
+    check.assert_not_called()
 
 
 def test_uncategorized_forward_only_schema_change_is_validated_after_choice(
