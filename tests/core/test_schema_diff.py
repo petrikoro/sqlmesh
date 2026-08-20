@@ -5,7 +5,6 @@ from sqlglot import exp
 
 from sqlmesh.core.engine_adapter import create_engine_adapter
 from sqlmesh.core.schema_diff import (
-    AlterColumnTypeSupport,
     SchemaDiffer,
     TableAlterColumn,
     TableAlterColumnPosition,
@@ -105,98 +104,6 @@ def test_schema_diff_calculate_type_transitions():
         """ALTER TABLE apply_to_table ADD COLUMN id BIGINT""",
         """ALTER TABLE apply_to_table ALTER COLUMN ds SET DATA TYPE INT""",
     ]
-
-
-@pytest.mark.parametrize(
-    (
-        "support",
-        "ignore_destructive",
-        "ignore_additive",
-        "treat_as_destructive",
-        "operation_is_destructive",
-    ),
-    [
-        (AlterColumnTypeSupport.NO_ALTER, False, False, False, None),
-        (AlterColumnTypeSupport.MODIFY, False, False, False, False),
-        (AlterColumnTypeSupport.MODIFY, True, False, False, False),
-        (AlterColumnTypeSupport.MODIFY, False, True, False, None),
-        (AlterColumnTypeSupport.MODIFY, False, False, True, True),
-        (AlterColumnTypeSupport.MODIFY_DESTRUCTIVE, False, False, False, True),
-        (AlterColumnTypeSupport.MODIFY_DESTRUCTIVE, False, True, False, True),
-        (AlterColumnTypeSupport.MODIFY_DESTRUCTIVE, True, False, False, None),
-        (AlterColumnTypeSupport.DROP_AND_ADD, False, False, False, True),
-        (AlterColumnTypeSupport.DROP_AND_ADD, False, True, False, True),
-        (AlterColumnTypeSupport.DROP_AND_ADD, True, False, False, None),
-    ],
-)
-def test_alter_column_type_support_obeys_ignore_flags(
-    support: AlterColumnTypeSupport,
-    ignore_destructive: bool,
-    ignore_additive: bool,
-    treat_as_destructive: bool,
-    operation_is_destructive: t.Optional[bool],
-):
-    current_type = exp.DataType.build("INT")
-    target_type = exp.DataType.build("BIGINT")
-
-    operations = SchemaDiffer(
-        alter_column_type_support=lambda *_: support,
-        treat_alter_data_type_as_destructive=treat_as_destructive,
-    ).compare_columns(
-        "apply_to_table",
-        {"id": current_type},
-        {"id": target_type},
-        ignore_destructive=ignore_destructive,
-        ignore_additive=ignore_additive,
-    )
-
-    if operation_is_destructive is None:
-        assert operations == []
-        return
-
-    if support is AlterColumnTypeSupport.DROP_AND_ADD:
-        assert [type(operation) for operation in operations] == [
-            TableAlterDropColumnOperation,
-            TableAlterAddColumnOperation,
-        ]
-        assert all(operation.is_destructive for operation in operations)
-        return
-
-    assert len(operations) == 1
-    assert isinstance(operations[0], TableAlterChangeColumnTypeOperation)
-    assert operations[0].is_destructive is operation_is_destructive
-
-
-def test_parameter_aware_alter_type_support_takes_precedence_over_coercion():
-    current_type = exp.DataType.build("DECIMAL(10, 2)")
-    rejected_type = exp.DataType.build("DECIMAL(11, 4)")
-    accepted_type = exp.DataType.build("DECIMAL(12, 4)")
-
-    def support(_: exp.DataType, target: exp.DataType) -> AlterColumnTypeSupport:
-        return (
-            AlterColumnTypeSupport.MODIFY
-            if target == accepted_type
-            else AlterColumnTypeSupport.DROP_AND_ADD
-        )
-
-    schema_differ = SchemaDiffer(
-        alter_column_type_support=support,
-        coerceable_types={current_type: {rejected_type}},
-    )
-
-    rejected_operations = schema_differ.compare_columns(
-        "apply_to_table", {"value": current_type}, {"value": rejected_type}
-    )
-    accepted_operations = schema_differ.compare_columns(
-        "apply_to_table", {"value": current_type}, {"value": accepted_type}
-    )
-
-    assert len(rejected_operations) == 2
-    assert isinstance(rejected_operations[0], TableAlterDropColumnOperation)
-    assert isinstance(rejected_operations[1], TableAlterAddColumnOperation)
-    assert len(accepted_operations) == 1
-    assert isinstance(accepted_operations[0], TableAlterChangeColumnTypeOperation)
-    assert not accepted_operations[0].is_destructive
 
 
 @pytest.mark.parametrize(

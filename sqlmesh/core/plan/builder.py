@@ -786,11 +786,10 @@ class PlanBuilder:
             )
 
         current_version = old.version_get_or_generate()
-        snapshot.categorize_as(
-            SnapshotChangeCategory.INDIRECT_BREAKING
-            if self._context_diff.indirectly_modified(snapshot.name)
-            else SnapshotChangeCategory.BREAKING
-        )
+        # The logical change remains non-breaking. Only this snapshot needs a new physical
+        # version because the engine cannot migrate its effective schema in place. Descendants
+        # are checked independently instead of inheriting a breaking category.
+        snapshot.categorize_as(SnapshotChangeCategory.NON_BREAKING)
         if current_version != snapshot.version:
             return
 

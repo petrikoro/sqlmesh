@@ -308,21 +308,6 @@ class NestedSupport(str, Enum):
         return self == NestedSupport.IGNORE
 
 
-class AlterColumnTypeSupport(str, Enum):
-    """Strategy returned by an engine-specific type-change classifier.
-
-    NO_ALTER: Types are physically equivalent.
-    MODIFY: In-place, non-destructive ALTER.
-    MODIFY_DESTRUCTIVE: In-place ALTER that may lose data.
-    DROP_AND_ADD: Destructive replacement when MODIFY is unsupported.
-    """
-
-    NO_ALTER = "NO_ALTER"
-    MODIFY = "MODIFY"
-    MODIFY_DESTRUCTIVE = "MODIFY_DESTRUCTIVE"
-    DROP_AND_ADD = "DROP_AND_ADD"
-
-
 class SchemaDiffer(PydanticModel):
     """
     Compares a source schema against a target schema and returns a list of alter statements to have the source
@@ -345,9 +330,6 @@ class SchemaDiffer(PydanticModel):
         nested_support: How the engine for which the diff is being computed supports nested types.
         compatible_types: Types that are compatible and automatically coerced in actions like UNION ALL. Dict key is data
             type, and value is the set of types that are compatible with it.
-        alter_column_type_support: An optional engine-specific classifier for type changes that
-            depend on complete type definitions, including parameters. It takes precedence over
-            the generic compatibility and coercion rules.
         coerceable_types: The mapping from a current type to all types that can be safely coerced to the current one without
             altering the column type. NOTE: usually callers should not specify this attribute manually and set the
             `support_coercing_compatible_types` flag instead. Some engines are inconsistent about their type coercion rules.
@@ -378,9 +360,6 @@ class SchemaDiffer(PydanticModel):
     nested_support: NestedSupport = NestedSupport.NONE
     array_element_selector: str = ""
     compatible_types: t.Dict[exp.DataType, t.Set[exp.DataType]] = {}
-    alter_column_type_support: t.Optional[
-        t.Callable[[exp.DataType, exp.DataType], AlterColumnTypeSupport]
-    ] = None
     coerceable_types_: t.Dict[exp.DataType, t.Set[exp.DataType]] = Field(
         default_factory=dict, alias="coerceable_types"
     )
@@ -435,17 +414,6 @@ class SchemaDiffer(PydanticModel):
 
             return is_coerceable
         return False
-
-    def _classify_alter_column_type(
-        self, current_type: exp.DataType, new_type: exp.DataType
-    ) -> AlterColumnTypeSupport:
-        if self.alter_column_type_support:
-            return self.alter_column_type_support(current_type, new_type)
-        if self._is_coerceable_type(current_type, new_type):
-            return AlterColumnTypeSupport.NO_ALTER
-        if self._is_compatible_type(current_type, new_type):
-            return AlterColumnTypeSupport.MODIFY
-        return AlterColumnTypeSupport.DROP_AND_ADD
 
     def _is_precision_increase_allowed(self, current_type: exp.DataType) -> bool:
         return (
@@ -622,53 +590,6 @@ class SchemaDiffer(PydanticModel):
                 )
         return operations
 
-    def _resolve_nested_alter_operations(
-        self,
-        columns: t.List[TableAlterColumn],
-        current_type: exp.DataType,
-        new_type: exp.DataType,
-        root_struct: exp.DataType,
-        table_name: TableName,
-        *,
-        ignore_destructive: bool,
-        ignore_additive: bool,
-    ) -> t.Optional[t.List[TableAlterColumnOperation]]:
-        """Return `None` when the types need regular alter handling."""
-        if self.nested_support.is_none:
-            return None
-
-        if new_type.this == current_type.this == exp.DataType.Type.STRUCT:
-            current_struct, new_struct = current_type, new_type
-        elif new_type.this == current_type.this == exp.DataType.Type.ARRAY:
-            # Some engines (i.e. Snowflake) don't support defining types on arrays.
-            if not new_type.expressions or not current_type.expressions:
-                return []
-            current_struct = current_type.expressions[0]
-            new_struct = new_type.expressions[0]
-            if (
-                new_struct.this != exp.DataType.Type.STRUCT
-                or current_struct.this != exp.DataType.Type.STRUCT
-            ):
-                return None
-        else:
-            return None
-
-        if self.nested_support.is_ignore:
-            return []
-        if not self.nested_support.is_all and self._requires_drop_alteration(
-            current_struct, new_struct
-        ):
-            return None
-        return self._get_operations(
-            columns,
-            current_struct,
-            new_struct,
-            root_struct,
-            table_name,
-            ignore_destructive=ignore_destructive,
-            ignore_additive=ignore_additive,
-        )
-
     def _alter_operation(
         self,
         columns: t.List[TableAlterColumn],
@@ -686,60 +607,79 @@ class SchemaDiffer(PydanticModel):
         # We don't copy on purpose here because current_type may need to be mutated inside
         # _get_operations (struct.expressions.pop and struct.expressions.insert)
         current_type = exp.DataType.build(current_type, copy=False)
-        nested_operations = self._resolve_nested_alter_operations(
+        if not self.nested_support.is_none:
+            if new_type.this == current_type.this == exp.DataType.Type.STRUCT:
+                if self.nested_support.is_ignore:
+                    return []
+                if self.nested_support.is_all or not self._requires_drop_alteration(
+                    current_type, new_type
+                ):
+                    return self._get_operations(
+                        columns,
+                        current_type,
+                        new_type,
+                        root_struct,
+                        table_name,
+                        ignore_destructive=ignore_destructive,
+                        ignore_additive=ignore_additive,
+                    )
+
+            if new_type.this == current_type.this == exp.DataType.Type.ARRAY:
+                # Some engines (i.e. Snowflake) don't support defining types on arrays
+                if not new_type.expressions or not current_type.expressions:
+                    return []
+                new_array_type = new_type.expressions[0]
+                current_array_type = current_type.expressions[0]
+                if new_array_type.this == current_array_type.this == exp.DataType.Type.STRUCT:
+                    if self.nested_support.is_ignore:
+                        return []
+                    if self.nested_support.is_all or not self._requires_drop_alteration(
+                        current_array_type, new_array_type
+                    ):
+                        return self._get_operations(
+                            columns,
+                            current_array_type,
+                            new_array_type,
+                            root_struct,
+                            table_name,
+                            ignore_destructive=ignore_destructive,
+                            ignore_additive=ignore_additive,
+                        )
+        if self._is_coerceable_type(current_type, new_type):
+            return []
+        if self._is_compatible_type(current_type, new_type):
+            if ignore_additive:
+                return []
+            struct.expressions.pop(pos)
+            struct.expressions.insert(pos, new_kwarg)
+            return [
+                TableAlterChangeColumnTypeOperation(
+                    target_table=exp.to_table(table_name),
+                    column_parts=columns,
+                    column_type=new_type,
+                    current_type=current_type,
+                    expected_table_struct=root_struct.copy(),
+                    array_element_selector=self.array_element_selector,
+                    is_part_of_destructive_change=self.treat_alter_data_type_as_destructive,
+                )
+            ]
+        if ignore_destructive:
+            return []
+        return self._drop_operation(
             columns,
-            current_type,
-            new_type,
+            root_struct,
+            pos,
             root_struct,
             table_name,
-            ignore_destructive=ignore_destructive,
-            ignore_additive=ignore_additive,
+        ) + self._add_operation(
+            columns,
+            pos,
+            new_kwarg,
+            struct,
+            root_struct,
+            table_name,
+            is_part_of_destructive_change=True,
         )
-        if nested_operations is not None:
-            return nested_operations
-
-        strategy = self._classify_alter_column_type(current_type, new_type)
-        if strategy is AlterColumnTypeSupport.NO_ALTER:
-            return []
-
-        if strategy is AlterColumnTypeSupport.DROP_AND_ADD:
-            if ignore_destructive:
-                return []
-            return self._drop_operation(
-                columns,
-                root_struct,
-                pos,
-                root_struct,
-                table_name,
-            ) + self._add_operation(
-                columns,
-                pos,
-                new_kwarg,
-                struct,
-                root_struct,
-                table_name,
-                is_part_of_destructive_change=True,
-            )
-
-        is_destructive = strategy is AlterColumnTypeSupport.MODIFY_DESTRUCTIVE
-        ignore_change = ignore_destructive if is_destructive else ignore_additive
-        if ignore_change:
-            return []
-
-        struct.expressions[pos] = new_kwarg
-        return [
-            TableAlterChangeColumnTypeOperation(
-                target_table=exp.to_table(table_name),
-                column_parts=columns,
-                column_type=new_type,
-                current_type=current_type,
-                expected_table_struct=root_struct.copy(),
-                array_element_selector=self.array_element_selector,
-                is_part_of_destructive_change=(
-                    is_destructive or self.treat_alter_data_type_as_destructive
-                ),
-            )
-        ]
 
     def _resolve_alter_operations(
         self,

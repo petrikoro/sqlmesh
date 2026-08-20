@@ -113,6 +113,11 @@ def _indirect_schema_change(make_snapshot: t.Callable) -> ContextDiff:
         nodes={parent_old.name: parent_old.model},
     )
     child_old.categorize_as(SnapshotChangeCategory.BREAKING)
+    grandchild_old = make_snapshot(
+        SqlModel(name="grandchild", kind=FullKind(), query=parse_one("SELECT id FROM child")),
+        nodes={parent_old.name: parent_old.model, child_old.name: child_old.model},
+    )
+    grandchild_old.categorize_as(SnapshotChangeCategory.BREAKING)
 
     parent_new = make_snapshot(
         SqlModel(name="parent", kind=FullKind(), query=parse_one("SELECT 1 AS id, 2 AS added"))
@@ -120,10 +125,16 @@ def _indirect_schema_change(make_snapshot: t.Callable) -> ContextDiff:
     parent_new.previous_versions = parent_old.all_versions
     child_new = make_snapshot(child_old.model, nodes={parent_new.name: parent_new.model})
     child_new.previous_versions = child_old.all_versions
+    grandchild_new = make_snapshot(
+        grandchild_old.model,
+        nodes={parent_new.name: parent_new.model, child_new.name: child_new.model},
+    )
+    grandchild_new.previous_versions = grandchild_old.all_versions
 
     return _schema_change_context_diff(
         (parent_new, parent_old),
         (child_new, child_old),
+        (grandchild_new, grandchild_old),
     )
 
 
@@ -141,19 +152,22 @@ def test_forward_only_plan_rejects_unsupported_in_place_schema_change(
         ).build()
 
 
-def test_standard_plan_recategorizes_unsupported_in_place_schema_change(
+def test_standard_plan_rebuilds_only_snapshot_with_unsupported_schema_change(
     make_snapshot: t.Callable, mocker: MockerFixture
 ):
     context_diff = _indirect_schema_change(make_snapshot)
-    check = mocker.Mock(return_value=False)
+    grandchild_new, grandchild_old = context_diff.modified_snapshots['"grandchild"']
+    check = mocker.Mock(side_effect=lambda new, _: new is grandchild_new)
 
     new, old = context_diff.modified_snapshots['"child"']
     builder = PlanBuilder(context_diff, can_apply_schema_change_in_place=check)
     parent, _ = context_diff.modified_snapshots['"parent"']
     builder.set_choice(parent, SnapshotChangeCategory.NON_BREAKING).build()
 
-    assert new.change_category == SnapshotChangeCategory.INDIRECT_BREAKING
+    assert new.change_category == SnapshotChangeCategory.NON_BREAKING
     assert new.version != old.version
+    assert grandchild_new.change_category == SnapshotChangeCategory.INDIRECT_NON_BREAKING
+    assert grandchild_new.version == grandchild_old.version
 
 
 def test_uncategorized_forward_only_schema_change_is_validated_after_choice(
